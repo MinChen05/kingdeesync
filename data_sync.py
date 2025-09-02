@@ -128,22 +128,29 @@ class DataSyncManager:
         
         try:
             # 构建查询条件
+            self._notify_progress(f"[{form_name}] 正在构建查询条件...")
             filter_string = self._build_filter_string(form_name, sync_type, table_name)
+            self._notify_progress(f"[{form_name}] 查询条件构建完成: {filter_string if filter_string else '无'}")
             
             # 查询金蝶数据
+            self._notify_progress(f"[{form_name}] 正在查询金蝶数据...")
             logger.info(f"查询金蝶 {form_name} 数据...")
             data = self._query_kingdee_data(form_name, filter_string)
             
             if data is None:
+                self._notify_progress(f"[{form_name}] 查询金蝶数据失败", 100)
                 return {
                     'status': SyncStatus.FAILED.value,
                     'message': "查询金蝶数据失败",
                     'record_count': 0
                 }
             
+            self._notify_progress(f"[{form_name}] 查询到 {len(data)} 条数据，准备插入数据库...")
+            
             # 插入数据库
             logger.info(f"插入 {len(data)} 条数据到数据库...")
             inserted_count = self._insert_database_data(form_name, data)
+            self._notify_progress(f"[{form_name}] 成功插入 {inserted_count} 条数据到数据库")
             
             end_time = datetime.now()
             
@@ -164,6 +171,7 @@ class DataSyncManager:
             end_time = datetime.now()
             error_msg = f"同步失败: {str(e)}"
             logger.error(f"{form_name} {error_msg}")
+            self._notify_progress(f"[{form_name}] {error_msg}", 100)
             
             # 记录错误日志
             mysql_manager.log_sync_operation(

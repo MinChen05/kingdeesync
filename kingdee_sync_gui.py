@@ -236,6 +236,7 @@ class KingdeeSyncGUI(QMainWindow):
             "销售订单", 
             "销售出库单", 
             "预测订单",
+            "生产订单",
             "自定义选择..."
         ])
         
@@ -260,7 +261,8 @@ class KingdeeSyncGUI(QMainWindow):
         forms_info = [
             ("销售订单", "📊 销售订单数据"),
             ("销售出库单", "📦 销售出库单数据"),
-            ("预测订单", "🔮 预测订单数据")
+            ("预测订单", "🔮 预测订单数据"),
+            ("生产订单", "🏭 生产订单数据")
         ]
         
         for form_name, form_desc_text in forms_info:

@@ -33,7 +33,8 @@ class DataSyncManager:
         self.table_mapping = {
             "销售订单": "sales_orders",
             "销售出库单": "sales_outstock", 
-            "预测订单": "forecast_orders"
+            "预测订单": "forecast_orders",
+            "生产订单": "production_orders"
         }
         self.sync_callbacks = []  # 同步进度回调
     
@@ -240,6 +241,8 @@ class DataSyncManager:
             return mysql_manager.insert_sales_outstock(data)
         elif form_name == "预测订单":
             return mysql_manager.insert_forecast_orders(data)
+        elif form_name == "生产订单":
+            return mysql_manager.insert_production_orders(data)
         else:
             logger.error(f"未知的表单类型: {form_name}")
             return 0

@@ -142,11 +142,26 @@ class MySQLManager:
             ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
             """
             
+            # 创建生产订单表
+            production_order_sql = """
+            CREATE TABLE IF NOT EXISTS production_orders (
+                id INT AUTO_INCREMENT PRIMARY KEY,
+                fid VARCHAR(100) UNIQUE,
+                bill_no VARCHAR(100),
+                bill_type_name VARCHAR(100),
+                bill_date DATE,
+                modify_date DATETIME,
+                cancel_status VARCHAR(50),
+                sync_time DATETIME DEFAULT CURRENT_TIMESTAMP
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+            """
+
             tables = [
                 ("sales_orders", sales_order_sql),
                 ("sales_outstock", sales_outstock_sql),
                 ("forecast_orders", forecast_order_sql),
-                ("sync_logs", sync_log_sql)
+                ("sync_logs", sync_log_sql),
+                ("production_orders", production_order_sql)
             ]
             
             for table_name, sql in tables:
@@ -205,7 +220,25 @@ class MySQLManager:
         """
         
         return self._batch_insert(sql, data, self._prepare_sales_outstock_data)
-    
+
+    def insert_production_orders(self, data: List[Dict]) -> int:
+        """插入生产订单数据"""
+        if not data:
+            return 0
+        
+        sql = """
+        INSERT INTO production_orders (
+            fid, bill_no, bill_type_name, bill_date, modify_date, cancel_status
+        ) VALUES (
+            %s, %s, %s, %s, %s, %s
+        ) ON DUPLICATE KEY UPDATE
+            bill_no=VALUES(bill_no), bill_type_name=VALUES(bill_type_name),
+            bill_date=VALUES(bill_date), modify_date=VALUES(modify_date),
+            cancel_status=VALUES(cancel_status), sync_time=CURRENT_TIMESTAMP
+        """
+        
+        return self._batch_insert(sql, data, self._prepare_production_order_data)
+
     def insert_forecast_orders(self, data: List[Dict]) -> int:
         """插入预测订单数据"""
         if not data:

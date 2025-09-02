@@ -1,0 +1,15 @@
+# 虚拟环境
+.venv/
+
+# 缓存文件
+__pycache__/
+
+# 构建和打包目录
+build/
+dist/
+
+# PyInstaller spec 文件
+*.spec
+
+# 日志文件
+logs/

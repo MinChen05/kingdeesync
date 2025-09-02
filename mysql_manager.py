@@ -145,13 +145,12 @@ class MySQLManager:
             # 创建生产订单表
             production_order_sql = """
             CREATE TABLE IF NOT EXISTS production_orders (
-                id INT AUTO_INCREMENT PRIMARY KEY,
-                fid VARCHAR(100) UNIQUE,
-                bill_no VARCHAR(100),
-                bill_type_name VARCHAR(100),
-                bill_date DATE,
-                modify_date DATETIME,
-                cancel_status VARCHAR(50),
+                fid INT PRIMARY KEY,
+                fbillno VARCHAR(80),
+                fbilltype VARCHAR(36),
+                fdate DATETIME,
+                fmodifydate DATETIME,
+                fcancelstatus CHAR(1),
                 sync_time DATETIME DEFAULT CURRENT_TIMESTAMP
             ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
             """
@@ -228,13 +227,13 @@ class MySQLManager:
         
         sql = """
         INSERT INTO production_orders (
-            fid, bill_no, bill_type_name, bill_date, modify_date, cancel_status
+            fid, fbillno, fbilltype, fdate, fmodifydate, fcancelstatus
         ) VALUES (
             %s, %s, %s, %s, %s, %s
         ) ON DUPLICATE KEY UPDATE
-            bill_no=VALUES(bill_no), bill_type_name=VALUES(bill_type_name),
-            bill_date=VALUES(bill_date), modify_date=VALUES(modify_date),
-            cancel_status=VALUES(cancel_status), sync_time=CURRENT_TIMESTAMP
+            fbillno=VALUES(fbillno), fbilltype=VALUES(fbilltype),
+            fdate=VALUES(fdate), fmodifydate=VALUES(fmodifydate),
+            fcancelstatus=VALUES(fcancelstatus), sync_time=CURRENT_TIMESTAMP
         """
         
         return self._batch_insert(sql, data, self._prepare_production_order_data)

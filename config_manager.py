@@ -127,6 +127,16 @@ class ConfigManager:
                 "StartRow": 0,
                 "Limit": 0,
                 "SubSystemId": ""
+            },
+            "生产订单": {
+                "FormId": "PRD_MO",
+                "FieldKeys": "FID,FBILLNO,FBILLTYPE,FDATE,FMODIFYDATE,FCANCELSTATUS",
+                "FilterString": "FDocumentStatus='c' and FForeOrgId = '171190' and FMaterialId.FName='电机'",
+                "OrderString": "",
+                "TopRowCount": 0,
+                "StartRow": 0,
+                "Limit": 0,
+                "SubSystemId": ""
             }
         }
 

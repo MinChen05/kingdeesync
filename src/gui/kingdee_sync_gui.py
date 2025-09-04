@@ -21,9 +21,9 @@ from PySide6.QtGui import (
     QFont, QPalette, QColor, QIcon, QPixmap, QPainter, QBrush, QTextCursor
 )
 
-from data_sync import sync_manager, SyncType
-from scheduler import auto_scheduler, SchedulerStatus
-from config_manager import config_manager
+from src.core.data_sync import sync_manager, SyncType
+from src.core.scheduler import auto_scheduler, SchedulerStatus
+from src.config.config_manager import config_manager
 
 class SyncWorker(QThread):
     """同步工作线程"""
@@ -819,441 +819,28 @@ class KingdeeSyncGUI(QMainWindow):
         self.status_timer.start(5000)
     
     def apply_theme(self):
-        """应用Windows 11蓝色主题"""
-        style = """
-        QMainWindow {
-            background-color: #f5f5f5;
-            color: #202020;
-        }
-        
-        /* 侧边栏样式 */
-        QFrame#sidebar {
-            background-color: #ffffff;
-            border: 1px solid #e0e0e0;
-            border-radius: 10px;
-        }
-        
-        QLabel#sidebar-title {
-            font-size: 20px;
-            font-weight: bold;
-            color: #0078d4;
-            margin-bottom: 10px;
-        }
-        
-        QLabel#section-title {
-            font-size: 14px;
-            font-weight: bold;
-            color: #424242;
-            margin: 10px 0 5px 0;
-        }
-        
-        /* 信息卡片样式 */
-        QFrame#info-card {
-            background-color: #ffffff;
-            border: 1px solid #e0e0e0;
-            border-radius: 8px;
-            margin: 2px;
-        }
-        
-        QFrame#info-card:hover {
-            border-color: #0078d4;
-            box-shadow: 0 2px 8px rgba(0, 120, 212, 0.1);
-        }
-        
-        QLabel#card-title {
-            font-size: 12px;
-            color: #666666;
-            margin: 0;
-        }
-        
-        QLabel#card-value {
-            font-size: 18px;
-            font-weight: bold;
-            margin: 0;
-        }
-        
-        /* 快速操作按钮 */
-        QPushButton#quick-action-btn {
-            background-color: #f8f9fa;
-            color: #495057;
-            border: 1px solid #dee2e6;
-            border-radius: 8px;
-            padding: 8px 12px;
-            font-weight: 500;
-            text-align: left;
-        }
-        
-        QPushButton#quick-action-btn:hover {
-            background-color: #e9ecef;
-            border-color: #0078d4;
-        }
-        
-        QPushButton#quick-action-btn:pressed {
-            background-color: #dee2e6;
-        }
-        
-        /* 状态标签 */
-        QLabel#status-label {
-            font-size: 12px;
-            color: #666666;
-            padding: 2px 0;
-        }
-        
-        /* 主内容区域 */
-        QFrame#main-content {
-            background-color: #ffffff;
-            border: 1px solid #e0e0e0;
-            border-radius: 10px;
-        }
-        
-        /* 标签页样式 */
-        QTabWidget#main-tabs::pane {
-            border: none;
-            background-color: transparent;
-        }
-        
-        QTabWidget#main-tabs QTabBar::tab {
-            background-color: transparent;
-            color: #666666;
-            padding: 12px 20px;
-            margin-right: 4px;
-            border-radius: 8px 8px 0 0;
-            font-weight: 500;
-        }
-        
-        QTabWidget#main-tabs QTabBar::tab:selected {
-            background-color: #0078d4;
-            color: white;
-        }
-        
-        QTabWidget#main-tabs QTabBar::tab:hover:!selected {
-            background-color: #f0f0f0;
-        }
-        
-        /* 表单卡片样式 */
-        QFrame#form-card {
-            background-color: #f8f9fa;
-            border: 1px solid #dee2e6;
-            border-radius: 8px;
-            margin: 2px 0;
-        }
-        
-        QFrame#form-card:hover {
-            background-color: #e9ecef;
-            border-color: #0078d4;
-        }
-        
-        QLabel#form-title {
-            font-size: 14px;
-            font-weight: bold;
-            color: #212529;
-        }
-        
-        QLabel#form-subtitle {
-            font-size: 11px;
-            color: #6c757d;
-        }
-        
-        /* 类型说明 */
-        QLabel#type-description {
-            font-size: 11px;
-            color: #6c757d;
-            line-height: 1.4;
-            padding: 5px;
-            background-color: #f8f9fa;
-            border-radius: 4px;
-        }
-        
-        /* 表单选择说明 */
-        QLabel#form-description {
-            font-size: 11px;
-            color: #6c757d;
-            line-height: 1.4;
-            padding: 8px;
-            background-color: #f0f8ff;
-            border: 1px solid #e1ecf4;
-            border-radius: 4px;
-            margin-top: 5px;
-        }
-        
-        /* 主要按钮 */
-        QPushButton#primary-btn {
-            background-color: #0078d4;
-            color: white;
-            border: none;
-            border-radius: 8px;
-            padding: 12px 20px;
-            font-weight: bold;
-            font-size: 14px;
-        }
-        
-        QPushButton#primary-btn:hover {
-            background-color: #106ebe;
-        }
-        
-        QPushButton#primary-btn:pressed {
-            background-color: #005a9e;
-        }
-        
-        /* 设置卡片 */
-        QFrame#setting-card {
-            background-color: #ffffff;
-            border: 1px solid #e0e0e0;
-            border-radius: 8px;
-            margin: 2px 0;
-        }
-        
-        QLabel#setting-title {
-            font-size: 14px;
-            font-weight: bold;
-            color: #212529;
-        }
-        
-        QLabel#setting-desc {
-            font-size: 11px;
-            color: #6c757d;
-        }
-        
-        /* 状态显示卡片 */
-        QFrame#status-display-card {
-            background-color: #f8f9fa;
-            border: 1px solid #dee2e6;
-            border-radius: 8px;
-        }
-        
-        QLabel#status-text {
-            font-size: 16px;
-            font-weight: bold;
-            color: #212529;
-        }
-        
-        QLabel#next-sync-text {
-            font-size: 12px;
-            color: #6c757d;
-        }
-        
-        /* 进度标签 */
-        QLabel#progress-label {
-            font-size: 14px;
-            color: #495057;
-            font-weight: 500;
-        }
-        
-        /* 配置卡片 */
-        QFrame#config-card {
-            background-color: #ffffff;
-            border: 1px solid #e0e0e0;
-            border-radius: 8px;
-            margin: 5px 0;
-        }
-        
-        QLabel#config-title {
-            font-size: 16px;
-            font-weight: bold;
-            color: #0078d4;
-            margin-bottom: 8px;
-        }
-        
-        QLabel#config-info {
-            font-size: 13px;
-            color: #495057;
-            line-height: 1.5;
-        }
-        
-        QLabel#app-title {
-            font-size: 18px;
-            font-weight: bold;
-            color: #0078d4;
-            margin-bottom: 10px;
-        }
-        
-        /* 统计信息框 */
-        QFrame#stats-frame {
-            background-color: #f8f9fa;
-            border: 1px solid #dee2e6;
-            border-radius: 6px;
-            padding: 8px 12px;
-        }
-        
-        /* 过滤框 */
-        QFrame#filter-frame {
-            background-color: #ffffff;
-            border: 1px solid #e0e0e0;
-            border-radius: 6px;
-            padding: 8px 12px;
-            margin: 5px 0;
-        }
-        
-        /* 操作按钮 */
-        QPushButton#action-btn {
-            background-color: #6c757d;
-            color: white;
-            border: none;
-            border-radius: 6px;
-            padding: 6px 12px;
-            font-weight: 500;
-        }
-        
-        QPushButton#action-btn:hover {
-            background-color: #545b62;
-        }
-        
-        QPushButton#danger-btn {
-            background-color: #dc3545;
-            color: white;
-            border: none;
-            border-radius: 6px;
-            padding: 6px 12px;
-            font-weight: 500;
-        }
-        
-        QPushButton#danger-btn:hover {
-            background-color: #c82333;
-        }
-        
-        /* 基本组件样式 */
-        QGroupBox {
-            font-weight: bold;
-            color: #0078d4;
-            border: 2px solid #e0e0e0;
-            border-radius: 10px;
-            margin-top: 12px;
-            padding-top: 12px;
-        }
-        
-        QGroupBox::title {
-            subcontrol-origin: margin;
-            left: 15px;
-            padding: 0 10px 0 10px;
-            background-color: white;
-            font-size: 14px;
-        }
-        
-        QPushButton {
-            background-color: #0078d4;
-            color: white;
-            border: none;
-            border-radius: 6px;
-            padding: 8px 16px;
-            font-weight: 500;
-        }
-        
-        QPushButton:hover {
-            background-color: #106ebe;
-        }
-        
-        QPushButton:pressed {
-            background-color: #005a9e;
-        }
-        
-        QPushButton:disabled {
-            background-color: #cccccc;
-            color: #888888;
-        }
-        
-        QCheckBox::indicator {
-            width: 18px;
-            height: 18px;
-            border: 2px solid #0078d4;
-            border-radius: 4px;
-            background-color: white;
-        }
-        
-        QCheckBox::indicator:checked {
-            background-color: #0078d4;
-        }
-        
-        QComboBox {
-            border: 2px solid #e0e0e0;
-            border-radius: 6px;
-            padding: 6px 10px;
-            background-color: white;
-            font-size: 13px;
-        }
-        
-        QComboBox:focus {
-            border-color: #0078d4;
-        }
-        
-        QSpinBox {
-            border: 2px solid #e0e0e0;
-            border-radius: 6px;
-            padding: 6px 10px;
-            background-color: white;
-            font-size: 13px;
-        }
-        
-        QSpinBox:focus {
-            border-color: #0078d4;
-        }
-        
-        QProgressBar {
-            border: 1px solid #e0e0e0;
-            border-radius: 6px;
-            background-color: #f0f0f0;
-            text-align: center;
-            font-weight: bold;
-        }
-        
-        QProgressBar::chunk {
-            background-color: #0078d4;
-            border-radius: 5px;
-        }
-        
-        QTextEdit {
-            border: 1px solid #e0e0e0;
-            border-radius: 8px;
-            background-color: #fafafa;
-            font-family: 'Consolas', 'Courier New', monospace;
-            font-size: 12px;
-            padding: 8px;
-        }
-        
-        QTableWidget {
-            border: 1px solid #e0e0e0;
-            border-radius: 8px;
-            background-color: white;
-            alternate-background-color: #f8f9fa;
-            gridline-color: #e0e0e0;
-        }
-        
-        QTableWidget::item {
-            padding: 8px;
-            border-bottom: 1px solid #e0e0e0;
-        }
-        
-        QTableWidget::item:selected {
-            background-color: #0078d4;
-            color: white;
-        }
-        
-        QHeaderView::section {
-            background-color: #f8f9fa;
-            color: #495057;
-            padding: 10px 8px;
-            border: 1px solid #e0e0e0;
-            font-weight: bold;
-            font-size: 12px;
-        }
-        
-        QStatusBar {
-            background-color: #f8f9fa;
-            color: #495057;
-            border-top: 1px solid #e0e0e0;
-            font-size: 12px;
-        }
-        
-        QLabel {
-            color: #495057;
-        }
-        
-        QScrollArea {
-            border: none;
-            background-color: transparent;
-        }
-        """
-        
-        self.setStyleSheet(style)
+        """应用Windows 11渐变淡紫色主题"""
+        try:
+            # 获取项目根目录
+            current_dir = os.path.dirname(os.path.abspath(__file__))
+            project_root = os.path.dirname(os.path.dirname(current_dir))
+            css_file_path = os.path.join(project_root, 'assets', 'styles.css')
+            
+            # 读取CSS文件
+            with open(css_file_path, 'r', encoding='utf-8') as f:
+                style = f.read()
+            
+            # 应用样式
+            self.setStyleSheet(style)
+            
+        except FileNotFoundError:
+            # 如果CSS文件不存在，使用默认样式
+            print("警告: styles.css文件未找到，使用默认样式")
+            self.setStyleSheet("")
+        except Exception as e:
+            # 如果读取CSS文件出错，使用默认样式
+            print(f"警告: 读取CSS文件时出错: {e}，使用默认样式")
+            self.setStyleSheet("")
     
     def start_manual_sync(self):
         """启动手动同步"""
@@ -1277,8 +864,8 @@ class KingdeeSyncGUI(QMainWindow):
     
     def test_connections(self):
         """测试连接"""
-        from kingdee_api import kingdee_client
-        from mysql_manager import mysql_manager
+        from src.core.kingdee_api import kingdee_client
+        from src.core.mysql_manager import mysql_manager
         
         self.log_message("正在测试连接...")
         
@@ -1356,7 +943,7 @@ class KingdeeSyncGUI(QMainWindow):
         
         if selection == "同步所有表单":
             # 返回所有表单
-            return ["销售订单", "销售出库单", "预测订单"]
+            return ["销售订单", "销售出库单", "预测订单", "生产订单"]
         elif selection == "自定义选择...":
             # 使用复选框的选择结果
             selected = []
@@ -1364,12 +951,12 @@ class KingdeeSyncGUI(QMainWindow):
                 if checkbox.isChecked():
                     selected.append(form_name)
             return selected
-        elif selection in ["销售订单", "销售出库单", "预测订单"]:
+        elif selection in ["销售订单", "销售出库单", "预测订单", "生产订单"]:
             # 返回单个选择的表单
             return [selection]
         else:
             # 默认返回所有表单
-            return ["销售订单", "销售出库单", "预测订单"]
+            return ["销售订单", "销售出库单", "预测订单", "生产订单"]
     
     def get_current_sync_type(self) -> SyncType:
         """获取当前同步类型"""
@@ -1394,7 +981,7 @@ class KingdeeSyncGUI(QMainWindow):
         
         if result['status'] == 'success':
             self.log_message(f"✓ 手动同步成功: {result['message']}")
-            QMessageBox.information(self, "同步完成", f"同步成功!\n{result['message']}")
+            # QMessageBox.information(self, "同步完成", f"同步成功!\n{result['message']}")  # 取消同步成功弹窗
         else:
             self.log_message(f"✗ 手动同步失败: {result['message']}")
             QMessageBox.critical(self, "同步失败", f"同步失败!\n{result['message']}")
@@ -1555,7 +1142,7 @@ class KingdeeSyncGUI(QMainWindow):
             auto_scheduler.stop()
         
         # 关闭数据库连接
-        from mysql_manager import mysql_manager
+        from src.core.mysql_manager import mysql_manager
         mysql_manager.disconnect()
         
         event.accept()

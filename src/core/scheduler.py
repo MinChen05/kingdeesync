@@ -10,8 +10,8 @@ from datetime import datetime
 from typing import List, Callable, Optional
 from enum import Enum
 
-from data_sync import sync_manager, SyncType
-from config_manager import config_manager
+from src.core.data_sync import sync_manager, SyncType
+from src.config.config_manager import config_manager
 
 # 配置日志
 logger = logging.getLogger(__name__)

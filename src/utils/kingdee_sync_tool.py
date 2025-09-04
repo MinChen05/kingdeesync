@@ -32,9 +32,9 @@ except ImportError as e:
 
 # 导入应用模块
 try:
-    from kingdee_sync_gui import KingdeeSyncGUI
-    from config_manager import config_manager
-    from scheduler import auto_scheduler
+    from src.gui.kingdee_sync_gui import KingdeeSyncGUI
+    from src.config.config_manager import config_manager
+    from src.core.scheduler import auto_scheduler
 except ImportError as e:
     print(f"导入应用模块失败: {e}")
     print("请确保所有模块文件都在同一目录下")
@@ -113,12 +113,12 @@ def initialize_application():
         logger.info("配置文件加载完成")
         
         # 初始化数据库表
-        from mysql_manager import mysql_manager
+        from src.core.mysql_manager import mysql_manager
         if mysql_manager.connect():
-            if mysql_manager.create_tables():
-                logger.info("数据库表初始化完成")
+            if mysql_manager.create_tables(create_tables=False):
+                logger.info("跳过数据库表创建，使用现有数据库表")
             else:
-                logger.warning("数据库表初始化失败，但程序将继续运行")
+                logger.warning("数据库连接检查失败，但程序将继续运行")
         else:
             logger.warning("数据库连接失败，程序将在GUI中提供连接测试功能")
         
@@ -187,12 +187,12 @@ def cleanup_and_exit():
             logger.info("自动同步调度器已停止")
         
         # 关闭数据库连接
-        from mysql_manager import mysql_manager
+        from src.core.mysql_manager import mysql_manager
         mysql_manager.disconnect()
         logger.info("数据库连接已关闭")
         
         # 关闭金蝶API连接
-        from kingdee_api import kingdee_client
+        from src.core.kingdee_api import kingdee_client
         kingdee_client.logout()
         logger.info("金蝶API连接已关闭")
         

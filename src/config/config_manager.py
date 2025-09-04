@@ -130,8 +130,8 @@ class ConfigManager:
             },
             "生产订单": {
                 "FormId": "PRD_MO",
-                "FieldKeys": "FID,FBILLNO,FBILLTYPE,FDATE,FMODIFYDATE,FCANCELSTATUS",
-                "FilterString": "FDocumentStatus='c' and FForeOrgId = '171190' and FMaterialId.FName='电机'",
+                "FieldKeys": "FID,FTreeEntity_FENTRYID,FTreeEntity_FSEQ,FBILLNO,FBILLTYPE.FNAME,FMATERIALID.FNUMBER,FWorkShopID.FNAME,FDATE,FQTY,FSALEORDERID,FSRCBILLNO,FPLANSTARTDATE,FPLANFINISHDATE,FMODIFYDATE,FCANCELSTATUS",
+                "FilterString": "FDocumentStatus='c' and FPrdOrgId = 171190",
                 "OrderString": "",
                 "TopRowCount": 0,
                 "StartRow": 0,

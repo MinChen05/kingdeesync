@@ -6,7 +6,7 @@ import requests
 import json
 import logging
 from typing import Dict, List, Any, Optional
-from config_manager import config_manager
+from src.config.config_manager import config_manager
 
 # 配置日志
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')

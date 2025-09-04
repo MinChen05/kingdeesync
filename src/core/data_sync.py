@@ -7,9 +7,9 @@ from datetime import datetime, timedelta
 from typing import Dict, List, Any, Optional
 from enum import Enum
 
-from kingdee_api import kingdee_client
-from mysql_manager import mysql_manager
-from config_manager import config_manager
+from src.core.kingdee_api import kingdee_client
+from src.core.mysql_manager import mysql_manager
+from src.config.config_manager import config_manager
 
 # 配置日志
 logger = logging.getLogger(__name__)
@@ -31,10 +31,10 @@ class DataSyncManager:
     
     def __init__(self):
         self.table_mapping = {
-            "销售订单": "sales_orders",
-            "销售出库单": "sales_outstock", 
-            "预测订单": "forecast_orders",
-            "生产订单": "production_orders"
+            "销售订单": "saleorder",
+            "销售出库单": "sal_outstock", 
+            "预测订单": "pln_forecast",
+            "生产订单": "prd_mo"
         }
         self.sync_callbacks = []  # 同步进度回调
     

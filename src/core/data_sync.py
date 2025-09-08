@@ -34,7 +34,8 @@ class DataSyncManager:
             "销售订单": "saleorder",
             "销售出库单": "sal_outstock", 
             "预测订单": "pln_forecast",
-            "生产订单": "prd_mo"
+            "生产订单": "prd_mo",
+            "生产用料清单": "prd_ppbom"
         }
         self.sync_callbacks = []  # 同步进度回调
     
@@ -243,6 +244,8 @@ class DataSyncManager:
             return mysql_manager.insert_forecast_orders(data)
         elif form_name == "生产订单":
             return mysql_manager.insert_production_orders(data)
+        elif form_name == "生产用料清单":
+            return mysql_manager.insert_production_ppbom(data)
         else:
             logger.error(f"未知的表单类型: {form_name}")
             return 0

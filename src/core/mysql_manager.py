@@ -171,25 +171,25 @@ class MySQLManager:
             self.cursor.execute("SHOW TABLES LIKE 'prd_mo'")
             if not self.cursor.fetchone():
                 # 构建字段定义
-                field_definitions = [
-                    "FID int(11) NOT NULL",
-                    "FENTRYID int(11) NULL",
-                    "FSEQ int(11) NULL",
-                    "FBILLNO varchar(80) NULL",
-                    "FBILLTYPE varchar(36) NULL",
-                    "FMATERIALNUMBER varchar(80) NULL",
-                    "FWORKSHOPNAME varchar(100) NULL",
-                    "FDATE datetime NULL",
-                    "FQTY decimal(18,6) NULL",
-                    "FSALEORDERID varchar(36) NULL",
-                    "FSRCBILLNO varchar(80) NULL",
-                    "FPLANSTARTDATE datetime NULL",
-                    "FPLANFINISHDATE datetime NULL",
-                    "FMODIFYDATE datetime NULL",
-                    "FCANCELSTATUS char(1) NULL",
-                    "SYNC_TIME datetime NULL DEFAULT CURRENT_TIMESTAMP",
-                    "PRIMARY KEY (FID)"
-                ]
+                field_definitions = ["FID int(11) NOT NULL",
+                "FENTRYID int(11) NULL",
+                "FSEQ int(11) NULL",
+                "FBILLNO varchar(80) NULL",
+                "FBILLTYPE varchar(36) NULL",
+                "FMATERIALNUMBER varchar(80) NULL",
+                "FWORKSHOPNAME varchar(100) NULL",
+                "FDATE datetime NULL",
+                "FQTY decimal(18,6) NULL",
+                "FSALEORDERID varchar(36) NULL",
+                "FSRCBILLNO varchar(80) NULL",
+                "FPLANSTARTDATE datetime NULL",
+                "FPLANFINISHDATE datetime NULL",
+                "FMODIFYDATE datetime NULL",
+                "FCANCELSTATUS char(1) NULL",
+                "FSTATUS char(1) NULL",
+                "FSTOCKINQUAQTY decimal(23,2) NULL",
+                "SYNC_TIME datetime NULL DEFAULT CURRENT_TIMESTAMP",
+                "PRIMARY KEY (FID)"]
                 
                 # 构建创建表SQL
                 field_defs_str = ',\n                '.join(field_definitions)
@@ -201,6 +201,31 @@ class MySQLManager:
                 logger.info("生产订单表创建完成")
             else:
                 logger.info("生产订单表已存在，跳过创建")
+            
+            # 检查生产用料清单表是否存在
+            self.cursor.execute("SHOW TABLES LIKE 'prd_ppbom'")
+            if not self.cursor.fetchone():
+                # 创建生产用料清单表
+                ppbom_sql = """
+                CREATE TABLE prd_ppbom (
+                    FID int(11) NOT NULL,
+                    FENTRYID int(11) NULL,
+                    FMOID int(11) NULL,
+                    FBILLNO varchar(30) NULL,
+                    FMATERIALNUMBER varchar(30) NULL,
+                    FMATERIALNAME varchar(20) NULL,
+                    FPrdOrgId varchar(30) NULL,
+                    FWorkshopName varchar(20) NULL,
+                    FFatherQTY decimal(18,2) NULL,
+                    FMODIFYDATE datetime NULL,
+                    SYNC_TIME datetime NULL DEFAULT CURRENT_TIMESTAMP,
+                    PRIMARY KEY (FID)
+                ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+                """
+                self.cursor.execute(ppbom_sql)
+                logger.info("生产用料清单表创建完成")
+            else:
+                logger.info("生产用料清单表已存在，跳过创建")
             
             return True
             
@@ -243,11 +268,9 @@ class MySQLManager:
         
         sql = """
         INSERT INTO prd_mo (
-            FID, FENTRYID, FSEQ, FBILLNO, FBILLTYPE, FMATERIALNUMBER, FWORKSHOPNAME, 
-            FDATE, FQTY, FSALEORDERID, FSRCBILLNO, FPLANSTARTDATE, FPLANFINISHDATE, 
-            FMODIFYDATE, FCANCELSTATUS
+            FID, FENTRYID, FSEQ, FBILLNO, FBILLTYPE, FMATERIALNUMBER, FWORKSHOPNAME, FDATE, FQTY, FSALEORDERID, FSRCBILLNO, FPLANSTARTDATE, FPLANFINISHDATE, FMODIFYDATE, FCANCELSTATUS, FSTATUS, FSTOCKINQUAQTY
         ) VALUES (
-            %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s
+            %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s
         ) ON DUPLICATE KEY UPDATE
             FENTRYID = VALUES(FENTRYID),
             FSEQ = VALUES(FSEQ),
@@ -262,7 +285,9 @@ class MySQLManager:
             FPLANSTARTDATE = VALUES(FPLANSTARTDATE),
             FPLANFINISHDATE = VALUES(FPLANFINISHDATE),
             FMODIFYDATE = VALUES(FMODIFYDATE),
-            FCANCELSTATUS = VALUES(FCANCELSTATUS)
+            FCANCELSTATUS = VALUES(FCANCELSTATUS),
+            FSTATUS = VALUES(FSTATUS),
+            FSTOCKINQUAQTY = VALUES(FSTOCKINQUAQTY)
         """
         
         return self._batch_insert(sql, data, self._prepare_production_order_data)
@@ -298,10 +323,49 @@ class MySQLManager:
                 self.cursor = None
             return 0
     
+    def _convert_production_status(self, status_value):
+        """转换生产订单状态值
+        状态值对应关系：
+        1 -> 计划
+        2 -> 计划确认
+        3 -> 下达
+        4 -> 开工
+        5 -> 完工
+        6 -> 结案
+        7 -> 结算
+        """
+        status_map = {
+            # 数字转中文（数据库字段已改为varchar(4)）
+            '1': '计划',
+            '2': '计划确认',
+            '3': '下达',
+            '4': '开工',
+            '5': '完工',
+            '6': '结案',
+            '7': '结算',
+            # 处理可能的文本值（保持不变）
+            '计划': '计划',
+            '计划确认': '计划确认',
+            '下达': '下达',
+            '开工': '开工',
+            '完工': '完工',
+            '结案': '结案',
+            '结算': '结算'
+        }
+        
+        if status_value is None:
+            return None
+            
+        # 转换为字符串并去除空格
+        status_str = str(status_value).strip()
+        
+        # 返回映射值，如果没有对应的映射则返回原值
+        return status_map.get(status_str, status_str)
+    
     def _prepare_production_order_data(self, item) -> Optional[Tuple]:
         """准备生产订单数据
         按照数据库字段顺序: FID, FENTRYID, FSEQ, FBILLNO, FBILLTYPE, FMATERIALNUMBER, FWORKSHOPNAME, 
-        FDATE, FQTY, FSALEORDERID, FSRCBILLNO, FPLANSTARTDATE, FPLANFINISHDATE, FMODIFYDATE, FCANCELSTATUS
+        FDATE, FQTY, FSALEORDERID, FSRCBILLNO, FPLANSTARTDATE, FPLANFINISHDATE, FMODIFYDATE, FCANCELSTATUS, FSTATUS, FSTOCKINQUAQTY
         """
         try:
             # 检查数据类型
@@ -322,11 +386,13 @@ class MySQLManager:
                     self._parse_datetime(item.get('FPLANSTARTDATE')),  # FPLANSTARTDATE
                     self._parse_datetime(item.get('FPLANFINISHDATE')), # FPLANFINISHDATE
                     self._parse_datetime(item.get('FMODIFYDATE')),     # FMODIFYDATE
-                    item.get('FCANCELSTATUS')               # FCANCELSTATUS
+                    item.get('FCANCELSTATUS'),              # FCANCELSTATUS
+                    self._convert_production_status(item.get('FSTATUS')),  # FSTATUS
+                    item.get('FSTOCKINQUAQTY')              # FSTOCKINQUAQTY
                 )
             elif isinstance(item, list):
                 # 列表格式数据
-                if len(item) >= 15:
+                if len(item) >= 15:  # 至少需要15个字段才能处理
                     return (
                         item[0],                            # FID
                         item[1],                            # FENTRYID
@@ -342,7 +408,9 @@ class MySQLManager:
                         self._parse_datetime(item[11]),     # FPLANSTARTDATE
                         self._parse_datetime(item[12]),     # FPLANFINISHDATE
                         self._parse_datetime(item[13]),     # FMODIFYDATE
-                        item[14]                            # FCANCELSTATUS
+                        item[14],                           # FCANCELSTATUS
+                        self._convert_production_status(item[15] if len(item) > 15 else None),  # FSTATUS
+                        item[16] if len(item) > 16 else None   # FSTOCKINQUAQTY
                     )
                 else:
                     logger.warning(f"列表数据项不足: {len(item)}")
@@ -352,6 +420,48 @@ class MySQLManager:
                 return None
         except Exception as e:
             logger.error(f"准备生产订单数据失败: {str(e)}")
+            return None
+            
+    def _prepare_production_ppbom_data(self, item) -> Optional[Tuple]:
+        """准备生产用料清单数据
+        按照数据库字段顺序: FID, FENTRYID, FMOID, FBILLNO, FMATERIALNUMBER, FMATERIALNAME, 
+        FPrdOrgId, FWorkshopName, FFatherQTY, FMODIFYDATE
+        """
+        try:
+            # 检查数据类型
+            if isinstance(item, dict):
+                # 字典格式数据
+                return (
+                    item.get('FID'),                        # FID
+                    None,                                   # FENTRYID (不存在，设为NULL)
+                    item.get('FMOID'),                      # FMOID
+                    item.get('FBILLNO'),                    # FBILLNO
+                    item.get('FMATERIALID.FNUMBER'),        # FMATERIALNUMBER
+                    item.get('FMATERIALID.FNAME'),          # FMATERIALNAME
+                    None,                                   # FPrdOrgId (不存在，设为NULL)
+                    item.get('FWORKSHOPID.FNAME'),          # FWorkshopName
+                    item.get('FQTY'),                       # FFatherQTY
+                    self._parse_datetime(item.get('FMODIFYDATE'))  # FMODIFYDATE
+                )
+            elif isinstance(item, list) and len(item) >= 8:
+                # 列表格式数据 - 根据API返回的实际字段顺序
+                return (
+                    item[0],                                # FID
+                    None,                                   # FENTRYID (不存在，设为NULL)
+                    item[1],                                # FMOID
+                    item[2],                                # FBILLNO
+                    item[3],                                # FMATERIALNUMBER (FMATERIALID.FNUMBER)
+                    item[4],                                # FMATERIALNAME (FMATERIALID.FNAME)
+                    None,                                   # FPrdOrgId (不存在，设为NULL)
+                    item[5],                                # FWorkshopName (FWORKSHOPID.FNAME)
+                    item[6],                                # FFatherQTY (FQTY)
+                    self._parse_datetime(item[7])           # FMODIFYDATE
+                )
+            else:
+                logger.warning(f"不支持的数据类型或列表数据项不足: {type(item)}")
+                return None
+        except Exception as e:
+            logger.error(f"准备生产用料清单数据失败: {str(e)}")
             return None
             
     def insert_sales_orders(self, data: List[Dict]) -> int:
@@ -442,6 +552,31 @@ class MySQLManager:
         """
         
         return self._batch_insert(sql, data, self._prepare_forecast_order_data)
+        
+    def insert_production_ppbom(self, data: List[Dict]) -> int:
+        """插入生产用料清单数据"""
+        if not data:
+            return 0
+        
+        sql = """
+        INSERT INTO prd_ppbom (
+            FID, FENTRYID, FMOID, FBILLNO, FMATERIALNUMBER, FMATERIALNAME, 
+            FPrdOrgId, FWorkshopName, FFatherQTY, FMODIFYDATE
+        ) VALUES (
+            %s, %s, %s, %s, %s, %s, %s, %s, %s, %s
+        ) ON DUPLICATE KEY UPDATE
+            FENTRYID = VALUES(FENTRYID),
+            FMOID = VALUES(FMOID),
+            FBILLNO = VALUES(FBILLNO),
+            FMATERIALNUMBER = VALUES(FMATERIALNUMBER),
+            FMATERIALNAME = VALUES(FMATERIALNAME),
+            FPrdOrgId = VALUES(FPrdOrgId),
+            FWorkshopName = VALUES(FWorkshopName),
+            FFatherQTY = VALUES(FFatherQTY),
+            FMODIFYDATE = VALUES(FMODIFYDATE)
+        """
+        
+        return self._batch_insert(sql, data, self._prepare_production_ppbom_data)
     
     def _prepare_sales_order_data(self, item) -> Optional[Tuple]:
         """准备销售订单数据

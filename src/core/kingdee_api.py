@@ -165,6 +165,20 @@ class KingdeeAPIClient:
             query_params["FilterString"] = filter_string
         return self.query_data("预测订单", query_params)
     
+    def query_production_order(self, filter_string: str = None) -> Optional[List[Dict]]:
+        """查询生产订单"""
+        query_params = config_manager.get_form_queries()["生产订单"].copy()
+        if filter_string:
+            query_params["FilterString"] = filter_string
+        return self.query_data("生产订单", query_params)
+    
+    def query_production_ppbom(self, filter_string: str = None) -> Optional[List[Dict]]:
+        """查询生产用料清单"""
+        query_params = config_manager.get_form_queries()["生产用料清单"].copy()
+        if filter_string:
+            query_params["FilterString"] = filter_string
+        return self.query_data("生产用料清单", query_params)
+    
     def query_multiple_forms(self, form_names: List[str], custom_filters: Dict[str, str] = None) -> Dict[str, List[Dict]]:
         """查询多个表单数据"""
         results = {}
@@ -186,6 +200,16 @@ class KingdeeAPIClient:
                     if custom_filters and form_name in custom_filters:
                         filter_string = custom_filters[form_name]
                     data = self.query_forecast_order(filter_string)
+                elif form_name == "生产订单":
+                    filter_string = None
+                    if custom_filters and form_name in custom_filters:
+                        filter_string = custom_filters[form_name]
+                    data = self.query_production_order(filter_string)
+                elif form_name == "生产用料清单":
+                    filter_string = None
+                    if custom_filters and form_name in custom_filters:
+                        filter_string = custom_filters[form_name]
+                    data = self.query_production_ppbom(filter_string)
                 else:
                     logger.warning(f"未知的表单类型: {form_name}")
                     data = []

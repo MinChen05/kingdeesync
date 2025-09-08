@@ -237,6 +237,7 @@ class KingdeeSyncGUI(QMainWindow):
             "销售出库单", 
             "预测订单",
             "生产订单",
+            "生产用料清单",
             "自定义选择..."
         ])
         
@@ -262,7 +263,8 @@ class KingdeeSyncGUI(QMainWindow):
             ("销售订单", "📊 销售订单数据"),
             ("销售出库单", "📦 销售出库单数据"),
             ("预测订单", "🔮 预测订单数据"),
-            ("生产订单", "🏭 生产订单数据")
+            ("生产订单", "🏭 生产订单数据"),
+            ("生产用料清单", "🧰 生产用料清单数据")
         ]
         
         for form_name, form_desc_text in forms_info:
@@ -705,6 +707,7 @@ class KingdeeSyncGUI(QMainWindow):
         tables_info = QLabel("""• sales_orders - 销售订单数据表
 • sales_outstock - 销售出库单数据表
 • forecast_orders - 预测订单数据表
+• prd_ppbom - 生产用料清单数据表
 • sync_logs - 同步操作日志表
 
 📊 所有数据表将在首次运行时自动创建""")
@@ -729,7 +732,7 @@ class KingdeeSyncGUI(QMainWindow):
         app_title.setObjectName("app-title")
         
         about_info = QLabel("""🎆 功能特性:
-• 支持销售订单、销售出库单、预测订单数据同步
+• 支持销售订单、销售出库单、预测订单、生产订单、生产用料清单数据同步
 • 提供增量、全量、完全同步三种模式
 • 支持自动定时同步和手动同步
 • 实时进度显示和日志记录
@@ -943,7 +946,7 @@ class KingdeeSyncGUI(QMainWindow):
         
         if selection == "同步所有表单":
             # 返回所有表单
-            return ["销售订单", "销售出库单", "预测订单", "生产订单"]
+            return ["销售订单", "销售出库单", "预测订单", "生产订单", "生产用料清单"]
         elif selection == "自定义选择...":
             # 使用复选框的选择结果
             selected = []
@@ -951,12 +954,12 @@ class KingdeeSyncGUI(QMainWindow):
                 if checkbox.isChecked():
                     selected.append(form_name)
             return selected
-        elif selection in ["销售订单", "销售出库单", "预测订单", "生产订单"]:
+        elif selection in ["销售订单", "销售出库单", "预测订单", "生产订单", "生产用料清单"]:
             # 返回单个选择的表单
             return [selection]
         else:
             # 默认返回所有表单
-            return ["销售订单", "销售出库单", "预测订单", "生产订单"]
+            return ["销售订单", "销售出库单", "预测订单", "生产订单", "生产用料清单"]
     
     def get_current_sync_type(self) -> SyncType:
         """获取当前同步类型"""

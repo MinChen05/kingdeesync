@@ -130,7 +130,17 @@ class ConfigManager:
             },
             "生产订单": {
                 "FormId": "PRD_MO",
-                "FieldKeys": "FID,FTreeEntity_FENTRYID,FTreeEntity_FSEQ,FBILLNO,FBILLTYPE.FNAME,FMATERIALID.FNUMBER,FWorkShopID.FNAME,FDATE,FQTY,FSALEORDERID,FSRCBILLNO,FPLANSTARTDATE,FPLANFINISHDATE,FMODIFYDATE,FCANCELSTATUS",
+                "FieldKeys": "FID,FTreeEntity_FENTRYID,FTreeEntity_FSEQ,FBILLNO,FBILLTYPE.FNAME,FMATERIALID.FNUMBER,FWorkShopID.FNAME,FDATE,FQTY,FSALEORDERID,FSRCBILLNO,FPLANSTARTDATE,FPLANFINISHDATE,FMODIFYDATE,FCANCELSTATUS,FSTATUS,FSTOCKINQUAQTY",
+                "FilterString": "FDocumentStatus='c' and FPrdOrgId = 171190",
+                "OrderString": "",
+                "TopRowCount": 0,
+                "StartRow": 0,
+                "Limit": 0,
+                "SubSystemId": ""
+            },
+            "生产用料清单": {
+                "FormId": "PRD_PPBOM",
+                "FieldKeys": "FID,FMOID,FBILLNO,FMATERIALID.FNUMBER,FMATERIALID.FNAME,FWORKSHOPID.FNAME,FQTY,FMODIFYDATE",
                 "FilterString": "FDocumentStatus='c' and FPrdOrgId = 171190",
                 "OrderString": "",
                 "TopRowCount": 0,

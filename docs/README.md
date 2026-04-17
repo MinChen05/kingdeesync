@@ -1,247 +1,30 @@
-# 金蝶数据同步工具
+# 文档索引
 
-<div align="center">
+## 基线说明
 
-![版本](https://img.shields.io/badge/版本-1.0-blue)
-![Python](https://img.shields.io/badge/Python-3.11+-green)
-![PySide6](https://img.shields.io/badge/PySide6-6.5+-orange)
-![MySQL](https://img.shields.io/badge/MySQL-5.7+-blue)
+- Python 代码线是当前唯一主线。
+- 默认数据库为 SQLServer，来源于 [config.ini](/d:/Kingdee/config.ini) 的 `[DATABASE] type = sqlserver`。
+- MySQL 仅保留兼容支持，不再作为文档默认假设。
+- `.NET` 目录是迁移工程，不是当前交付主线。
 
-</div>
+## 本目录建议关注
 
-## 📋 项目概述
+- 根目录 [README.md](/d:/Kingdee/README.md)：项目总览、启动方式、门禁、迁移口径。
+- [../dotnet/README.md](/d:/Kingdee/dotnet/README.md)：`.NET` 迁移现状、限制和 parity 用法。
+- [../src/config/form-queries.json](/d:/Kingdee/src/config/form-queries.json)：Python / .NET 共用的查询模板。
+- [../src/config/tables.json](/d:/Kingdee/src/config/tables.json)：表单到 writer / 目标表映射。
 
-金蝶数据同步工具是一个基于Python和PySide6开发的桌面应用程序，用于将金蝶云星空系统中的业务数据同步到MySQL数据库中。工具采用Windows 11风格的蓝色主题界面，提供直观易用的操作体验，支持多种业务表单数据的自动化同步。
+## 当前约定
 
-## ✨ 功能特性
+- 所有默认部署说明都应以 SQLServer 为主。
+- 所有架构说明都应以 Python 主线为准。
+- 涉及 `.NET` 的内容必须明确标注“迁移中”或“对账用途”，避免误读为正式替代。
 
-### 🚀 核心功能
-- **多表单同步**: 支持销售订单、销售出库单、预测订单、生产订单四种业务表单数据同步
-- **三种同步模式**:
-  - **增量同步**: 只同步上次同步后修改的数据（推荐日常使用）
-  - **全量同步**: 同步所有符合条件的数据
-  - **完全同步**: 清空数据库后重新同步所有数据，确保100%数据一致性
-- **自动定时同步**: 支持1分钟到24小时的自定义同步间隔
-- **手动同步**: 随时执行一次性数据同步
-- **数据验证**: 验证金蝶系统与数据库数据的完整性和一致性
+## 常用命令
 
-### 🎨 界面特性
-- **Windows 11风格**: 现代化蓝色主题界面设计
-- **实时进度显示**: 同步过程可视化进度条和状态信息
-- **实时日志**: 所有操作都有详细的日志记录
-- **历史记录**: 查看历史同步记录和统计信息
-- **连接测试**: 一键测试金蝶API和MySQL数据库连接状态
-
-## 🔧 安装部署
-
-### 环境要求
-- **操作系统**: Windows 10/11 (推荐Windows 11)
-- **Python版本**: Python 3.11 或更高版本
-- **内存**: 最低 2GB RAM，推荐 4GB 以上
-- **网络**: 能够访问金蝶云星空系统和MySQL数据库
-
-### 安装步骤
-
-#### 方式一：使用可执行文件（推荐）
-1. 下载最新的发布版本 `金蝶数据同步工具.exe`
-2. 双击 `启动金蝶数据同步工具.bat` 文件启动程序
-3. 首次运行会自动创建配置文件
-
-#### 方式二：从源码运行
-1. **安装Python**
-   - 从 https://www.python.org/downloads/ 下载Python 3.11+
-   - 安装时务必勾选"Add Python to PATH"选项
-
-2. **下载项目文件**
-   - 将所有项目文件放在同一个目录下
-
-3. **安装依赖包**
-   ```bash
-   pip install -r requirements.txt
-   ```
-
-4. **启动程序**
-   - 双击 `scripts/启动程序.bat` 文件
-   - 或在命令行运行: `python main.py`
-
-## ⚙️ 配置说明
-
-### 金蝶API配置
-程序默认配置了以下金蝶API参数：
-```ini
-[KINGDEE]
-login_url = https://jyxing.ik3cloud.com/k3cloud/Kingdee.BOS.WebApi.ServicesStub.AuthService.ValidateUser.common.kdsvc
-query_url = https://jyxing.ik3cloud.com/k3cloud/Kingdee.BOS.WebApi.ServicesStub.DynamicFormService.ExecuteBillQuery.common.kdsvc
-acct_id = 20211115163118805
-username = aps
-password = jy@123456
-lcid = 2052
+```bash
+python main.py
+python main.py check
+python -m unittest tests.test_config_manager tests.test_filter_builder tests.test_sync_run_repository -v
+python src/tools/compare_python_dotnet_batch.py --mode full --tables 表单A,表单B
 ```
-
-### MySQL数据库配置
-```ini
-[MYSQL]
-host = 192.169.0.32
-user = root
-password = 123456
-database = kingdee
-charset = utf8mb4
-port = 3306
-```
-
-### 同步配置
-```ini
-[SYNC]
-auto_sync = False
-sync_interval = 60
-sync_type = incremental
-```
-
-## 📖 使用指南
-
-### 1. 启动程序
-双击 `启动程序.bat` 文件启动程序，程序会自动检查依赖环境并启动GUI界面。
-
-### 2. 测试连接
-在使用前，建议先点击"测试连接"按钮验证：
-- 金蝶API连接是否正常
-- MySQL数据库连接是否正常
-
-### 3. 数据同步
-
-#### 手动同步
-1. 在"数据同步"标签页中选择要同步的表单
-2. 选择同步类型（增量/全量/完全同步）
-3. 点击"手动同步"按钮
-4. 观察进度条和日志信息
-
-#### 自动同步
-1. 切换到"定时同步"标签页
-2. 勾选"启用自动同步"
-3. 设置同步间隔（分钟）
-4. 点击"启动调度"按钮
-5. 系统将按设定间隔自动执行同步
-
-### 4. 数据验证
-点击"数据验证"按钮可以验证金蝶系统与数据库中数据记录数量是否一致。
-
-### 5. 查看历史
-在"历史记录"标签页可以查看所有同步操作的历史记录和统计信息。
-
-## 💾 数据库表结构
-
-程序会自动创建以下数据表：
-
-### 销售订单表 (sales_orders)
-- 存储销售订单数据
-- 主要字段：订单号、客户信息、物料信息、数量、交期等
-
-### 销售出库单表 (sales_outstock)  
-- 存储销售出库单数据
-- 主要字段：出库单号、客户信息、物料信息、出库数量等
-
-### 预测订单表 (pln_forecast)
-- 存储预测订单数据
-- 主要字段：预测单号、客户信息、物料信息、预测数量、预测日期等
-
-### 生产订单表 (prd_mo)
-- 存储生产订单数据
-- 主要字段：生产订单号、物料信息、计划数量、计划日期等
-
-### 同步日志表 (sync_logs)
-- 记录所有同步操作的详细日志
-- 包含同步类型、状态、耗时、记录数等信息
-
-## ❓ 故障排除
-
-### 常见问题
-
-**Q1: 程序启动失败，提示缺少模块**
-- A: 请确保已安装所有依赖包，运行 `pip install -r requirements.txt`
-
-**Q2: 金蝶API连接测试失败**
-- A: 检查网络连接和金蝶服务器地址，确认账号密码正确
-
-**Q3: MySQL数据库连接失败**
-- A: 检查数据库服务器地址、端口、用户名和密码，确保数据库服务正常运行
-
-**Q4: 同步过程中出现超时**
-- A: 检查网络状况，或调整查询的数据量和时间范围
-
-**Q5: 数据不一致**
-- A: 使用"完全同步"模式重新同步所有数据，或检查过滤条件设置
-
-**Q6: 程序退出时出现"Already closed"错误**
-- A: 这是一个已知问题，不影响程序功能和数据同步结果
-
-### 日志文件
-程序运行日志保存在 `logs/` 目录下，按日期命名。如遇问题，请查看日志文件获取详细错误信息。
-
-### 性能优化建议
-1. **网络环境**: 确保网络连接稳定，减少超时风险
-2. **同步频率**: 根据业务需要合理设置同步间隔，避免过于频繁
-3. **数据量**: 对于大量数据，建议在业务低峰期执行完全同步
-4. **数据库**: 适当为数据库表添加索引以提高查询性能
-
-## 🔌 技术架构
-
-### 开发技术栈
-- **前端UI**: PySide6 (Qt6) - 现代化跨平台GUI框架
-- **后端逻辑**: Python 3.11+ - 高效的数据处理和业务逻辑
-- **数据库**: MySQL - 关系型数据库存储
-- **网络通信**: requests - HTTP API调用
-- **任务调度**: schedule - 定时任务管理
-- **配置管理**: configparser - 配置文件管理
-
-### 项目结构
-```
-├── main.py                 # 主程序入口
-├── config.ini              # 配置文件
-├── requirements.txt        # 依赖包清单
-├── assets/                 # 资源文件目录
-│   └── styles.css          # 样式表
-├── data/                   # 数据文件目录
-│   └── table_fields_analysis.json  # 表字段分析
-├── docs/                   # 文档目录
-│   ├── README.md           # 使用说明
-│   └── 需求.txt            # 需求文档
-├── scripts/                # 脚本目录
-│   ├── build_exe.py        # EXE打包脚本
-│   ├── rebuild_production_order_table.py  # 表重建脚本
-│   ├── update_production_order_fields.py  # 字段更新脚本
-│   ├── 启动程序.bat        # 启动批处理
-│   └── 打包EXE.bat         # 打包批处理
-└── src/                    # 源代码目录
-    ├── config/             # 配置模块
-    │   └── config_manager.py  # 配置管理器
-    ├── core/               # 核心模块
-    │   ├── data_sync.py    # 数据同步逻辑
-    │   ├── kingdee_api.py  # 金蝶API接口
-    │   ├── mysql_manager.py  # MySQL管理器
-    │   └── scheduler.py    # 任务调度器
-    ├── gui/                # 界面模块
-    │   └── kingdee_sync_gui.py  # GUI界面
-    └── utils/              # 工具模块
-        ├── get_table_fields.py  # 表字段获取
-        └── kingdee_sync_tool.py  # 同步工具
-```
-
-## 📝 更新日志
-
-### v1.0 (2025-08-30)
-- ✨ 初始版本发布
-- ✨ 支持销售订单、销售出库单、预测订单、生产订单数据同步
-- ✨ 提供增量、全量、完全三种同步模式
-- ✨ 实现自动定时同步功能
-- ✨ Windows 11风格蓝色主题界面
-- ✨ 完整的日志记录和历史查询功能
-- ✨ 数据完整性验证功能
-- ✨ 支持打包为单文件EXE可执行程序
-
-## 🔧 技术支持
-
-如遇到技术问题或需要功能定制，请联系开发团队获取支持。
-
----
-
-**注意**: 本工具仅供内部使用，请确保遵守相关数据安全和隐私保护规定。使用前请备份重要数据，避免数据丢失风险。

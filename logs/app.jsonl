@@ -1,0 +1,256 @@
+{"asctime": "2026-04-17 23:42:53,137", "name": "src.utils.kingdee_sync_tool", "levelname": "INFO", "message": "\u65e5\u5fd7\u7cfb\u7edf\u521d\u59cb\u5316\u5b8c\u6210"}
+{"asctime": "2026-04-17 23:42:53,137", "name": "src.utils.kingdee_sync_tool", "levelname": "INFO", "message": "============================================================"}
+{"asctime": "2026-04-17 23:42:53,138", "name": "src.utils.kingdee_sync_tool", "levelname": "INFO", "message": "=== \u542f\u52a8\u91d1\u8776\u6570\u636e\u540c\u6b65\u5de5\u5177 (\u4ee3\u7801\u7248\u672c: v20260120_Fix_Login_Loop) ==="}
+{"asctime": "2026-04-17 23:42:53,141", "name": "src.utils.kingdee_sync_tool", "levelname": "INFO", "message": "\u6240\u6709\u4f9d\u8d56\u9879\u68c0\u67e5\u901a\u8fc7"}
+{"asctime": "2026-04-17 23:42:53,189", "name": "src.utils.kingdee_sync_tool", "levelname": "INFO", "message": "\u5e94\u7528\u7a0b\u5e8f\u6837\u5f0f\u8bbe\u7f6e\u5b8c\u6210"}
+{"asctime": "2026-04-17 23:42:53,268", "name": "src.utils.kingdee_sync_tool", "levelname": "INFO", "message": "\u914d\u7f6e\u6587\u4ef6\u52a0\u8f7d\u5b8c\u6210"}
+{"asctime": "2026-04-17 23:42:53,815", "name": "src.utils.kingdee_sync_tool", "levelname": "INFO", "message": "\u4e3b\u7a97\u53e3\u5df2\u663e\u793a: isVisible=True, geometry=PySide6.QtCore.QRect(0, 0, 1460, 820)"}
+{"asctime": "2026-04-17 23:43:08,601", "name": "src.utils.kingdee_sync_tool", "levelname": "INFO", "message": "\u5e94\u7528\u7a0b\u5e8f\u9000\u51fa\uff0c\u9000\u51fa\u7801: 0"}
+{"asctime": "2026-04-17 23:43:08,605", "name": "src.utils.kingdee_sync_tool", "levelname": "INFO", "message": "\u6570\u636e\u5e93\u8fde\u63a5\u5df2\u5173\u95ed"}
+{"asctime": "2026-04-17 23:43:08,606", "name": "src.core.kingdee_api", "levelname": "INFO", "message": "\u4f1a\u8bdd\u5fc3\u8df3\u5df2\u505c\u6b62"}
+{"asctime": "2026-04-17 23:43:08,607", "name": "src.utils.kingdee_sync_tool", "levelname": "INFO", "message": "\u6839\u636e\u914d\u7f6e\u5df2\u8df3\u8fc7\u81ea\u52a8\u767b\u51fa\uff0c\u4ec5\u505c\u6b62\u5fc3\u8df3"}
+{"asctime": "2026-04-17 23:43:08,608", "name": "src.utils.kingdee_sync_tool", "levelname": "INFO", "message": "\u7a0b\u5e8f\u6e05\u7406\u5b8c\u6210"}
+{"asctime": "2026-04-17 23:50:02,239", "name": "src.utils.kingdee_sync_tool", "levelname": "INFO", "message": "\u65e5\u5fd7\u7cfb\u7edf\u521d\u59cb\u5316\u5b8c\u6210"}
+{"asctime": "2026-04-17 23:50:02,239", "name": "src.utils.kingdee_sync_tool", "levelname": "INFO", "message": "============================================================"}
+{"asctime": "2026-04-17 23:50:02,240", "name": "src.utils.kingdee_sync_tool", "levelname": "INFO", "message": "=== \u542f\u52a8\u91d1\u8776\u6570\u636e\u540c\u6b65\u5de5\u5177 (\u4ee3\u7801\u7248\u672c: v20260120_Fix_Login_Loop) ==="}
+{"asctime": "2026-04-17 23:50:02,242", "name": "src.utils.kingdee_sync_tool", "levelname": "INFO", "message": "\u6240\u6709\u4f9d\u8d56\u9879\u68c0\u67e5\u901a\u8fc7"}
+{"asctime": "2026-04-17 23:50:02,290", "name": "src.utils.kingdee_sync_tool", "levelname": "INFO", "message": "\u5e94\u7528\u7a0b\u5e8f\u6837\u5f0f\u8bbe\u7f6e\u5b8c\u6210"}
+{"asctime": "2026-04-17 23:50:02,359", "name": "src.utils.kingdee_sync_tool", "levelname": "INFO", "message": "\u914d\u7f6e\u6587\u4ef6\u52a0\u8f7d\u5b8c\u6210"}
+{"asctime": "2026-04-17 23:50:02,890", "name": "src.utils.kingdee_sync_tool", "levelname": "INFO", "message": "\u4e3b\u7a97\u53e3\u5df2\u663e\u793a: isVisible=True, geometry=PySide6.QtCore.QRect(0, 0, 1460, 820)"}
+{"asctime": "2026-04-17 23:50:23,011", "name": "src.utils.kingdee_sync_tool", "levelname": "INFO", "message": "\u5e94\u7528\u7a0b\u5e8f\u9000\u51fa\uff0c\u9000\u51fa\u7801: 0"}
+{"asctime": "2026-04-17 23:50:23,015", "name": "src.utils.kingdee_sync_tool", "levelname": "INFO", "message": "\u6570\u636e\u5e93\u8fde\u63a5\u5df2\u5173\u95ed"}
+{"asctime": "2026-04-17 23:50:23,016", "name": "src.core.kingdee_api", "levelname": "INFO", "message": "\u4f1a\u8bdd\u5fc3\u8df3\u5df2\u505c\u6b62"}
+{"asctime": "2026-04-17 23:50:23,017", "name": "src.utils.kingdee_sync_tool", "levelname": "INFO", "message": "\u6839\u636e\u914d\u7f6e\u5df2\u8df3\u8fc7\u81ea\u52a8\u767b\u51fa\uff0c\u4ec5\u505c\u6b62\u5fc3\u8df3"}
+{"asctime": "2026-04-17 23:50:23,017", "name": "src.utils.kingdee_sync_tool", "levelname": "INFO", "message": "\u7a0b\u5e8f\u6e05\u7406\u5b8c\u6210"}
+{"asctime": "2026-04-17 23:56:00,484", "name": "src.utils.kingdee_sync_tool", "levelname": "INFO", "message": "\u65e5\u5fd7\u7cfb\u7edf\u521d\u59cb\u5316\u5b8c\u6210"}
+{"asctime": "2026-04-17 23:56:00,485", "name": "src.utils.kingdee_sync_tool", "levelname": "INFO", "message": "============================================================"}
+{"asctime": "2026-04-17 23:56:00,486", "name": "src.utils.kingdee_sync_tool", "levelname": "INFO", "message": "=== \u542f\u52a8\u91d1\u8776\u6570\u636e\u540c\u6b65\u5de5\u5177 (\u4ee3\u7801\u7248\u672c: v20260120_Fix_Login_Loop) ==="}
+{"asctime": "2026-04-17 23:56:00,488", "name": "src.utils.kingdee_sync_tool", "levelname": "INFO", "message": "\u6240\u6709\u4f9d\u8d56\u9879\u68c0\u67e5\u901a\u8fc7"}
+{"asctime": "2026-04-17 23:56:00,549", "name": "src.utils.kingdee_sync_tool", "levelname": "INFO", "message": "\u5e94\u7528\u7a0b\u5e8f\u6837\u5f0f\u8bbe\u7f6e\u5b8c\u6210"}
+{"asctime": "2026-04-17 23:56:00,626", "name": "src.utils.kingdee_sync_tool", "levelname": "INFO", "message": "\u914d\u7f6e\u6587\u4ef6\u52a0\u8f7d\u5b8c\u6210"}
+{"asctime": "2026-04-17 23:56:01,151", "name": "src.utils.kingdee_sync_tool", "levelname": "INFO", "message": "\u4e3b\u7a97\u53e3\u5df2\u663e\u793a: isVisible=True, geometry=PySide6.QtCore.QRect(0, 0, 1460, 820)"}
+{"asctime": "2026-04-17 23:56:21,385", "name": "src.utils.kingdee_sync_tool", "levelname": "INFO", "message": "\u5e94\u7528\u7a0b\u5e8f\u9000\u51fa\uff0c\u9000\u51fa\u7801: 0"}
+{"asctime": "2026-04-17 23:56:21,388", "name": "src.utils.kingdee_sync_tool", "levelname": "INFO", "message": "\u6570\u636e\u5e93\u8fde\u63a5\u5df2\u5173\u95ed"}
+{"asctime": "2026-04-17 23:56:21,390", "name": "src.core.kingdee_api", "levelname": "INFO", "message": "\u4f1a\u8bdd\u5fc3\u8df3\u5df2\u505c\u6b62"}
+{"asctime": "2026-04-17 23:56:21,390", "name": "src.utils.kingdee_sync_tool", "levelname": "INFO", "message": "\u6839\u636e\u914d\u7f6e\u5df2\u8df3\u8fc7\u81ea\u52a8\u767b\u51fa\uff0c\u4ec5\u505c\u6b62\u5fc3\u8df3"}
+{"asctime": "2026-04-17 23:56:21,391", "name": "src.utils.kingdee_sync_tool", "levelname": "INFO", "message": "\u7a0b\u5e8f\u6e05\u7406\u5b8c\u6210"}
+{"asctime": "2026-04-18 00:03:02,461", "name": "src.utils.kingdee_sync_tool", "levelname": "INFO", "message": "\u65e5\u5fd7\u7cfb\u7edf\u521d\u59cb\u5316\u5b8c\u6210"}
+{"asctime": "2026-04-18 00:03:02,461", "name": "src.utils.kingdee_sync_tool", "levelname": "INFO", "message": "============================================================"}
+{"asctime": "2026-04-18 00:03:02,462", "name": "src.utils.kingdee_sync_tool", "levelname": "INFO", "message": "=== \u542f\u52a8\u91d1\u8776\u6570\u636e\u540c\u6b65\u5de5\u5177 (\u4ee3\u7801\u7248\u672c: v20260120_Fix_Login_Loop) ==="}
+{"asctime": "2026-04-18 00:03:02,464", "name": "src.utils.kingdee_sync_tool", "levelname": "INFO", "message": "\u6240\u6709\u4f9d\u8d56\u9879\u68c0\u67e5\u901a\u8fc7"}
+{"asctime": "2026-04-18 00:03:02,511", "name": "src.utils.kingdee_sync_tool", "levelname": "INFO", "message": "\u5e94\u7528\u7a0b\u5e8f\u6837\u5f0f\u8bbe\u7f6e\u5b8c\u6210"}
+{"asctime": "2026-04-18 00:03:02,583", "name": "src.utils.kingdee_sync_tool", "levelname": "INFO", "message": "\u914d\u7f6e\u6587\u4ef6\u52a0\u8f7d\u5b8c\u6210"}
+{"asctime": "2026-04-18 00:03:03,100", "name": "src.utils.kingdee_sync_tool", "levelname": "INFO", "message": "\u4e3b\u7a97\u53e3\u5df2\u663e\u793a: isVisible=True, geometry=PySide6.QtCore.QRect(0, 0, 1460, 820)"}
+{"asctime": "2026-04-18 00:03:06,611", "name": "src.utils.kingdee_sync_tool", "levelname": "INFO", "message": "\u5e94\u7528\u7a0b\u5e8f\u9000\u51fa\uff0c\u9000\u51fa\u7801: 0"}
+{"asctime": "2026-04-18 00:03:06,615", "name": "src.utils.kingdee_sync_tool", "levelname": "INFO", "message": "\u6570\u636e\u5e93\u8fde\u63a5\u5df2\u5173\u95ed"}
+{"asctime": "2026-04-18 00:03:06,616", "name": "src.core.kingdee_api", "levelname": "INFO", "message": "\u4f1a\u8bdd\u5fc3\u8df3\u5df2\u505c\u6b62"}
+{"asctime": "2026-04-18 00:03:06,617", "name": "src.utils.kingdee_sync_tool", "levelname": "INFO", "message": "\u6839\u636e\u914d\u7f6e\u5df2\u8df3\u8fc7\u81ea\u52a8\u767b\u51fa\uff0c\u4ec5\u505c\u6b62\u5fc3\u8df3"}
+{"asctime": "2026-04-18 00:03:06,618", "name": "src.utils.kingdee_sync_tool", "levelname": "INFO", "message": "\u7a0b\u5e8f\u6e05\u7406\u5b8c\u6210"}
+{"asctime": "2026-04-18 00:17:23,115", "name": "src.utils.kingdee_sync_tool", "levelname": "INFO", "message": "\u65e5\u5fd7\u7cfb\u7edf\u521d\u59cb\u5316\u5b8c\u6210"}
+{"asctime": "2026-04-18 00:17:23,116", "name": "src.utils.kingdee_sync_tool", "levelname": "INFO", "message": "============================================================"}
+{"asctime": "2026-04-18 00:17:23,116", "name": "src.utils.kingdee_sync_tool", "levelname": "INFO", "message": "=== \u542f\u52a8\u91d1\u8776\u6570\u636e\u540c\u6b65\u5de5\u5177 (\u4ee3\u7801\u7248\u672c: v20260120_Fix_Login_Loop) ==="}
+{"asctime": "2026-04-18 00:17:23,120", "name": "src.utils.kingdee_sync_tool", "levelname": "INFO", "message": "\u6240\u6709\u4f9d\u8d56\u9879\u68c0\u67e5\u901a\u8fc7"}
+{"asctime": "2026-04-18 00:17:23,167", "name": "src.utils.kingdee_sync_tool", "levelname": "INFO", "message": "\u5e94\u7528\u7a0b\u5e8f\u6837\u5f0f\u8bbe\u7f6e\u5b8c\u6210"}
+{"asctime": "2026-04-18 00:17:23,237", "name": "src.utils.kingdee_sync_tool", "levelname": "INFO", "message": "\u914d\u7f6e\u6587\u4ef6\u52a0\u8f7d\u5b8c\u6210"}
+{"asctime": "2026-04-18 00:17:23,771", "name": "src.utils.kingdee_sync_tool", "levelname": "INFO", "message": "\u4e3b\u7a97\u53e3\u5df2\u663e\u793a: isVisible=True, geometry=PySide6.QtCore.QRect(0, 0, 1460, 820)"}
+{"asctime": "2026-04-18 00:17:31,390", "name": "src.utils.kingdee_sync_tool", "levelname": "INFO", "message": "\u5e94\u7528\u7a0b\u5e8f\u9000\u51fa\uff0c\u9000\u51fa\u7801: 0"}
+{"asctime": "2026-04-18 00:17:31,394", "name": "src.utils.kingdee_sync_tool", "levelname": "INFO", "message": "\u6570\u636e\u5e93\u8fde\u63a5\u5df2\u5173\u95ed"}
+{"asctime": "2026-04-18 00:17:31,395", "name": "src.core.kingdee_api", "levelname": "INFO", "message": "\u4f1a\u8bdd\u5fc3\u8df3\u5df2\u505c\u6b62"}
+{"asctime": "2026-04-18 00:17:31,396", "name": "src.utils.kingdee_sync_tool", "levelname": "INFO", "message": "\u6839\u636e\u914d\u7f6e\u5df2\u8df3\u8fc7\u81ea\u52a8\u767b\u51fa\uff0c\u4ec5\u505c\u6b62\u5fc3\u8df3"}
+{"asctime": "2026-04-18 00:17:31,396", "name": "src.utils.kingdee_sync_tool", "levelname": "INFO", "message": "\u7a0b\u5e8f\u6e05\u7406\u5b8c\u6210"}
+{"asctime": "2026-04-18 00:25:42,004", "name": "src.utils.kingdee_sync_tool", "levelname": "INFO", "message": "\u65e5\u5fd7\u7cfb\u7edf\u521d\u59cb\u5316\u5b8c\u6210"}
+{"asctime": "2026-04-18 00:25:42,005", "name": "src.utils.kingdee_sync_tool", "levelname": "INFO", "message": "============================================================"}
+{"asctime": "2026-04-18 00:25:42,005", "name": "src.utils.kingdee_sync_tool", "levelname": "INFO", "message": "=== \u542f\u52a8\u91d1\u8776\u6570\u636e\u540c\u6b65\u5de5\u5177 (\u4ee3\u7801\u7248\u672c: v20260120_Fix_Login_Loop) ==="}
+{"asctime": "2026-04-18 00:25:42,009", "name": "src.utils.kingdee_sync_tool", "levelname": "INFO", "message": "\u6240\u6709\u4f9d\u8d56\u9879\u68c0\u67e5\u901a\u8fc7"}
+{"asctime": "2026-04-18 00:25:42,059", "name": "src.utils.kingdee_sync_tool", "levelname": "INFO", "message": "\u5e94\u7528\u7a0b\u5e8f\u6837\u5f0f\u8bbe\u7f6e\u5b8c\u6210"}
+{"asctime": "2026-04-18 00:25:42,129", "name": "src.utils.kingdee_sync_tool", "levelname": "INFO", "message": "\u914d\u7f6e\u6587\u4ef6\u52a0\u8f7d\u5b8c\u6210"}
+{"asctime": "2026-04-18 00:25:42,664", "name": "src.utils.kingdee_sync_tool", "levelname": "INFO", "message": "\u4e3b\u7a97\u53e3\u5df2\u663e\u793a: isVisible=True, geometry=PySide6.QtCore.QRect(0, 0, 1460, 820)"}
+{"asctime": "2026-04-18 00:25:59,303", "name": "src.utils.kingdee_sync_tool", "levelname": "INFO", "message": "\u5e94\u7528\u7a0b\u5e8f\u9000\u51fa\uff0c\u9000\u51fa\u7801: 0"}
+{"asctime": "2026-04-18 00:25:59,307", "name": "src.utils.kingdee_sync_tool", "levelname": "INFO", "message": "\u6570\u636e\u5e93\u8fde\u63a5\u5df2\u5173\u95ed"}
+{"asctime": "2026-04-18 00:25:59,308", "name": "src.core.kingdee_api", "levelname": "INFO", "message": "\u4f1a\u8bdd\u5fc3\u8df3\u5df2\u505c\u6b62"}
+{"asctime": "2026-04-18 00:25:59,309", "name": "src.utils.kingdee_sync_tool", "levelname": "INFO", "message": "\u6839\u636e\u914d\u7f6e\u5df2\u8df3\u8fc7\u81ea\u52a8\u767b\u51fa\uff0c\u4ec5\u505c\u6b62\u5fc3\u8df3"}
+{"asctime": "2026-04-18 00:25:59,310", "name": "src.utils.kingdee_sync_tool", "levelname": "INFO", "message": "\u7a0b\u5e8f\u6e05\u7406\u5b8c\u6210"}
+{"asctime": "2026-04-18 00:26:02,795", "name": "src.utils.kingdee_sync_tool", "levelname": "INFO", "message": "\u65e5\u5fd7\u7cfb\u7edf\u521d\u59cb\u5316\u5b8c\u6210"}
+{"asctime": "2026-04-18 00:26:02,795", "name": "src.utils.kingdee_sync_tool", "levelname": "INFO", "message": "============================================================"}
+{"asctime": "2026-04-18 00:26:02,796", "name": "src.utils.kingdee_sync_tool", "levelname": "INFO", "message": "=== \u542f\u52a8\u91d1\u8776\u6570\u636e\u540c\u6b65\u5de5\u5177 (\u4ee3\u7801\u7248\u672c: v20260120_Fix_Login_Loop) ==="}
+{"asctime": "2026-04-18 00:26:02,799", "name": "src.utils.kingdee_sync_tool", "levelname": "INFO", "message": "\u6240\u6709\u4f9d\u8d56\u9879\u68c0\u67e5\u901a\u8fc7"}
+{"asctime": "2026-04-18 00:26:02,845", "name": "src.utils.kingdee_sync_tool", "levelname": "INFO", "message": "\u5e94\u7528\u7a0b\u5e8f\u6837\u5f0f\u8bbe\u7f6e\u5b8c\u6210"}
+{"asctime": "2026-04-18 00:26:02,923", "name": "src.utils.kingdee_sync_tool", "levelname": "INFO", "message": "\u914d\u7f6e\u6587\u4ef6\u52a0\u8f7d\u5b8c\u6210"}
+{"asctime": "2026-04-18 00:26:03,456", "name": "src.utils.kingdee_sync_tool", "levelname": "INFO", "message": "\u4e3b\u7a97\u53e3\u5df2\u663e\u793a: isVisible=True, geometry=PySide6.QtCore.QRect(0, 0, 1460, 820)"}
+{"asctime": "2026-04-18 00:26:07,293", "name": "src.utils.kingdee_sync_tool", "levelname": "INFO", "message": "\u5e94\u7528\u7a0b\u5e8f\u9000\u51fa\uff0c\u9000\u51fa\u7801: 0"}
+{"asctime": "2026-04-18 00:26:07,296", "name": "src.utils.kingdee_sync_tool", "levelname": "INFO", "message": "\u6570\u636e\u5e93\u8fde\u63a5\u5df2\u5173\u95ed"}
+{"asctime": "2026-04-18 00:26:07,298", "name": "src.core.kingdee_api", "levelname": "INFO", "message": "\u4f1a\u8bdd\u5fc3\u8df3\u5df2\u505c\u6b62"}
+{"asctime": "2026-04-18 00:26:07,298", "name": "src.utils.kingdee_sync_tool", "levelname": "INFO", "message": "\u6839\u636e\u914d\u7f6e\u5df2\u8df3\u8fc7\u81ea\u52a8\u767b\u51fa\uff0c\u4ec5\u505c\u6b62\u5fc3\u8df3"}
+{"asctime": "2026-04-18 00:26:07,299", "name": "src.utils.kingdee_sync_tool", "levelname": "INFO", "message": "\u7a0b\u5e8f\u6e05\u7406\u5b8c\u6210"}
+{"asctime": "2026-04-18 01:07:34,288", "name": "src.utils.kingdee_sync_tool", "levelname": "INFO", "message": "\u65e5\u5fd7\u7cfb\u7edf\u521d\u59cb\u5316\u5b8c\u6210"}
+{"asctime": "2026-04-18 01:07:34,289", "name": "src.utils.kingdee_sync_tool", "levelname": "INFO", "message": "============================================================"}
+{"asctime": "2026-04-18 01:07:34,289", "name": "src.utils.kingdee_sync_tool", "levelname": "INFO", "message": "=== \u542f\u52a8\u91d1\u8776\u6570\u636e\u540c\u6b65\u5de5\u5177 (\u4ee3\u7801\u7248\u672c: v20260120_Fix_Login_Loop) ==="}
+{"asctime": "2026-04-18 01:07:34,292", "name": "src.utils.kingdee_sync_tool", "levelname": "INFO", "message": "\u6240\u6709\u4f9d\u8d56\u9879\u68c0\u67e5\u901a\u8fc7"}
+{"asctime": "2026-04-18 01:07:34,339", "name": "src.utils.kingdee_sync_tool", "levelname": "INFO", "message": "\u5e94\u7528\u7a0b\u5e8f\u6837\u5f0f\u8bbe\u7f6e\u5b8c\u6210"}
+{"asctime": "2026-04-18 01:07:34,408", "name": "src.utils.kingdee_sync_tool", "levelname": "INFO", "message": "\u914d\u7f6e\u6587\u4ef6\u52a0\u8f7d\u5b8c\u6210"}
+{"asctime": "2026-04-18 01:07:34,958", "name": "src.utils.kingdee_sync_tool", "levelname": "INFO", "message": "\u4e3b\u7a97\u53e3\u5df2\u663e\u793a: isVisible=True, geometry=PySide6.QtCore.QRect(0, 0, 1460, 820)"}
+{"asctime": "2026-04-18 01:07:58,846", "name": "src.utils.kingdee_sync_tool", "levelname": "INFO", "message": "\u5e94\u7528\u7a0b\u5e8f\u9000\u51fa\uff0c\u9000\u51fa\u7801: 0"}
+{"asctime": "2026-04-18 01:07:58,850", "name": "src.utils.kingdee_sync_tool", "levelname": "INFO", "message": "\u6570\u636e\u5e93\u8fde\u63a5\u5df2\u5173\u95ed"}
+{"asctime": "2026-04-18 01:07:58,852", "name": "src.core.kingdee_api", "levelname": "INFO", "message": "\u4f1a\u8bdd\u5fc3\u8df3\u5df2\u505c\u6b62"}
+{"asctime": "2026-04-18 01:07:58,852", "name": "src.utils.kingdee_sync_tool", "levelname": "INFO", "message": "\u6839\u636e\u914d\u7f6e\u5df2\u8df3\u8fc7\u81ea\u52a8\u767b\u51fa\uff0c\u4ec5\u505c\u6b62\u5fc3\u8df3"}
+{"asctime": "2026-04-18 01:07:58,853", "name": "src.utils.kingdee_sync_tool", "levelname": "INFO", "message": "\u7a0b\u5e8f\u6e05\u7406\u5b8c\u6210"}
+{"asctime": "2026-04-18 01:43:15,217", "name": "src.utils.kingdee_sync_tool", "levelname": "INFO", "message": "\u65e5\u5fd7\u7cfb\u7edf\u521d\u59cb\u5316\u5b8c\u6210"}
+{"asctime": "2026-04-18 01:43:15,217", "name": "src.utils.kingdee_sync_tool", "levelname": "INFO", "message": "============================================================"}
+{"asctime": "2026-04-18 01:43:15,218", "name": "src.utils.kingdee_sync_tool", "levelname": "INFO", "message": "=== \u542f\u52a8\u91d1\u8776\u6570\u636e\u540c\u6b65\u5de5\u5177 (\u4ee3\u7801\u7248\u672c: v20260120_Fix_Login_Loop) ==="}
+{"asctime": "2026-04-18 01:43:15,221", "name": "src.utils.kingdee_sync_tool", "levelname": "INFO", "message": "\u6240\u6709\u4f9d\u8d56\u9879\u68c0\u67e5\u901a\u8fc7"}
+{"asctime": "2026-04-18 01:43:15,270", "name": "src.utils.kingdee_sync_tool", "levelname": "INFO", "message": "\u5e94\u7528\u7a0b\u5e8f\u6837\u5f0f\u8bbe\u7f6e\u5b8c\u6210"}
+{"asctime": "2026-04-18 01:43:15,343", "name": "src.utils.kingdee_sync_tool", "levelname": "INFO", "message": "\u914d\u7f6e\u6587\u4ef6\u52a0\u8f7d\u5b8c\u6210"}
+{"asctime": "2026-04-18 01:43:15,913", "name": "src.utils.kingdee_sync_tool", "levelname": "INFO", "message": "\u4e3b\u7a97\u53e3\u5df2\u663e\u793a: isVisible=True, geometry=PySide6.QtCore.QRect(0, 0, 1460, 820)"}
+{"asctime": "2026-04-18 01:43:29,534", "name": "src.utils.kingdee_sync_tool", "levelname": "INFO", "message": "\u5e94\u7528\u7a0b\u5e8f\u9000\u51fa\uff0c\u9000\u51fa\u7801: 0"}
+{"asctime": "2026-04-18 01:43:29,538", "name": "src.utils.kingdee_sync_tool", "levelname": "INFO", "message": "\u6570\u636e\u5e93\u8fde\u63a5\u5df2\u5173\u95ed"}
+{"asctime": "2026-04-18 01:43:29,539", "name": "src.core.kingdee_api", "levelname": "INFO", "message": "\u4f1a\u8bdd\u5fc3\u8df3\u5df2\u505c\u6b62"}
+{"asctime": "2026-04-18 01:43:29,540", "name": "src.utils.kingdee_sync_tool", "levelname": "INFO", "message": "\u6839\u636e\u914d\u7f6e\u5df2\u8df3\u8fc7\u81ea\u52a8\u767b\u51fa\uff0c\u4ec5\u505c\u6b62\u5fc3\u8df3"}
+{"asctime": "2026-04-18 01:43:29,541", "name": "src.utils.kingdee_sync_tool", "levelname": "INFO", "message": "\u7a0b\u5e8f\u6e05\u7406\u5b8c\u6210"}
+{"asctime": "2026-04-18 01:59:44,652", "name": "src.utils.kingdee_sync_tool", "levelname": "INFO", "message": "\u65e5\u5fd7\u7cfb\u7edf\u521d\u59cb\u5316\u5b8c\u6210"}
+{"asctime": "2026-04-18 01:59:44,652", "name": "src.utils.kingdee_sync_tool", "levelname": "INFO", "message": "============================================================"}
+{"asctime": "2026-04-18 01:59:44,653", "name": "src.utils.kingdee_sync_tool", "levelname": "INFO", "message": "=== \u542f\u52a8\u91d1\u8776\u6570\u636e\u540c\u6b65\u5de5\u5177 (\u4ee3\u7801\u7248\u672c: v20260120_Fix_Login_Loop) ==="}
+{"asctime": "2026-04-18 01:59:44,656", "name": "src.utils.kingdee_sync_tool", "levelname": "INFO", "message": "\u6240\u6709\u4f9d\u8d56\u9879\u68c0\u67e5\u901a\u8fc7"}
+{"asctime": "2026-04-18 01:59:44,703", "name": "src.utils.kingdee_sync_tool", "levelname": "INFO", "message": "\u5e94\u7528\u7a0b\u5e8f\u6837\u5f0f\u8bbe\u7f6e\u5b8c\u6210"}
+{"asctime": "2026-04-18 01:59:44,779", "name": "src.utils.kingdee_sync_tool", "levelname": "INFO", "message": "\u914d\u7f6e\u6587\u4ef6\u52a0\u8f7d\u5b8c\u6210"}
+{"asctime": "2026-04-18 01:59:45,349", "name": "src.utils.kingdee_sync_tool", "levelname": "INFO", "message": "\u4e3b\u7a97\u53e3\u5df2\u663e\u793a: isVisible=True, geometry=PySide6.QtCore.QRect(0, 0, 1460, 820)"}
+{"asctime": "2026-04-18 02:00:05,579", "name": "src.utils.kingdee_sync_tool", "levelname": "INFO", "message": "\u5e94\u7528\u7a0b\u5e8f\u9000\u51fa\uff0c\u9000\u51fa\u7801: 0"}
+{"asctime": "2026-04-18 02:00:05,582", "name": "src.utils.kingdee_sync_tool", "levelname": "INFO", "message": "\u6570\u636e\u5e93\u8fde\u63a5\u5df2\u5173\u95ed"}
+{"asctime": "2026-04-18 02:00:05,583", "name": "src.core.kingdee_api", "levelname": "INFO", "message": "\u4f1a\u8bdd\u5fc3\u8df3\u5df2\u505c\u6b62"}
+{"asctime": "2026-04-18 02:00:05,584", "name": "src.utils.kingdee_sync_tool", "levelname": "INFO", "message": "\u6839\u636e\u914d\u7f6e\u5df2\u8df3\u8fc7\u81ea\u52a8\u767b\u51fa\uff0c\u4ec5\u505c\u6b62\u5fc3\u8df3"}
+{"asctime": "2026-04-18 02:00:05,585", "name": "src.utils.kingdee_sync_tool", "levelname": "INFO", "message": "\u7a0b\u5e8f\u6e05\u7406\u5b8c\u6210"}
+{"asctime": "2026-04-18 02:26:20,347", "name": "src.utils.kingdee_sync_tool", "levelname": "INFO", "message": "\u65e5\u5fd7\u7cfb\u7edf\u521d\u59cb\u5316\u5b8c\u6210"}
+{"asctime": "2026-04-18 02:26:20,347", "name": "src.utils.kingdee_sync_tool", "levelname": "INFO", "message": "============================================================"}
+{"asctime": "2026-04-18 02:26:20,348", "name": "src.utils.kingdee_sync_tool", "levelname": "INFO", "message": "=== \u542f\u52a8\u91d1\u8776\u6570\u636e\u540c\u6b65\u5de5\u5177 (\u4ee3\u7801\u7248\u672c: v20260120_Fix_Login_Loop) ==="}
+{"asctime": "2026-04-18 02:26:20,351", "name": "src.utils.kingdee_sync_tool", "levelname": "INFO", "message": "\u6240\u6709\u4f9d\u8d56\u9879\u68c0\u67e5\u901a\u8fc7"}
+{"asctime": "2026-04-18 02:26:20,405", "name": "src.utils.kingdee_sync_tool", "levelname": "INFO", "message": "\u5e94\u7528\u7a0b\u5e8f\u6837\u5f0f\u8bbe\u7f6e\u5b8c\u6210"}
+{"asctime": "2026-04-18 02:26:20,487", "name": "src.utils.kingdee_sync_tool", "levelname": "INFO", "message": "\u914d\u7f6e\u6587\u4ef6\u52a0\u8f7d\u5b8c\u6210"}
+{"asctime": "2026-04-18 02:26:22,778", "name": "src.utils.kingdee_sync_tool", "levelname": "INFO", "message": "\u4e3b\u7a97\u53e3\u5df2\u663e\u793a: isVisible=True, geometry=PySide6.QtCore.QRect(0, 0, 1460, 820)"}
+{"asctime": "2026-04-18 02:26:43,601", "name": "src.utils.kingdee_sync_tool", "levelname": "INFO", "message": "\u5e94\u7528\u7a0b\u5e8f\u9000\u51fa\uff0c\u9000\u51fa\u7801: 0"}
+{"asctime": "2026-04-18 02:26:43,604", "name": "src.utils.kingdee_sync_tool", "levelname": "INFO", "message": "\u6570\u636e\u5e93\u8fde\u63a5\u5df2\u5173\u95ed"}
+{"asctime": "2026-04-18 02:26:43,605", "name": "src.core.kingdee_api", "levelname": "INFO", "message": "\u4f1a\u8bdd\u5fc3\u8df3\u5df2\u505c\u6b62"}
+{"asctime": "2026-04-18 02:26:43,606", "name": "src.utils.kingdee_sync_tool", "levelname": "INFO", "message": "\u6839\u636e\u914d\u7f6e\u5df2\u8df3\u8fc7\u81ea\u52a8\u767b\u51fa\uff0c\u4ec5\u505c\u6b62\u5fc3\u8df3"}
+{"asctime": "2026-04-18 02:26:43,607", "name": "src.utils.kingdee_sync_tool", "levelname": "INFO", "message": "\u7a0b\u5e8f\u6e05\u7406\u5b8c\u6210"}
+{"asctime": "2026-04-18 08:45:43,681", "name": "src.utils.kingdee_sync_tool", "levelname": "INFO", "message": "\u65e5\u5fd7\u7cfb\u7edf\u521d\u59cb\u5316\u5b8c\u6210"}
+{"asctime": "2026-04-18 08:45:43,681", "name": "src.utils.kingdee_sync_tool", "levelname": "INFO", "message": "============================================================"}
+{"asctime": "2026-04-18 08:45:43,682", "name": "src.utils.kingdee_sync_tool", "levelname": "INFO", "message": "=== \u542f\u52a8\u91d1\u8776\u6570\u636e\u540c\u6b65\u5de5\u5177 (\u4ee3\u7801\u7248\u672c: v20260120_Fix_Login_Loop) ==="}
+{"asctime": "2026-04-18 08:45:43,684", "name": "src.utils.kingdee_sync_tool", "levelname": "INFO", "message": "\u6240\u6709\u4f9d\u8d56\u9879\u68c0\u67e5\u901a\u8fc7"}
+{"asctime": "2026-04-18 08:45:43,736", "name": "src.utils.kingdee_sync_tool", "levelname": "INFO", "message": "\u5e94\u7528\u7a0b\u5e8f\u6837\u5f0f\u8bbe\u7f6e\u5b8c\u6210"}
+{"asctime": "2026-04-18 08:45:43,825", "name": "src.core.mysql_manager", "levelname": "WARNING", "message": "Recovered 1 stale running sync run(s)"}
+{"asctime": "2026-04-18 08:45:43,825", "name": "src.utils.kingdee_sync_tool", "levelname": "WARNING", "message": "Recovered 1 stale running sync run(s) during startup"}
+{"asctime": "2026-04-18 08:45:43,827", "name": "src.utils.kingdee_sync_tool", "levelname": "INFO", "message": "\u914d\u7f6e\u6587\u4ef6\u52a0\u8f7d\u5b8c\u6210"}
+{"asctime": "2026-04-18 08:45:47,025", "name": "src.utils.kingdee_sync_tool", "levelname": "INFO", "message": "\u4e3b\u7a97\u53e3\u5df2\u663e\u793a: isVisible=True, geometry=PySide6.QtCore.QRect(0, 0, 1460, 820)"}
+{"asctime": "2026-04-18 08:45:59,049", "name": "src.utils.kingdee_sync_tool", "levelname": "INFO", "message": "\u5e94\u7528\u7a0b\u5e8f\u9000\u51fa\uff0c\u9000\u51fa\u7801: 0"}
+{"asctime": "2026-04-18 08:45:59,052", "name": "src.utils.kingdee_sync_tool", "levelname": "INFO", "message": "\u6570\u636e\u5e93\u8fde\u63a5\u5df2\u5173\u95ed"}
+{"asctime": "2026-04-18 08:45:59,054", "name": "src.core.kingdee_api", "levelname": "INFO", "message": "\u4f1a\u8bdd\u5fc3\u8df3\u5df2\u505c\u6b62"}
+{"asctime": "2026-04-18 08:45:59,054", "name": "src.utils.kingdee_sync_tool", "levelname": "INFO", "message": "\u6839\u636e\u914d\u7f6e\u5df2\u8df3\u8fc7\u81ea\u52a8\u767b\u51fa\uff0c\u4ec5\u505c\u6b62\u5fc3\u8df3"}
+{"asctime": "2026-04-18 08:45:59,056", "name": "src.utils.kingdee_sync_tool", "levelname": "INFO", "message": "\u7a0b\u5e8f\u6e05\u7406\u5b8c\u6210"}
+{"asctime": "2026-04-18 08:47:23,903", "name": "src.utils.kingdee_sync_tool", "levelname": "INFO", "message": "\u65e5\u5fd7\u7cfb\u7edf\u521d\u59cb\u5316\u5b8c\u6210"}
+{"asctime": "2026-04-18 08:47:23,904", "name": "src.utils.kingdee_sync_tool", "levelname": "INFO", "message": "============================================================"}
+{"asctime": "2026-04-18 08:47:23,904", "name": "src.utils.kingdee_sync_tool", "levelname": "INFO", "message": "=== \u542f\u52a8\u91d1\u8776\u6570\u636e\u540c\u6b65\u5de5\u5177 (\u4ee3\u7801\u7248\u672c: v20260120_Fix_Login_Loop) ==="}
+{"asctime": "2026-04-18 08:47:23,908", "name": "src.utils.kingdee_sync_tool", "levelname": "INFO", "message": "\u6240\u6709\u4f9d\u8d56\u9879\u68c0\u67e5\u901a\u8fc7"}
+{"asctime": "2026-04-18 08:47:23,957", "name": "src.utils.kingdee_sync_tool", "levelname": "INFO", "message": "\u5e94\u7528\u7a0b\u5e8f\u6837\u5f0f\u8bbe\u7f6e\u5b8c\u6210"}
+{"asctime": "2026-04-18 08:47:24,036", "name": "src.utils.kingdee_sync_tool", "levelname": "INFO", "message": "\u914d\u7f6e\u6587\u4ef6\u52a0\u8f7d\u5b8c\u6210"}
+{"asctime": "2026-04-18 08:47:26,969", "name": "src.utils.kingdee_sync_tool", "levelname": "INFO", "message": "\u4e3b\u7a97\u53e3\u5df2\u663e\u793a: isVisible=True, geometry=PySide6.QtCore.QRect(0, 0, 1460, 820)"}
+{"asctime": "2026-04-18 08:55:04,414", "name": "src.utils.kingdee_sync_tool", "levelname": "INFO", "message": "\u5e94\u7528\u7a0b\u5e8f\u9000\u51fa\uff0c\u9000\u51fa\u7801: 0"}
+{"asctime": "2026-04-18 08:55:04,417", "name": "src.utils.kingdee_sync_tool", "levelname": "INFO", "message": "\u6570\u636e\u5e93\u8fde\u63a5\u5df2\u5173\u95ed"}
+{"asctime": "2026-04-18 08:55:04,418", "name": "src.core.kingdee_api", "levelname": "INFO", "message": "\u4f1a\u8bdd\u5fc3\u8df3\u5df2\u505c\u6b62"}
+{"asctime": "2026-04-18 08:55:04,419", "name": "src.utils.kingdee_sync_tool", "levelname": "INFO", "message": "\u6839\u636e\u914d\u7f6e\u5df2\u8df3\u8fc7\u81ea\u52a8\u767b\u51fa\uff0c\u4ec5\u505c\u6b62\u5fc3\u8df3"}
+{"asctime": "2026-04-18 08:55:04,419", "name": "src.utils.kingdee_sync_tool", "levelname": "INFO", "message": "\u7a0b\u5e8f\u6e05\u7406\u5b8c\u6210"}
+{"asctime": "2026-04-18 09:27:40,344", "name": "src.utils.kingdee_sync_tool", "levelname": "INFO", "message": "\u65e5\u5fd7\u7cfb\u7edf\u521d\u59cb\u5316\u5b8c\u6210"}
+{"asctime": "2026-04-18 09:27:40,345", "name": "src.utils.kingdee_sync_tool", "levelname": "INFO", "message": "============================================================"}
+{"asctime": "2026-04-18 09:27:40,345", "name": "src.utils.kingdee_sync_tool", "levelname": "INFO", "message": "=== \u542f\u52a8\u91d1\u8776\u6570\u636e\u540c\u6b65\u5de5\u5177 (\u4ee3\u7801\u7248\u672c: v20260120_Fix_Login_Loop) ==="}
+{"asctime": "2026-04-18 09:27:40,348", "name": "src.utils.kingdee_sync_tool", "levelname": "INFO", "message": "\u6240\u6709\u4f9d\u8d56\u9879\u68c0\u67e5\u901a\u8fc7"}
+{"asctime": "2026-04-18 09:27:40,397", "name": "src.utils.kingdee_sync_tool", "levelname": "INFO", "message": "\u5e94\u7528\u7a0b\u5e8f\u6837\u5f0f\u8bbe\u7f6e\u5b8c\u6210"}
+{"asctime": "2026-04-18 09:27:40,483", "name": "src.utils.kingdee_sync_tool", "levelname": "INFO", "message": "\u914d\u7f6e\u6587\u4ef6\u52a0\u8f7d\u5b8c\u6210"}
+{"asctime": "2026-04-18 09:27:43,632", "name": "src.utils.kingdee_sync_tool", "levelname": "INFO", "message": "\u4e3b\u7a97\u53e3\u5df2\u663e\u793a: isVisible=True, geometry=PySide6.QtCore.QRect(230, 75, 1460, 820)"}
+{"asctime": "2026-04-18 09:28:01,472", "name": "src.utils.kingdee_sync_tool", "levelname": "INFO", "message": "\u5e94\u7528\u7a0b\u5e8f\u9000\u51fa\uff0c\u9000\u51fa\u7801: 0"}
+{"asctime": "2026-04-18 09:28:01,475", "name": "src.utils.kingdee_sync_tool", "levelname": "INFO", "message": "\u6570\u636e\u5e93\u8fde\u63a5\u5df2\u5173\u95ed"}
+{"asctime": "2026-04-18 09:28:01,476", "name": "src.core.kingdee_api", "levelname": "INFO", "message": "\u4f1a\u8bdd\u5fc3\u8df3\u5df2\u505c\u6b62"}
+{"asctime": "2026-04-18 09:28:01,477", "name": "src.utils.kingdee_sync_tool", "levelname": "INFO", "message": "\u6839\u636e\u914d\u7f6e\u5df2\u8df3\u8fc7\u81ea\u52a8\u767b\u51fa\uff0c\u4ec5\u505c\u6b62\u5fc3\u8df3"}
+{"asctime": "2026-04-18 09:28:01,478", "name": "src.utils.kingdee_sync_tool", "levelname": "INFO", "message": "\u7a0b\u5e8f\u6e05\u7406\u5b8c\u6210"}
+{"asctime": "2026-04-18 09:28:04,513", "name": "src.utils.kingdee_sync_tool", "levelname": "INFO", "message": "\u65e5\u5fd7\u7cfb\u7edf\u521d\u59cb\u5316\u5b8c\u6210"}
+{"asctime": "2026-04-18 09:28:04,513", "name": "src.utils.kingdee_sync_tool", "levelname": "INFO", "message": "============================================================"}
+{"asctime": "2026-04-18 09:28:04,514", "name": "src.utils.kingdee_sync_tool", "levelname": "INFO", "message": "=== \u542f\u52a8\u91d1\u8776\u6570\u636e\u540c\u6b65\u5de5\u5177 (\u4ee3\u7801\u7248\u672c: v20260120_Fix_Login_Loop) ==="}
+{"asctime": "2026-04-18 09:28:04,516", "name": "src.utils.kingdee_sync_tool", "levelname": "INFO", "message": "\u6240\u6709\u4f9d\u8d56\u9879\u68c0\u67e5\u901a\u8fc7"}
+{"asctime": "2026-04-18 09:28:04,566", "name": "src.utils.kingdee_sync_tool", "levelname": "INFO", "message": "\u5e94\u7528\u7a0b\u5e8f\u6837\u5f0f\u8bbe\u7f6e\u5b8c\u6210"}
+{"asctime": "2026-04-18 09:28:04,648", "name": "src.utils.kingdee_sync_tool", "levelname": "INFO", "message": "\u914d\u7f6e\u6587\u4ef6\u52a0\u8f7d\u5b8c\u6210"}
+{"asctime": "2026-04-18 09:28:07,682", "name": "src.utils.kingdee_sync_tool", "levelname": "INFO", "message": "\u4e3b\u7a97\u53e3\u5df2\u663e\u793a: isVisible=True, geometry=PySide6.QtCore.QRect(230, 75, 1460, 820)"}
+{"asctime": "2026-04-18 09:49:21,886", "name": "src.utils.kingdee_sync_tool", "levelname": "INFO", "message": "\u5e94\u7528\u7a0b\u5e8f\u9000\u51fa\uff0c\u9000\u51fa\u7801: 0"}
+{"asctime": "2026-04-18 09:49:21,889", "name": "src.utils.kingdee_sync_tool", "levelname": "INFO", "message": "\u6570\u636e\u5e93\u8fde\u63a5\u5df2\u5173\u95ed"}
+{"asctime": "2026-04-18 09:49:21,891", "name": "src.core.kingdee_api", "levelname": "INFO", "message": "\u4f1a\u8bdd\u5fc3\u8df3\u5df2\u505c\u6b62"}
+{"asctime": "2026-04-18 09:49:21,892", "name": "src.utils.kingdee_sync_tool", "levelname": "INFO", "message": "\u6839\u636e\u914d\u7f6e\u5df2\u8df3\u8fc7\u81ea\u52a8\u767b\u51fa\uff0c\u4ec5\u505c\u6b62\u5fc3\u8df3"}
+{"asctime": "2026-04-18 09:49:21,892", "name": "src.utils.kingdee_sync_tool", "levelname": "INFO", "message": "\u7a0b\u5e8f\u6e05\u7406\u5b8c\u6210"}
+{"asctime": "2026-04-18 09:49:27,457", "name": "src.utils.kingdee_sync_tool", "levelname": "INFO", "message": "\u65e5\u5fd7\u7cfb\u7edf\u521d\u59cb\u5316\u5b8c\u6210"}
+{"asctime": "2026-04-18 09:49:27,458", "name": "src.utils.kingdee_sync_tool", "levelname": "INFO", "message": "============================================================"}
+{"asctime": "2026-04-18 09:49:27,458", "name": "src.utils.kingdee_sync_tool", "levelname": "INFO", "message": "=== \u542f\u52a8\u91d1\u8776\u6570\u636e\u540c\u6b65\u5de5\u5177 (\u4ee3\u7801\u7248\u672c: v20260120_Fix_Login_Loop) ==="}
+{"asctime": "2026-04-18 09:49:27,462", "name": "src.utils.kingdee_sync_tool", "levelname": "INFO", "message": "\u6240\u6709\u4f9d\u8d56\u9879\u68c0\u67e5\u901a\u8fc7"}
+{"asctime": "2026-04-18 09:49:27,515", "name": "src.utils.kingdee_sync_tool", "levelname": "INFO", "message": "\u5e94\u7528\u7a0b\u5e8f\u6837\u5f0f\u8bbe\u7f6e\u5b8c\u6210"}
+{"asctime": "2026-04-18 09:49:27,599", "name": "src.utils.kingdee_sync_tool", "levelname": "INFO", "message": "\u914d\u7f6e\u6587\u4ef6\u52a0\u8f7d\u5b8c\u6210"}
+{"asctime": "2026-04-18 09:49:30,558", "name": "src.utils.kingdee_sync_tool", "levelname": "INFO", "message": "\u4e3b\u7a97\u53e3\u5df2\u663e\u793a: isVisible=True, geometry=PySide6.QtCore.QRect(230, 75, 1460, 820)"}
+{"asctime": "2026-04-18 09:50:01,406", "name": "src.utils.kingdee_sync_tool", "levelname": "INFO", "message": "\u5e94\u7528\u7a0b\u5e8f\u9000\u51fa\uff0c\u9000\u51fa\u7801: 0"}
+{"asctime": "2026-04-18 09:50:01,411", "name": "src.utils.kingdee_sync_tool", "levelname": "INFO", "message": "\u6570\u636e\u5e93\u8fde\u63a5\u5df2\u5173\u95ed"}
+{"asctime": "2026-04-18 09:50:01,412", "name": "src.core.kingdee_api", "levelname": "INFO", "message": "\u4f1a\u8bdd\u5fc3\u8df3\u5df2\u505c\u6b62"}
+{"asctime": "2026-04-18 09:50:01,413", "name": "src.utils.kingdee_sync_tool", "levelname": "INFO", "message": "\u6839\u636e\u914d\u7f6e\u5df2\u8df3\u8fc7\u81ea\u52a8\u767b\u51fa\uff0c\u4ec5\u505c\u6b62\u5fc3\u8df3"}
+{"asctime": "2026-04-18 09:50:01,414", "name": "src.utils.kingdee_sync_tool", "levelname": "INFO", "message": "\u7a0b\u5e8f\u6e05\u7406\u5b8c\u6210"}
+{"asctime": "2026-04-18 10:02:07,807", "name": "src.utils.kingdee_sync_tool", "levelname": "INFO", "message": "\u65e5\u5fd7\u7cfb\u7edf\u521d\u59cb\u5316\u5b8c\u6210"}
+{"asctime": "2026-04-18 10:02:07,808", "name": "src.utils.kingdee_sync_tool", "levelname": "INFO", "message": "============================================================"}
+{"asctime": "2026-04-18 10:02:07,808", "name": "src.utils.kingdee_sync_tool", "levelname": "INFO", "message": "=== \u542f\u52a8\u91d1\u8776\u6570\u636e\u540c\u6b65\u5de5\u5177 (\u4ee3\u7801\u7248\u672c: v20260120_Fix_Login_Loop) ==="}
+{"asctime": "2026-04-18 10:02:07,811", "name": "src.utils.kingdee_sync_tool", "levelname": "INFO", "message": "\u6240\u6709\u4f9d\u8d56\u9879\u68c0\u67e5\u901a\u8fc7"}
+{"asctime": "2026-04-18 10:02:07,862", "name": "src.utils.kingdee_sync_tool", "levelname": "INFO", "message": "\u5e94\u7528\u7a0b\u5e8f\u6837\u5f0f\u8bbe\u7f6e\u5b8c\u6210"}
+{"asctime": "2026-04-18 10:02:07,944", "name": "src.utils.kingdee_sync_tool", "levelname": "INFO", "message": "\u914d\u7f6e\u6587\u4ef6\u52a0\u8f7d\u5b8c\u6210"}
+{"asctime": "2026-04-18 10:02:10,908", "name": "src.utils.kingdee_sync_tool", "levelname": "INFO", "message": "\u4e3b\u7a97\u53e3\u5df2\u663e\u793a: isVisible=True, geometry=PySide6.QtCore.QRect(230, 75, 1460, 820)"}
+{"asctime": "2026-04-18 10:02:30,855", "name": "src.utils.kingdee_sync_tool", "levelname": "INFO", "message": "\u5e94\u7528\u7a0b\u5e8f\u9000\u51fa\uff0c\u9000\u51fa\u7801: 0"}
+{"asctime": "2026-04-18 10:02:30,858", "name": "src.utils.kingdee_sync_tool", "levelname": "INFO", "message": "\u6570\u636e\u5e93\u8fde\u63a5\u5df2\u5173\u95ed"}
+{"asctime": "2026-04-18 10:02:30,859", "name": "src.core.kingdee_api", "levelname": "INFO", "message": "\u4f1a\u8bdd\u5fc3\u8df3\u5df2\u505c\u6b62"}
+{"asctime": "2026-04-18 10:02:30,860", "name": "src.utils.kingdee_sync_tool", "levelname": "INFO", "message": "\u6839\u636e\u914d\u7f6e\u5df2\u8df3\u8fc7\u81ea\u52a8\u767b\u51fa\uff0c\u4ec5\u505c\u6b62\u5fc3\u8df3"}
+{"asctime": "2026-04-18 10:02:30,861", "name": "src.utils.kingdee_sync_tool", "levelname": "INFO", "message": "\u7a0b\u5e8f\u6e05\u7406\u5b8c\u6210"}
+{"asctime": "2026-04-18 10:27:29,499", "name": "src.utils.kingdee_sync_tool", "levelname": "INFO", "message": "\u65e5\u5fd7\u7cfb\u7edf\u521d\u59cb\u5316\u5b8c\u6210"}
+{"asctime": "2026-04-18 10:27:29,500", "name": "src.utils.kingdee_sync_tool", "levelname": "INFO", "message": "============================================================"}
+{"asctime": "2026-04-18 10:27:29,500", "name": "src.utils.kingdee_sync_tool", "levelname": "INFO", "message": "=== \u542f\u52a8\u91d1\u8776\u6570\u636e\u540c\u6b65\u5de5\u5177 (\u4ee3\u7801\u7248\u672c: v20260120_Fix_Login_Loop) ==="}
+{"asctime": "2026-04-18 10:27:29,503", "name": "src.utils.kingdee_sync_tool", "levelname": "INFO", "message": "\u6240\u6709\u4f9d\u8d56\u9879\u68c0\u67e5\u901a\u8fc7"}
+{"asctime": "2026-04-18 10:27:29,555", "name": "src.utils.kingdee_sync_tool", "levelname": "INFO", "message": "\u5e94\u7528\u7a0b\u5e8f\u6837\u5f0f\u8bbe\u7f6e\u5b8c\u6210"}
+{"asctime": "2026-04-18 10:27:29,656", "name": "src.utils.kingdee_sync_tool", "levelname": "INFO", "message": "\u914d\u7f6e\u6587\u4ef6\u52a0\u8f7d\u5b8c\u6210"}
+{"asctime": "2026-04-18 10:27:32,671", "name": "src.utils.kingdee_sync_tool", "levelname": "INFO", "message": "\u4e3b\u7a97\u53e3\u5df2\u663e\u793a: isVisible=True, geometry=PySide6.QtCore.QRect(230, 75, 1460, 820)"}
+{"asctime": "2026-04-18 10:32:08,962", "name": "src.utils.kingdee_sync_tool", "levelname": "INFO", "message": "\u5e94\u7528\u7a0b\u5e8f\u9000\u51fa\uff0c\u9000\u51fa\u7801: 0"}
+{"asctime": "2026-04-18 10:32:08,965", "name": "src.utils.kingdee_sync_tool", "levelname": "INFO", "message": "\u6570\u636e\u5e93\u8fde\u63a5\u5df2\u5173\u95ed"}
+{"asctime": "2026-04-18 10:32:08,967", "name": "src.core.kingdee_api", "levelname": "INFO", "message": "\u4f1a\u8bdd\u5fc3\u8df3\u5df2\u505c\u6b62"}
+{"asctime": "2026-04-18 10:32:08,968", "name": "src.utils.kingdee_sync_tool", "levelname": "INFO", "message": "\u6839\u636e\u914d\u7f6e\u5df2\u8df3\u8fc7\u81ea\u52a8\u767b\u51fa\uff0c\u4ec5\u505c\u6b62\u5fc3\u8df3"}
+{"asctime": "2026-04-18 10:32:08,970", "name": "src.utils.kingdee_sync_tool", "levelname": "INFO", "message": "\u7a0b\u5e8f\u6e05\u7406\u5b8c\u6210"}
+{"asctime": "2026-04-18 12:39:42,521", "name": "src.utils.kingdee_sync_tool", "levelname": "INFO", "message": "\u65e5\u5fd7\u7cfb\u7edf\u521d\u59cb\u5316\u5b8c\u6210"}
+{"asctime": "2026-04-18 12:39:42,522", "name": "src.utils.kingdee_sync_tool", "levelname": "INFO", "message": "============================================================"}
+{"asctime": "2026-04-18 12:39:42,522", "name": "src.utils.kingdee_sync_tool", "levelname": "INFO", "message": "=== \u542f\u52a8\u91d1\u8776\u6570\u636e\u540c\u6b65\u5de5\u5177 (\u4ee3\u7801\u7248\u672c: v20260120_Fix_Login_Loop) ==="}
+{"asctime": "2026-04-18 12:39:42,525", "name": "src.utils.kingdee_sync_tool", "levelname": "INFO", "message": "\u6240\u6709\u4f9d\u8d56\u9879\u68c0\u67e5\u901a\u8fc7"}
+{"asctime": "2026-04-18 12:39:42,576", "name": "src.utils.kingdee_sync_tool", "levelname": "INFO", "message": "\u5e94\u7528\u7a0b\u5e8f\u6837\u5f0f\u8bbe\u7f6e\u5b8c\u6210"}
+{"asctime": "2026-04-18 12:39:42,659", "name": "src.core.mysql_manager", "levelname": "WARNING", "message": "Recovered 1 stale running sync run(s)"}
+{"asctime": "2026-04-18 12:39:42,660", "name": "src.utils.kingdee_sync_tool", "levelname": "WARNING", "message": "Recovered 1 stale running sync run(s) during startup"}
+{"asctime": "2026-04-18 12:39:42,661", "name": "src.utils.kingdee_sync_tool", "levelname": "INFO", "message": "\u914d\u7f6e\u6587\u4ef6\u52a0\u8f7d\u5b8c\u6210"}
+{"asctime": "2026-04-18 12:39:45,809", "name": "src.utils.kingdee_sync_tool", "levelname": "INFO", "message": "\u4e3b\u7a97\u53e3\u5df2\u663e\u793a: isVisible=True, geometry=PySide6.QtCore.QRect(230, 75, 1460, 820)"}
+{"asctime": "2026-04-18 12:45:01,754", "name": "src.utils.kingdee_sync_tool", "levelname": "INFO", "message": "\u5e94\u7528\u7a0b\u5e8f\u9000\u51fa\uff0c\u9000\u51fa\u7801: 0"}
+{"asctime": "2026-04-18 12:45:01,758", "name": "src.utils.kingdee_sync_tool", "levelname": "INFO", "message": "\u6570\u636e\u5e93\u8fde\u63a5\u5df2\u5173\u95ed"}
+{"asctime": "2026-04-18 12:45:01,759", "name": "src.core.kingdee_api", "levelname": "INFO", "message": "\u4f1a\u8bdd\u5fc3\u8df3\u5df2\u505c\u6b62"}
+{"asctime": "2026-04-18 12:45:01,760", "name": "src.utils.kingdee_sync_tool", "levelname": "INFO", "message": "\u6839\u636e\u914d\u7f6e\u5df2\u8df3\u8fc7\u81ea\u52a8\u767b\u51fa\uff0c\u4ec5\u505c\u6b62\u5fc3\u8df3"}
+{"asctime": "2026-04-18 12:45:01,761", "name": "src.utils.kingdee_sync_tool", "levelname": "INFO", "message": "\u7a0b\u5e8f\u6e05\u7406\u5b8c\u6210"}
+{"asctime": "2026-04-18 12:45:03,990", "name": "src.utils.kingdee_sync_tool", "levelname": "INFO", "message": "\u65e5\u5fd7\u7cfb\u7edf\u521d\u59cb\u5316\u5b8c\u6210"}
+{"asctime": "2026-04-18 12:45:03,992", "name": "src.utils.kingdee_sync_tool", "levelname": "INFO", "message": "============================================================"}
+{"asctime": "2026-04-18 12:45:03,993", "name": "src.utils.kingdee_sync_tool", "levelname": "INFO", "message": "=== \u542f\u52a8\u91d1\u8776\u6570\u636e\u540c\u6b65\u5de5\u5177 (\u4ee3\u7801\u7248\u672c: v20260120_Fix_Login_Loop) ==="}
+{"asctime": "2026-04-18 12:45:03,996", "name": "src.utils.kingdee_sync_tool", "levelname": "INFO", "message": "\u6240\u6709\u4f9d\u8d56\u9879\u68c0\u67e5\u901a\u8fc7"}
+{"asctime": "2026-04-18 12:45:04,046", "name": "src.utils.kingdee_sync_tool", "levelname": "INFO", "message": "\u5e94\u7528\u7a0b\u5e8f\u6837\u5f0f\u8bbe\u7f6e\u5b8c\u6210"}
+{"asctime": "2026-04-18 12:45:04,118", "name": "src.utils.kingdee_sync_tool", "levelname": "INFO", "message": "\u914d\u7f6e\u6587\u4ef6\u52a0\u8f7d\u5b8c\u6210"}
+{"asctime": "2026-04-18 12:45:07,004", "name": "src.utils.kingdee_sync_tool", "levelname": "INFO", "message": "\u4e3b\u7a97\u53e3\u5df2\u663e\u793a: isVisible=True, geometry=PySide6.QtCore.QRect(230, 75, 1460, 820)"}
+{"asctime": "2026-04-18 12:49:24,590", "name": "src.utils.kingdee_sync_tool", "levelname": "INFO", "message": "\u5e94\u7528\u7a0b\u5e8f\u9000\u51fa\uff0c\u9000\u51fa\u7801: 0"}
+{"asctime": "2026-04-18 12:49:24,593", "name": "src.utils.kingdee_sync_tool", "levelname": "INFO", "message": "\u6570\u636e\u5e93\u8fde\u63a5\u5df2\u5173\u95ed"}
+{"asctime": "2026-04-18 12:49:24,594", "name": "src.core.kingdee_api", "levelname": "INFO", "message": "\u4f1a\u8bdd\u5fc3\u8df3\u5df2\u505c\u6b62"}
+{"asctime": "2026-04-18 12:49:24,596", "name": "src.utils.kingdee_sync_tool", "levelname": "INFO", "message": "\u6839\u636e\u914d\u7f6e\u5df2\u8df3\u8fc7\u81ea\u52a8\u767b\u51fa\uff0c\u4ec5\u505c\u6b62\u5fc3\u8df3"}
+{"asctime": "2026-04-18 12:49:24,596", "name": "src.utils.kingdee_sync_tool", "levelname": "INFO", "message": "\u7a0b\u5e8f\u6e05\u7406\u5b8c\u6210"}
+{"asctime": "2026-04-18 12:52:48,878", "name": "src.utils.kingdee_sync_tool", "levelname": "INFO", "message": "\u65e5\u5fd7\u7cfb\u7edf\u521d\u59cb\u5316\u5b8c\u6210"}
+{"asctime": "2026-04-18 12:52:48,879", "name": "src.utils.kingdee_sync_tool", "levelname": "INFO", "message": "============================================================"}
+{"asctime": "2026-04-18 12:52:48,879", "name": "src.utils.kingdee_sync_tool", "levelname": "INFO", "message": "=== \u542f\u52a8\u91d1\u8776\u6570\u636e\u540c\u6b65\u5de5\u5177 (\u4ee3\u7801\u7248\u672c: v20260120_Fix_Login_Loop) ==="}
+{"asctime": "2026-04-18 12:52:48,883", "name": "src.utils.kingdee_sync_tool", "levelname": "INFO", "message": "\u6240\u6709\u4f9d\u8d56\u9879\u68c0\u67e5\u901a\u8fc7"}
+{"asctime": "2026-04-18 12:52:48,934", "name": "src.utils.kingdee_sync_tool", "levelname": "INFO", "message": "\u5e94\u7528\u7a0b\u5e8f\u6837\u5f0f\u8bbe\u7f6e\u5b8c\u6210"}
+{"asctime": "2026-04-18 12:52:49,004", "name": "src.utils.kingdee_sync_tool", "levelname": "INFO", "message": "\u914d\u7f6e\u6587\u4ef6\u52a0\u8f7d\u5b8c\u6210"}
+{"asctime": "2026-04-18 12:52:51,993", "name": "src.utils.kingdee_sync_tool", "levelname": "INFO", "message": "\u4e3b\u7a97\u53e3\u5df2\u663e\u793a: isVisible=True, geometry=PySide6.QtCore.QRect(230, 75, 1460, 820)"}
+{"asctime": "2026-04-18 13:22:45,810", "name": "src.utils.kingdee_sync_tool", "levelname": "INFO", "message": "\u5e94\u7528\u7a0b\u5e8f\u9000\u51fa\uff0c\u9000\u51fa\u7801: 0"}
+{"asctime": "2026-04-18 13:22:45,814", "name": "src.utils.kingdee_sync_tool", "levelname": "INFO", "message": "\u6570\u636e\u5e93\u8fde\u63a5\u5df2\u5173\u95ed"}
+{"asctime": "2026-04-18 13:22:45,816", "name": "src.core.kingdee_api", "levelname": "INFO", "message": "\u4f1a\u8bdd\u5fc3\u8df3\u5df2\u505c\u6b62"}
+{"asctime": "2026-04-18 13:22:45,817", "name": "src.utils.kingdee_sync_tool", "levelname": "INFO", "message": "\u6839\u636e\u914d\u7f6e\u5df2\u8df3\u8fc7\u81ea\u52a8\u767b\u51fa\uff0c\u4ec5\u505c\u6b62\u5fc3\u8df3"}
+{"asctime": "2026-04-18 13:22:45,818", "name": "src.utils.kingdee_sync_tool", "levelname": "INFO", "message": "\u7a0b\u5e8f\u6e05\u7406\u5b8c\u6210"}

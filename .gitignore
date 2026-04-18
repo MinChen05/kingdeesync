@@ -3,6 +3,9 @@
 
 # 缓存文件
 __pycache__/
+.mypy_cache/
+.ruff_cache/
+*.pyc
 
 # 构建和打包目录
 build/
@@ -13,3 +16,18 @@ dist/
 
 # 日志文件
 logs/
+log/
+debug_startup.txt
+debug_reporting.txt
+startup_log.txt
+startup_log_v2.txt
+temp_log.txt
+
+# 运行时断点目录
+checkpoints/
+
+# 本地协作 / 机器相关文件
+.claude/
+.install_salt
+config.local.ini
+.worktrees/

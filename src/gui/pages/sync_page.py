@@ -24,6 +24,7 @@ from PySide6.QtWidgets import (
 from src.gui.components.buttons import LoadingButton
 from src.gui.components.combobox import SearchableComboBox
 from src.gui.components.page_shell import Win11PageScaffold, Win11SectionCard, Win11SummaryCard
+from src.config.config_manager import config_manager
 from src.gui.design_tokens import ColorTokens
 from src.gui.feedback import UiFeedback
 from src.gui.ui_text import ButtonText, LoadingText
@@ -37,6 +38,9 @@ FORM_ALL_TEXT = "同步全部表单"
 FORM_DEFAULT_TEXT = "使用默认表单集合..."
 FORM_ALL_DATA = "__ALL__"
 FORM_DEFAULT_DATA = "__DEFAULT__"
+SYNC_UI_SCOPE_KEY = "ui_manual_scope"
+SYNC_UI_FORM_KEY = "ui_manual_form"
+SYNC_UI_MODE_KEY = "ui_manual_mode"
 
 
 class SyncOverviewCard(Win11SummaryCard):
@@ -129,6 +133,7 @@ class SyncPage(Win11PageScaffold):
         self.fail_count = 0
         self.sync_worker = None
         self.test_worker = None
+        self._loading_defaults = False
         super().__init__(
             title="同步执行",
             eyebrow="同步",
@@ -486,6 +491,7 @@ class SyncPage(Win11PageScaffold):
         self.form_selector = SearchableComboBox(placeholder="请选择同步范围", searchable=True, items=items)
         self.form_selector.setMinimumHeight(40)
         self.form_selector.setCurrentIndex(0)
+        self.form_selector.currentIndexChanged.connect(self._on_manual_selection_changed)
         self.gui.form_selector = self.form_selector
         return self.form_selector
 
@@ -498,8 +504,52 @@ class SyncPage(Win11PageScaffold):
         self.sync_type_combo = SearchableComboBox(placeholder="请选择同步模式", searchable=False, items=mode_items)
         self.sync_type_combo.setMinimumHeight(40)
         self.sync_type_combo.setCurrentIndex(0)
+        self.sync_type_combo.currentIndexChanged.connect(self._on_manual_selection_changed)
         self.gui.sync_type_combo = self.sync_type_combo
         return self.sync_type_combo
+
+    def _current_manual_selection_payload(self) -> tuple[str, str, str]:
+        form_data = self._combo_selected_data(self.form_selector, default=FORM_ALL_DATA)
+        mode_data = self._combo_selected_data(self.sync_type_combo, default="incremental")
+
+        if form_data == FORM_DEFAULT_DATA:
+            scope = "default"
+            selected_form = ""
+        elif form_data == FORM_ALL_DATA or not form_data:
+            scope = "all"
+            selected_form = ""
+        else:
+            scope = "single"
+            selected_form = str(form_data)
+
+        normalized_mode = str(mode_data or "incremental").strip().lower()
+        if normalized_mode not in {"incremental", "full", "complete"}:
+            normalized_mode = "incremental"
+        return scope, selected_form, normalized_mode
+
+    def _persist_manual_selection(self) -> None:
+        if self._loading_defaults:
+            return
+
+        try:
+            scope, selected_form, mode = self._current_manual_selection_payload()
+            config_manager.update_config("SYNC", SYNC_UI_SCOPE_KEY, scope)
+            config_manager.update_config("SYNC", SYNC_UI_FORM_KEY, selected_form)
+            config_manager.update_config("SYNC", SYNC_UI_MODE_KEY, mode)
+        except Exception as exc:  # pragma: no cover - persistence failure shouldn't block UI
+            logger.warning("Failed to persist sync UI selection: %s", exc)
+
+    def _refresh_selection_summary(self) -> None:
+        mode_text = self.sync_type_combo.currentText() or "增量（推荐）"
+        form_text = self.form_selector.currentText() or FORM_ALL_TEXT
+        self.summary_mode.set_data(mode_text, "当前保存的同步模式。")
+        self.summary_target.set_data(form_text, "当前保存的同步范围。")
+
+    def _on_manual_selection_changed(self, *_args) -> None:
+        if self._loading_defaults:
+            return
+        self._persist_manual_selection()
+        self._refresh_selection_summary()
 
     def start_sync(self) -> None:
         if self.sync_worker is not None and self.sync_worker.isRunning():
@@ -658,23 +708,42 @@ class SyncPage(Win11PageScaffold):
 
     def load_smart_defaults(self) -> None:
         config = sync_service.get_sync_config()
-        default_forms = config.get("default_forms", [])
-        if default_forms:
-            if len(default_forms) == 1:
-                self._set_combo_selected_by_data(self.form_selector, default_forms[0])
-            else:
-                self._set_combo_selected_by_data(self.form_selector, FORM_DEFAULT_DATA)
+        self._loading_defaults = True
+        try:
+            scope = str(config.get(SYNC_UI_SCOPE_KEY, "") or "").strip().lower()
+            selected_form = str(config.get(SYNC_UI_FORM_KEY, "") or "").strip()
 
-        sync_type = config.get("sync_type", "incremental")
-        if sync_type not in ("incremental", "full", "complete"):
-            sync_type = "incremental"
-        self._set_combo_selected_by_data(self.sync_type_combo, sync_type)
+            default_forms = config.get("default_forms", [])
+            if scope == "default":
+                self._set_combo_selected_by_data(self.form_selector, FORM_DEFAULT_DATA)
+            elif scope == "single" and selected_form:
+                if not self._set_combo_selected_by_data(self.form_selector, selected_form):
+                    if len(default_forms) == 1:
+                        self._set_combo_selected_by_data(self.form_selector, default_forms[0])
+                    elif default_forms:
+                        self._set_combo_selected_by_data(self.form_selector, FORM_DEFAULT_DATA)
+            elif scope == "all":
+                self._set_combo_selected_by_data(self.form_selector, FORM_ALL_DATA)
+            elif default_forms:
+                if len(default_forms) == 1:
+                    self._set_combo_selected_by_data(self.form_selector, default_forms[0])
+                else:
+                    self._set_combo_selected_by_data(self.form_selector, FORM_DEFAULT_DATA)
+            else:
+                self._set_combo_selected_by_data(self.form_selector, FORM_ALL_DATA)
+
+            sync_type = str(config.get(SYNC_UI_MODE_KEY, config.get("sync_type", "incremental"))).strip().lower()
+            if sync_type not in ("incremental", "full", "complete"):
+                sync_type = "incremental"
+            self._set_combo_selected_by_data(self.sync_type_combo, sync_type)
+        finally:
+            self._loading_defaults = False
 
         self._set_run_state("neutral", "空闲")
         self._set_hero_hint("已加载保存的同步默认值，可直接启动任务。", "neutral")
-        self.summary_mode.set_data(self.sync_type_combo.currentText(), "当前保存的同步模式。")
-        self.summary_target.set_data(self.form_selector.currentText() or FORM_ALL_TEXT, "当前保存的同步范围。")
+        self._refresh_selection_summary()
         self.summary_result.set_data("--", "等待下一次同步结果。")
+        self._persist_manual_selection()
 
     def reset_stats(self) -> None:
         self.synced_count = 0

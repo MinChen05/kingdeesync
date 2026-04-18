@@ -451,20 +451,24 @@ class SchedulePage(Win11PageScaffold):
         curr_auto = self.switch_auto.isChecked()
         curr_interval = self.spin_interval.value()
         has_changes = (curr_auto != self.original_auto) or (curr_interval != self.original_interval)
-        self.btn_save.setEnabled(has_changes)
-        self.btn_save.setText("保存设置 *" if has_changes else ButtonText.SAVE_SETTINGS)
         self._refresh_interval_presets()
         self._refresh_interval_strategy()
 
-        if has_changes:
-            self._update_quick_info("配置已变更，请在下一次调度前保存。", "info")
-        else:
+        if not has_changes:
+            self.btn_save.setEnabled(False)
+            self.btn_save.setText(ButtonText.SAVE_SETTINGS)
             self._update_quick_info("当前配置与已保存设置一致。", "neutral")
+            return
 
-    def save_config(self) -> None:
+        if self._save_config_values(curr_auto, curr_interval):
+            self._update_quick_info("调度配置已自动保存。", "success")
+        else:
+            self.btn_save.setEnabled(True)
+            self.btn_save.setText("保存设置 *")
+            self._update_quick_info("自动保存失败，请点击“保存设置”重试。", "danger")
+
+    def _save_config_values(self, is_auto: bool, interval: int) -> bool:
         try:
-            is_auto = self.switch_auto.isChecked()
-            interval = self.spin_interval.value()
             config_manager.update_config("SYNC", "auto_sync", str(is_auto))
             config_manager.update_config("SYNC", "sync_interval", str(interval))
             self.original_auto = is_auto
@@ -476,11 +480,20 @@ class SchedulePage(Win11PageScaffold):
             self._refresh_interval_presets()
             self._refresh_interval_strategy()
             logger.info("调度配置已保存。")
+            return True
+        except Exception as exc:
+            logger.error("保存调度配置失败：%s", exc)
+            return False
+
+    def save_config(self) -> None:
+        is_auto = self.switch_auto.isChecked()
+        interval = self.spin_interval.value()
+        if self._save_config_values(is_auto, interval):
             self._update_quick_info("调度设置保存成功。", "success")
             UiFeedback.success(self, "保存成功", "调度设置已成功保存。")
-        except Exception as exc:
+        else:
             self._update_quick_info("调度设置保存失败，请查看日志后重试。", "danger")
-            UiFeedback.error(self, "保存失败", f"无法保存调度设置：\n{exc}")
+            UiFeedback.error(self, "保存失败", "无法保存调度设置，请稍后重试。")
 
     def on_toggle_task(self) -> None:
         if auto_scheduler.is_running():

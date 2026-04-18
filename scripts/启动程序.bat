@@ -19,16 +19,16 @@ if %errorlevel% neq 0 (
 echo [信息] Python版本检查通过
 
 :: 检查是否存在虚拟环境
-if exist "venv\Scripts\activate.bat" (
+if exist ".venv\Scripts\activate.bat" (
     echo [信息] 检测到虚拟环境，正在激活...
-    call venv\Scripts\activate.bat
+    call .venv\Scripts\activate.bat
 ) else (
     echo [信息] 未检测到虚拟环境，使用系统Python环境
 )
 
 :: 检查依赖是否安装
 echo [信息] 检查依赖包...
-python -c "import PySide6, pymysql, requests, schedule, dateutil" >nul 2>&1
+python -c "import PySide6, pymysql, requests, schedule, dateutil, cryptography" >nul 2>&1
 if %errorlevel% neq 0 (
     echo [警告] 检测到缺少依赖包，正在自动安装...
     pip install -r requirements.txt
@@ -49,7 +49,7 @@ echo [信息] 正在启动金蝶数据同步工具...
 echo.
 
 :: 启动主程序
-python kingdee_sync_tool.py
+python main.py
 
 :: 检查程序退出状态
 if %errorlevel% neq 0 (

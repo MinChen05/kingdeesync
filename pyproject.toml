@@ -1,0 +1,44 @@
+[tool.ruff]
+line-length = 120
+target-version = "py311"
+extend-exclude = [
+    "dist",
+    "build",
+    "logs",
+    "log",
+    ".venv",
+    "__pycache__",
+    "docs",
+    "assets",
+    "checkpoints",
+    "dotnet",
+    "tdesign-vue-next-starter",
+    "_ui_ref",
+]
+
+[tool.ruff.lint]
+select = ["F"]
+ignore = ["F401"]
+
+[tool.mypy]
+python_version = "3.11"
+ignore_missing_imports = true
+follow_imports = "skip"
+files = [
+    "main.py",
+    "src/config",
+    "src/services/sync_service.py",
+    "src/services/settings_service.py",
+    "src/services/reporting.py",
+    "src/core/filter_builder.py",
+    "src/core/form_sync_runner.py",
+    "src/core/sync_log_repository.py",
+    "src/core/sync_run_repository.py",
+    "src/core/upsert_engine_mysql.py",
+    "src/core/upsert_engine_sqlserver.py",
+    "src/core/writers_registry.py",
+    "src/gui/workers.py",
+    "src/gui/pages/settings_page.py",
+    "src/utils/logger.py",
+]
+exclude = "^(dist|build|logs|log|\\.venv|docs|assets)/"

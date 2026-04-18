@@ -31,3 +31,5 @@ checkpoints/
 .install_salt
 config.local.ini
 .worktrees/
+.DS_Store
+tmp-*.png

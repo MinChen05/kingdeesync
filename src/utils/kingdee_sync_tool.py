@@ -16,12 +16,16 @@ import logging
 from datetime import datetime
 
 # 添加当前目录到Python路径
-current_dir = os.path.dirname(os.path.abspath(__file__))
+if getattr(sys, 'frozen', False):
+    current_dir = os.path.dirname(sys.executable)
+else:
+    current_dir = os.path.dirname(os.path.abspath(__file__))
+    
 sys.path.insert(0, current_dir)
 
 # 导入PySide6模块
 try:
-    from PySide6.QtWidgets import QApplication, QMessageBox
+    from PySide6.QtWidgets import QApplication
     from PySide6.QtCore import Qt, QLocale
     from PySide6.QtGui import QFont
 except ImportError as e:
@@ -33,8 +37,11 @@ except ImportError as e:
 # 导入应用模块
 try:
     from src.gui.kingdee_sync_gui import KingdeeSyncGUI
+    from src.gui.feedback import UiFeedback
     from src.config.config_manager import config_manager
     from src.core.scheduler import auto_scheduler
+    from src.services.sync_service import sync_service
+    from src.utils import logger as app_logger
 except ImportError as e:
     print(f"导入应用模块失败: {e}")
     print("请确保所有模块文件都在同一目录下")
@@ -42,31 +49,7 @@ except ImportError as e:
 
 def setup_logging():
     """设置日志系统"""
-    log_dir = os.path.join(current_dir, "logs")
-    if not os.path.exists(log_dir):
-        os.makedirs(log_dir)
-    
-    log_file = os.path.join(log_dir, f"sync_tool_{datetime.now().strftime('%Y%m%d')}.log")
-    
-    # 配置日志格式
-    log_format = '%(asctime)s - %(name)s - %(levelname)s - %(message)s'
-    
-    # 配置根日志记录器
-    logging.basicConfig(
-        level=logging.INFO,
-        format=log_format,
-        handlers=[
-            # 文件处理器
-            logging.FileHandler(log_file, encoding='utf-8'),
-            # 控制台处理器
-            logging.StreamHandler(sys.stdout)
-        ]
-    )
-    
-    # 设置第三方库的日志级别
-    logging.getLogger('requests').setLevel(logging.WARNING)
-    logging.getLogger('urllib3').setLevel(logging.WARNING)
-    logging.getLogger('pymysql').setLevel(logging.WARNING)
+    app_logger.setup_logging()
     
     logger = logging.getLogger(__name__)
     logger.info("日志系统初始化完成")
@@ -89,12 +72,26 @@ def check_dependencies():
     for module in required_modules:
         try:
             __import__(module)
-        except ImportError:
-            missing_modules.append(module)
+        except ImportError as e:
+            missing_modules.append(f"{module} ({e})")
+            # 调试：写入 debug 文件
+            try:
+                debug_path = app_logger.get_debug_log_path("debug_startup.txt")
+                with open(debug_path, "a") as f:
+                    f.write(f"Failed to import {module}: {e}\n")
+            except:
+                pass
     
     if missing_modules:
         error_msg = f"缺少必需的Python模块: {', '.join(missing_modules)}"
         logger.error(error_msg)
+        # 调试：写入 debug 文件
+        try:
+            debug_path = app_logger.get_debug_log_path("debug_startup.txt")
+            with open(debug_path, "a") as f:
+                f.write(f"Missing modules: {missing_modules}\n")
+        except:
+            pass
         print(error_msg)
         print("请运行以下命令安装依赖:")
         print("pip install -r requirements.txt")
@@ -110,17 +107,15 @@ def initialize_application():
     try:
         # 创建配置文件（如果不存在）
         config_manager.load_config()
+        try:
+            repaired = sync_service.repair_stale_sync_runs()
+            if repaired:
+                logger.warning("Recovered %s stale running sync run(s) during startup", repaired)
+        except Exception as repair_exc:
+            logger.warning("Failed to repair stale running sync runs during startup: %s", repair_exc)
         logger.info("配置文件加载完成")
         
-        # 初始化数据库表
-        from src.core.mysql_manager import mysql_manager
-        if mysql_manager.connect():
-            if mysql_manager.create_tables(create_tables=False):
-                logger.info("跳过数据库表创建，使用现有数据库表")
-            else:
-                logger.warning("数据库连接检查失败，但程序将继续运行")
-        else:
-            logger.warning("数据库连接失败，程序将在GUI中提供连接测试功能")
+        # 删除自动建表与字段检查，仅加载配置并由GUI提供连接测试/报错提示
         
         return True
         
@@ -141,6 +136,7 @@ def setup_application_style(app):
         # 设置默认字体
         font = QFont("Microsoft YaHei UI", 9)
         app.setFont(font)
+        app.setStyle("Fusion")
         
         # 启用高DPI支持
         app.setAttribute(Qt.AA_EnableHighDpiScaling, True)
@@ -171,8 +167,8 @@ def handle_exception(exc_type, exc_value, exc_traceback):
     try:
         app = QApplication.instance()
         if app:
-            error_msg = f"程序发生错误:\n{exc_type.__name__}: {str(exc_value)}"
-            QMessageBox.critical(None, "程序错误", error_msg)
+            error_msg = UiFeedback.build_error_message("程序运行出现异常，请查看日志后重试。", f"{exc_type.__name__}: {exc_value}")
+            UiFeedback.error(None, "程序错误", error_msg)
     except:
         pass
 
@@ -191,10 +187,19 @@ def cleanup_and_exit():
         mysql_manager.disconnect()
         logger.info("数据库连接已关闭")
         
-        # 关闭金蝶API连接
+        # 关闭金蝶API连接（遵循配置：不自动登出，仅停止心跳）
         from src.core.kingdee_api import kingdee_client
-        kingdee_client.logout()
-        logger.info("金蝶API连接已关闭")
+        # 先停止心跳线程
+        try:
+            kingdee_client.stop_keepalive()
+        except Exception:
+            pass
+        kd_cfg = config_manager.get_kingdee_config()
+        if kd_cfg.get('auto_logout_on_exit', False):
+            kingdee_client.logout()
+            logger.info("金蝶API连接已登出并关闭")
+        else:
+            logger.info("根据配置已跳过自动登出，仅停止心跳")
         
         logger.info("程序清理完成")
         
@@ -203,30 +208,60 @@ def cleanup_and_exit():
 
 def main():
     """主函数"""
+    # 调试路径
+    try:
+        debug_path = app_logger.get_debug_log_path("debug_startup.txt")
+        with open(debug_path, "a") as f:
+            f.write("Entered gui_main\n")
+    except:
+        pass
+
     # 设置异常处理器
     sys.excepthook = handle_exception
     
     # 初始化日志系统
     logger = setup_logging()
+    
+    try:
+        with open(debug_path, "a") as f:
+            f.write("Logging setup complete\n")
+    except:
+        pass
+
     logger.info("=" * 60)
-    logger.info("金蝶数据同步工具启动")
-    logger.info(f"Python版本: {sys.version}")
-    logger.info(f"工作目录: {current_dir}")
-    logger.info("=" * 60)
+    logger.info("=== 启动金蝶数据同步工具 (代码版本: v20260120_Fix_Login_Loop) ===")
     
     # 检查依赖项
     if not check_dependencies():
+        try:
+            with open(debug_path, "a") as f:
+                f.write("Dependencies check failed\n")
+        except:
+            pass
         return 1
     
+    try:
+        with open(debug_path, "a") as f:
+            f.write("Dependencies check passed\n")
+            f.write("Creating QApplication\n")
+    except:
+        pass
+
     # 创建QApplication实例
     app = QApplication(sys.argv)
     
+    try:
+        with open(debug_path, "a") as f:
+            f.write("QApplication created\n")
+    except:
+        pass
+        
     # 设置应用程序样式
     setup_application_style(app)
     
     # 初始化应用程序
     if not initialize_application():
-        QMessageBox.critical(None, "初始化失败", "应用程序初始化失败，请检查日志文件获取详细信息。")
+        UiFeedback.error(None, "初始化失败", "应用程序初始化失败，请检查日志获取详细信息。")
         return 1
     
     try:
@@ -235,14 +270,26 @@ def main():
         
         # 显示主窗口
         main_window.show()
+        main_window.raise_()
+        main_window.activateWindow()
         
-        # 加载初始状态
-        main_window.load_initial_status()
+        logger.info(f"主窗口已显示: isVisible={main_window.isVisible()}, geometry={main_window.geometry()}")
         
-        logger.info("主窗口已显示")
-        
+        try:
+            with open(debug_path, "a") as f:
+                f.write(f"MainWindow shown, isVisible={main_window.isVisible()}, geometry={main_window.geometry()}\n")
+                f.write("Entering exec()\n")
+        except:
+            pass
+            
         # 进入事件循环
         exit_code = app.exec()
+        
+        try:
+            with open(debug_path, "a") as f:
+                f.write(f"App exited with code {exit_code}\n")
+        except:
+            pass
         
         logger.info(f"应用程序退出，退出码: {exit_code}")
         
@@ -250,7 +297,7 @@ def main():
         
     except Exception as e:
         logger.error(f"运行主程序时发生错误: {str(e)}")
-        QMessageBox.critical(None, "运行错误", f"运行主程序时发生错误:\n{str(e)}")
+        UiFeedback.error(None, "运行失败", UiFeedback.build_error_message("主程序启动失败，请检查环境或配置后重试。", e))
         return 1
     
     finally:

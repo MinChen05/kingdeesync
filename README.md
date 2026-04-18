@@ -6,6 +6,7 @@
 - 默认数据库是 SQLServer，和 [config.ini](/d:/Kingdee/config.ini) 中 `[DATABASE] type = sqlserver` 保持一致。
 - MySQL 仍保留兼容能力，但不再作为默认主路径。
 - `.NET` 目录处于迁移进行中状态，用于分层迁移、CLI 验证和 Python/.NET 对账，不是当前生产主线。
+- 本地真实连接信息建议放在未纳入版本控制的 `config.local.ini`，仓库中的 `config.ini` 只保留脱敏模板。
 
 ## 功能概览
 
@@ -27,8 +28,8 @@ SQLServer 为默认主配置：
 
 ```ini
 [SQLSERVER]
-host = 10.10.10.191
-database = Kingdee
+host = 127.0.0.1
+database = your_database
 driver = ODBC Driver 17 for SQL Server
 ```
 
@@ -36,8 +37,8 @@ MySQL 配置仍保留，用于兼容历史部署或回归对比：
 
 ```ini
 [MYSQL]
-host = 192.169.0.32
-database = kingdee
+host = 127.0.0.1
+database = your_database
 ```
 
 ## 快速开始

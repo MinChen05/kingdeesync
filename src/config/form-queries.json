@@ -1,0 +1,226 @@
+{
+  "发货通知单": {
+    "FormId": "SAL_DELIVERYNOTICE",
+    "FieldKeys": "FID,FEntity_FENTRYID,FEntity_FSEQ,FBillNo,FDate,FCustomerID.FNAME,FMaterialID.FNAME,FMaterialID.FNUMBER,FQTY,FSumOutQty,FCLOSESTATUS_MX,FModifyDate,FSrcBillNo",
+    "FilterString": "FSaleOrgId = 171190",
+    "OrderString": "",
+    "TopRowCount": 0,
+    "StartRow": 0,
+    "Limit": 0,
+    "SubSystemId": ""
+  },
+  "生产入库单": {
+    "FormId": "PRD_INSTOCK",
+    "FieldKeys": "FID,FEntity_FENTRYID,FBILLNO,FDATE,FMATERIALID,FREALQTY,FSrcEntrySeq,FSRCBILLNO,FMoEntrySeq,FDOCUMENTSTATUS,FMoBillNo,FModifyDate",
+    "FilterString": "FPrdOrgId = 171190",
+    "OrderString": "",
+    "TopRowCount": 0,
+    "StartRow": 0,
+    "Limit": 0,
+    "SubSystemId": ""
+  },
+  "销售订单": {
+    "FormId": "SAL_SaleOrder",
+    "FieldKeys": "FID,FSaleOrderEntry_FENTRYID,FSaleOrderEntry_FSEQ,FBillTypeID.FName,FBillNo,FDate,FCustId.FName,FSaleOrgId.FName,FCustId.FGROUP,FMaterialId,FMaterialId.FName,FMaterialId.FNumber,FMaterialId.F_ora_Text_qtr,FMaterialId.FBarcode,FMaterialId.FDescription,FQTY,FCloseStatus,FDeliveryDate,FModifyDate,FStockOutQty,FMrpCloseStatus,FDocumentStatus",
+    "FilterString": "FSaleOrgId = 171190 and FBillTypeID.FName='标准销售订单' and FMaterialId.FName='电机'",
+    "OrderString": "",
+    "TopRowCount": 0,
+    "StartRow": 0,
+    "Limit": 0,
+    "SubSystemId": ""
+  },
+  "销售出库单": {
+    "FormId": "SAL_OUTSTOCK",
+    "FieldKeys": "FEntity_FENTRYID,FEntity_FSEQ,FBillTypeID.FName,FBillNO,FDate,FCustomerID.FNAME,FSaleOrgId.FNAME,FCustomerID.FGROUP,FRealQty,FMaterialID.FNAME,FMaterialID.FNUMBER,FMaterialID.F_ora_Text_qtr,FMaterialID.FBarcode,FSRCBILLNO,FModifyDate,FMaterialID.FDescription",
+    "FilterString": "FSaleOrgId=171190 and FBillTypeID.FName='标准销售出库单' and FMaterialID.FNAME='电机'",
+    "OrderString": "",
+    "TopRowCount": 0,
+    "StartRow": 0,
+    "Limit": 0,
+    "SubSystemId": ""
+  },
+  "销售退货单": {
+    "FormId": "SAL_RETURNSTOCK",
+    "FieldKeys": "FEntity_FENTRYID,FBillNo,FDATE,FRetcustId.FNAME,FRetcustId.FGROUP,FSalesManId.FNAME,F_ora_Assistant1.FDataValue,FRealQty,FMaterialId.FNAME,FMaterialId.FNUMBER,FMaterialId.F_ora_Text_qtr,FMaterialId.FBarcode,FDeliveryDate,FModifyDate",
+    "FilterString": "FSaleOrgId = '171190' AND FMaterialId.FNAME = '电机'",
+    "OrderString": "",
+    "TopRowCount": 0,
+    "StartRow": 0,
+    "Limit": 0,
+    "SubSystemId": ""
+  },
+  "预测订单": {
+    "FormId": "PLN_FORECAST",
+    "FieldKeys": "FEntity_FENTRYID,FBillNo,FForeOrgId.FNAME,FCustId.FNAME,FCustId.FGROUP,FMaterialId.FNAME,FMaterialId.FNUMBER,FQty,F_ora_Base.FNAME,F_ora_BaseProperty_ca9,F_ora_BaseProperty_uky,F_ora_Date,FModifyDate,FMaterialId.FDescription",
+    "FilterString": "FForeOrgId = '171190' and FMaterialId.FName='电机'",
+    "OrderString": "",
+    "TopRowCount": 0,
+    "StartRow": 0,
+    "Limit": 0,
+    "SubSystemId": ""
+  },
+  "生产订单主表": {
+    "FormId": "PRD_MO",
+    "FieldKeys": "FID,FBILLNO,FBILLTYPE.FNAME,FDATE,FPRDORGID,FWORKSHOPID,FDOCUMENTSTATUS,FCREATEDATE,FMODIFYDATE,FCANCELSTATUS",
+    "FilterString": "FPrdOrgId = 171190",
+    "OrderString": "FID ASC",
+    "TopRowCount": 0,
+    "StartRow": 0,
+    "Limit": 0,
+    "SubSystemId": ""
+  },
+  "生产订单明细": {
+    "FormId": "PRD_MO",
+    "FieldKeys": "FID,FTreeEntity_FENTRYID,FTreeEntity_FSEQ,FSrcBillNo,FSRCBILLENTRYID,FSALEORDERNO,FMATERIALID,FQTY,FSTOCKINQUAAUXQTY,FPLANSTARTDATE,FPLANFINISHDATE,FBOMID,FREQUESTORGID,FSTOCKINORGID,FSTOCKID,FWORKSHOPID,FSTATUS,FMODIFYDATE,F_ora_Text1,FMaterialId.FNumber,FMaterialId.FDescription,FSRCBILLENTRYSEQ",
+    "FilterString": "FPrdOrgId = 171190",
+    "OrderString": "FID ASC",
+    "TopRowCount": 0,
+    "StartRow": 0,
+    "Limit": 0,
+    "SubSystemId": ""
+  },
+  "客户资料": {
+    "FormId": "BD_Customer",
+    "FieldKeys": "FCUSTID,FNumber,FNAME,FCreateDate,FModifyDate,FGROUP.FNAME,FSELLER.FNAME,F_ora_Base.FNAME,F_ora_Text_qtr",
+    "FilterString": "FUseOrgId.FName='台州市金宇机电有限公司' and FForbidStatus='A'",
+    "OrderString": "",
+    "TopRowCount": 0,
+    "StartRow": 0,
+    "Limit": 0,
+    "SubSystemId": ""
+  },
+  "生产用料清单主表": {
+    "FormId": "PRD_PPBOM",
+    "FieldKeys": "FID,FBILLNO,FMATERIALID,FPRDORGID,FWORKSHOPID,FBOMID,FBASEQTY,FQTY,FMOTYPE,FMOID,FMOBILLNO,FMOENTRYID,FMOENTRYSEQ,FDOCUMENTSTATUS,FCREATEDATE,FMODIFYDATE,FAPPROVEDATE,FSALEORDERID,FSALEORDERNO,FSALEORDERENTRYID,FSALEORDERENTRYSEQ",
+    "FilterString": "FPrdOrgId = 171190",
+    "OrderString": "FID ASC",
+    "TopRowCount": 0,
+    "StartRow": 0,
+    "Limit": 0,
+    "SubSystemId": ""
+  },
+  "生产用料清单明细表": {
+    "FormId": "PRD_PPBOM",
+    "FieldKeys": "FID,FEntity_FENTRYID,FEntity_FSEQ,FMOID,FMOBILLNO,FMOENTRYID,FMOENTRYSEQ,FBOMENTRYID,FMATERIALID2,FNEEDDATE2,FBASESTDQTY,FBASENEEDQTY,FBASEMUSTQTY,FSTDQTY,FNEEDQTY2,FMUSTQTY,FBASEPICKEDQTY,F_ORA_DATETIME,FMODIFYDATE",
+    "FilterString": "FPrdOrgId = 171190",
+    "OrderString": "FID ASC",
+    "TopRowCount": 0,
+    "StartRow": 0,
+    "Limit": 0,
+    "SubSystemId": ""
+  },
+  "科目余额表": {
+    "FormId": "GL_RPT_AccountBalance",
+    "SchemeId": "",
+    "FieldKeys": "FBALANCEID,FBALANCENAME,FDETAILNUMBER,FDETAILNAME,FBEGINYEARDEBITLOCAL,FBEGINYEARCREDITLOCAL,FBEGINDEBIT,FBEGINDEBITLOCAL,FBEGINCREDIT,FBEGINCREDITLOCAL,FDEBIT,FDEBITLOCAL,FCREDIT,FCREDITLOCAL,FYTDDEBIT,FYTDDEBITLOCAL,FYTDCREDIT,FYTDCREDITLOCAL,FENDDEBIT,FENDDEBITLOCAL,FENDCREDIT,FENDCREDITLOCAL,FPROFITLOCAL,FYTDPROFITLOCAL",
+    "FilterString": [],
+    "IsVerifyBaseDataField": "true",
+    "Model": {
+      "FACCTBOOKID": {
+        "FNumber": "002"
+      },
+      "FCURRENCY": "1",
+      "FSTARTYEAR": "2025",
+      "FSTARTPERIOD": "1",
+      "FENDYEAR": "2026",
+      "FENDPERIOD": "12",
+      "FBALANCELEVEL": "4",
+      "FSHOWDETAIL": true,
+      "FFORBIDBALANCE": true,
+      "FNOTPOSTVOUCHER": true,
+      "FDEBITORCREDIT": false,
+      "FBALANCEZERO": true,
+      "FNOBUSINESS": false,
+      "FPERIODNOBALANCE": true,
+      "FYEARNOBALANCE": true,
+      "FSHOWFULLNAME": false,
+      "FDETAILSHOWACCT": true,
+      "FSHOWDETAILONLY": false,
+      "FEXCLUDEADJUSTVCH": false,
+      "FFLEXDEBITORCREDIT": false,
+      "FSHOWFLEXBYCOL": false
+    },
+    "StartRow": 0,
+    "Limit": 0
+  },
+  "即时库存": {
+    "FormId": "STK_Inventory",
+    "FieldKeys": "FID,FSTOCKORGID,FSTOCKID,FSTOCKLOCID,FSTOCKSTATUSID,FBASEUNITID,FBASEQTY,FMATERIALID,FUPDATETIME",
+    "FilterString": "1=1",
+    "OrderString": "",
+    "TopRowCount": 0,
+    "StartRow": 0,
+    "Limit": 0,
+    "SubSystemId": ""
+  },
+  "物料": {
+    "FormId": "BD_MATERIAL",
+    "FieldKeys": "FMATERIALID,FNUMBER,FMASTERID,FMATERIALGROUP.fname,FCREATEORGID,FUSEORGID,FCREATEDATE,FMODIFYDATE,FDOCUMENTSTATUS,FFORBIDSTATUS,FAPPROVEDATE,FREFSTATUS,F_TMHE_TEXT,F_JY_TEXT,F_JY_TEXT1,F_JY_TEXT2,F_JYX_TEXT1,F_JYX_TEXT2,F_JYX_TEXT4,F_JYX_TEXT3,F_JYX_ASSISTANT,F_JYX_ASSISTANT1,F_JYX_ASSISTANT2,F_JY_QTY,F_JY_QTY1,F_KDKF_HJFS,F_ORA_TEXT_QTR,F_ORA_TEXT_QTR1,FERPCLSID,FCATEGORYID,FTYPEID,FBARCODE,FNAME,FSPECIFICATION",
+    "FilterString": "FUSEORGID = 171190",
+    "OrderString": "",
+    "TopRowCount": 0,
+    "StartRow": 0,
+    "Limit": 0,
+    "SubSystemId": ""
+  },
+  "仓库": {
+    "FormId": "BD_STOCK",
+    "FieldKeys": "FSTOCKID,FMASTERID,FNUMBER,FUSEORGID,FMODIFYDATE,FDOCUMENTSTATUS,FFORBIDSTATUS,FNAME",
+    "FilterString": "1=1",
+    "OrderString": "",
+    "TopRowCount": 0,
+    "StartRow": 0,
+    "Limit": 0,
+    "SubSystemId": ""
+  },
+  "物料清单": {
+    "FormId": "ENG_BOM",
+    "FieldKeys": "FID,FMASTERID,FNUMBER,FBILLTYPE.FNAME,FDOCUMENTSTATUS,FMATERIALID,FFORBIDSTATUS,FUSEORGID,FMODIFYDATE,FBASEUNITID,FQTY,FBOMUSE",
+    "FilterString": "1=1",
+    "OrderString": "",
+    "TopRowCount": 0,
+    "StartRow": 0,
+    "Limit": 0,
+    "SubSystemId": ""
+  },
+  "物料清单子项": {
+    "FormId": "ENG_BOM",
+    "FieldKeys": "FID,FTreeEntity_FENTRYID,FTreeEntity_FSEQ,FMATERIALID,FNUMERATOR,FDENOMINATOR,FISSUETYPE,FBACKFLUSHTYPE,FSUPPLYORG,FSTOCKID,FENTRYROWID,FREPLACEGROUP,FQTY,FACTUALQTY,FMASTERID,FMATERIALTYPE,FMODIFYDATE",
+    "FilterString": "1=1",
+    "OrderString": "",
+    "TopRowCount": 0,
+    "StartRow": 0,
+    "Limit": 0,
+    "SubSystemId": ""
+  },
+  "采购订单": {
+    "FormId": "PUR_PurchaseOrder",
+    "FieldKeys": "FID,FPOOrderEntry_FENTRYID,FBillNo,FDocumentStatus,FSupplierId.FNAME,FPurchaseDeptId.FNAME,F_ora_Assistant,FMaterialId.FNUMBER,FMaterialId.FNAME,FMaterialId.FSpecification,FQTY,FCreateDate,FModifyDate,FApproveDate",
+    "FilterString": "FPURCHASEORGID = 171190",
+    "OrderString": "",
+    "TopRowCount": 0,
+    "StartRow": 0,
+    "Limit": 0,
+    "SubSystemId": ""
+  },
+  "委外订单": {
+    "FormId": "SUB_SUBREQORDER",
+    "FieldKeys": "FID,FTreeEntity_FENTRYID,FSrcBillNO,FSRCBILLENTRYSEQ,FSRCBILLENTRYID,FSrcBillId,FBillType.FNAME,FBillNo,FDATE,F_ora_Base,FMaterialId.FNUMBER,FQty,FStockInQty,FSupplierId.FNAME,FModifyDate,FDOCUMENTSTATUS,FMaterialId.FDescription",
+    "FilterString": "FSubOrgId = 171190",
+    "OrderString": "",
+    "TopRowCount": 0,
+    "StartRow": 0,
+    "Limit": 0,
+    "SubSystemId": ""
+  },
+  "应付单": {
+    "FormId": "AP_Payable",
+    "FieldKeys": "FID,FEntityDetail_FENTRYID,FEntityDetail_FSEQ,FBillTypeID.FNAME,FBillNo,FDATE,FPURCHASEORGID.FNAME,F_ora_Base1.FNAME,FSUPPLIERID.FNAME,FSETACCOUNTTYPE,FMATERIALID.FNUMBER,FMATERIALID.FNAME,FPRICEUNITID.FNAME,FPRICEQTY,FALLAMOUNTFOR_D,FNOTAXAMOUNTFOR,FDISCOUNTAMOUNTFOR,FModifyDate",
+    "FilterString": "FSetAccountType = 3 and FPURCHASEORGID.FNAME='台州市金宇机电有限公司'",
+    "OrderString": "",
+    "TopRowCount": 0,
+    "StartRow": 0,
+    "Limit": 0,
+    "SubSystemId": ""
+  }
+}

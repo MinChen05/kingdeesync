@@ -6,6 +6,7 @@
 - 默认数据库为 SQLServer，来源于 [config.ini](/d:/Kingdee/config.ini) 的 `[DATABASE] type = sqlserver`。
 - MySQL 仅保留兼容支持，不再作为文档默认假设。
 - `.NET` 目录是迁移工程，不是当前交付主线。
+- 本地部署应优先使用未入库的 `config.local.ini`，仓库中的 `config.ini` 仅作为脱敏模板。
 
 ## 本目录建议关注
 

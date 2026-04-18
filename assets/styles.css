@@ -3784,3 +3784,360 @@ QMessageBox {
 QMessageBox QLabel {
     color: #2e4d57;
 }
+
+/* ==========================================================
+   Theme Override: Sky White
+   Goal: white base with sky-blue interaction layer
+   ========================================================== */
+
+QMainWindow[theme="win11-shell"] {
+    background-color: #f5fbff;
+}
+
+QMainWindow[theme="win11-shell"] QWidget {
+    color: #21364a;
+}
+
+QMainWindow[theme="win11-shell"] QWidget#desktop_body {
+    background-color: #f3f9fe;
+}
+
+QMainWindow[theme="win11-shell"] QFrame#desktop_title_bar[ui="win11-title-bar"] {
+    background-color: #fbfeff;
+    border-bottom: 1px solid #d8e7f4;
+}
+
+QMainWindow[theme="win11-shell"] QFrame#desktop_title_bar[ui="win11-title-bar"] QLabel#titlebar_text {
+    color: #22384c;
+}
+
+QMainWindow[theme="win11-shell"] QFrame#desktop_title_bar[ui="win11-title-bar"] QPushButton#titlebar_menu_btn,
+QMainWindow[theme="win11-shell"] QFrame#desktop_title_bar[ui="win11-title-bar"] QPushButton#titlebar_min_btn,
+QMainWindow[theme="win11-shell"] QFrame#desktop_title_bar[ui="win11-title-bar"] QPushButton#titlebar_max_btn,
+QMainWindow[theme="win11-shell"] QFrame#desktop_title_bar[ui="win11-title-bar"] QPushButton#titlebar_close_btn {
+    color: #6b8399;
+}
+
+QMainWindow[theme="win11-shell"] QFrame#desktop_title_bar[ui="win11-title-bar"] QPushButton#titlebar_menu_btn:hover,
+QMainWindow[theme="win11-shell"] QFrame#desktop_title_bar[ui="win11-title-bar"] QPushButton#titlebar_min_btn:hover,
+QMainWindow[theme="win11-shell"] QFrame#desktop_title_bar[ui="win11-title-bar"] QPushButton#titlebar_max_btn:hover {
+    background-color: #e8f4ff;
+    color: #2578da;
+}
+
+QMainWindow[theme="win11-shell"] QMenuBar#desktop_menu_bar,
+QMainWindow[theme="win11-shell"] QStatusBar#desktop_status_bar {
+    background-color: #fbfeff;
+    border-color: #d8e7f4;
+}
+
+QMainWindow[theme="win11-shell"] QMenuBar#desktop_menu_bar::item {
+    color: #45617b;
+}
+
+QMainWindow[theme="win11-shell"] QMenuBar#desktop_menu_bar::item:selected {
+    background-color: #e8f4ff;
+    color: #2578da;
+}
+
+QMainWindow[theme="win11-shell"] QMenu {
+    background-color: #ffffff;
+    border: 1px solid #d8e7f4;
+}
+
+QMainWindow[theme="win11-shell"] QMenu::item {
+    color: #3b5872;
+}
+
+QMainWindow[theme="win11-shell"] QMenu::item:selected {
+    background-color: #edf6ff;
+    color: #2578da;
+}
+
+QMainWindow[theme="win11-shell"] QLabel#statusbar_clock {
+    color: #4ca8f8;
+}
+
+QMainWindow[theme="win11-shell"] QScrollBar::handle:vertical,
+QMainWindow[theme="win11-shell"] QScrollBar::handle:horizontal {
+    background-color: rgba(76, 168, 248, 0.48);
+}
+
+QMainWindow[theme="win11-shell"] QScrollBar::handle:vertical:hover,
+QMainWindow[theme="win11-shell"] QScrollBar::handle:horizontal:hover {
+    background-color: rgba(76, 168, 248, 0.78);
+}
+
+QMainWindow[theme="win11-shell"] QSplitter#app_splitter::handle,
+QMainWindow[theme="win11-shell"] QSplitter[ui="win11-page-splitter"]::handle {
+    background-color: #dbe8f5;
+}
+
+QMainWindow[theme="win11-shell"] QSplitter[ui="win11-page-splitter"]::handle:hover {
+    background-color: #cbdcf0;
+}
+
+QMainWindow[theme="win11-shell"] QFrame#sidebar[ui="win11-nav-panel"] {
+    background-color: #f2f8fe;
+    border-right: 1px solid #d7e6f3;
+}
+
+QMainWindow[theme="win11-shell"] QFrame#sidebar[ui="win11-nav-panel"] QFrame#sidebar_header,
+QMainWindow[theme="win11-shell"] QFrame#sidebar[ui="win11-nav-panel"] QFrame#sidebar_toolstrip,
+QMainWindow[theme="win11-shell"] QFrame#sidebar[ui="win11-nav-panel"] QFrame#status_card[ui="win11-sidebar-status"] {
+    background-color: #ffffff;
+    border: 1px solid #dce9f5;
+}
+
+QMainWindow[theme="win11-shell"] QFrame#sidebar[ui="win11-nav-panel"] QLabel#app-logo {
+    color: #1c3552;
+}
+
+QMainWindow[theme="win11-shell"] QFrame#sidebar[ui="win11-nav-panel"] QLabel#app-subtitle,
+QMainWindow[theme="win11-shell"] QFrame#sidebar[ui="win11-nav-panel"] QLabel#sidebar_section_title,
+QMainWindow[theme="win11-shell"] QFrame#sidebar[ui="win11-nav-panel"] QLabel#sidebar_status_hint {
+    color: #7891a6;
+}
+
+QMainWindow[theme="win11-shell"] QFrame#sidebar[ui="win11-nav-panel"] QTreeWidget#nav-tree::item {
+    color: #2a4763;
+}
+
+QMainWindow[theme="win11-shell"] QFrame#sidebar[ui="win11-nav-panel"] QTreeWidget#nav-tree::item:hover {
+    background-color: #edf6ff;
+    color: #214360;
+}
+
+QMainWindow[theme="win11-shell"] QFrame#sidebar[ui="win11-nav-panel"] QTreeWidget#nav-tree::item:selected {
+    background-color: #4ca8f8;
+    border: 1px solid #75befd;
+    color: #ffffff;
+}
+
+QMainWindow[theme="win11-shell"] QFrame#sidebar[ui="win11-nav-panel"] QToolButton[class="nav-tool-btn"]:hover {
+    background-color: #edf6ff;
+    border-color: #d2e5f7;
+}
+
+QMainWindow[theme="win11-shell"] QFrame#status_card[ui="win11-sidebar-status"] QWidget[class="status-row"] {
+    background-color: #fbfdff;
+    border: 1px solid #dfebf6;
+}
+
+QMainWindow[theme="win11-shell"] QFrame#status_card[ui="win11-sidebar-status"] QLabel[class="status-pill-online"] {
+    background-color: #edf6ff;
+    border: 1px solid #cfe3fb;
+    color: #2e95d9;
+}
+
+QMainWindow[theme="win11-shell"] QFrame#status_card[ui="win11-sidebar-status"] QLabel[class="status-pill-offline"] {
+    background-color: #f1f5f9;
+    border: 1px solid #dde7ef;
+    color: #7f95a8;
+}
+
+QMainWindow[theme="win11-shell"] QFrame#top_status_bar[ui="win11-command-bar"],
+QMainWindow[theme="win11-shell"] QFrame[ui="win11-hero-card"],
+QMainWindow[theme="win11-shell"] QFrame[ui="win11-summary-card"],
+QMainWindow[theme="win11-shell"] QFrame[ui="win11-section-card"],
+QMainWindow[theme="win11-shell"] QFrame[ui="win11-primary-action-bar"],
+QMainWindow[theme="win11-shell"] QFrame[ui="win11-pagination-card"] {
+    background-color: #ffffff;
+    border: 1px solid #dbe8f4;
+}
+
+QMainWindow[theme="win11-shell"] QFrame#top_status_bar[ui="win11-command-bar"] QLabel#topbar_title,
+QMainWindow[theme="win11-shell"] QLabel[ui="win11-hero-title"] {
+    color: #183650;
+}
+
+QMainWindow[theme="win11-shell"] QFrame#top_status_bar[ui="win11-command-bar"] QLabel#topbar_subtitle,
+QMainWindow[theme="win11-shell"] QFrame#top_status_bar[ui="win11-command-bar"] QLabel#topbar_time,
+QMainWindow[theme="win11-shell"] QLabel[ui="win11-hero-subtitle"],
+QMainWindow[theme="win11-shell"] QLabel[ui="win11-summary-subtitle"],
+QMainWindow[theme="win11-shell"] QLabel[ui="win11-section-subtitle"],
+QMainWindow[theme="win11-shell"] QLabel[ui="win11-meta-text"],
+QMainWindow[theme="win11-shell"] QLabel[ui="win11-helper-text"],
+QMainWindow[theme="win11-shell"] QLabel[ui="win11-row-note"] {
+    color: #7390a9;
+}
+
+QMainWindow[theme="win11-shell"] QLabel[ui="win11-hero-eyebrow"],
+QMainWindow[theme="win11-shell"] QLabel[ui="win11-summary-value"],
+QMainWindow[theme="win11-shell"] QLabel[ui="win11-inline-value"],
+QMainWindow[theme="win11-shell"] QLabel#statusbar_clock {
+    color: #2c88e8;
+}
+
+QMainWindow[theme="win11-shell"] QFrame[ui="win11-summary-card"]:hover,
+QMainWindow[theme="win11-shell"] QFrame[ui="win11-section-card"]:hover {
+    border-color: #bfd8f2;
+    background-color: #fcfeff;
+}
+
+QMainWindow[theme="win11-shell"] QFrame[ui="win11-inline-card"],
+QMainWindow[theme="win11-shell"] QFrame[ui="win11-progress-card"],
+QMainWindow[theme="win11-shell"] QFrame[ui="win11-execution-metric-card"],
+QMainWindow[theme="win11-shell"] QFrame[ui="win11-log-toolbar"] {
+    background-color: #f8fbff;
+    border: 1px solid #dfeaf5;
+}
+
+QMainWindow[theme="win11-shell"] QLabel[ui="win11-inline-badge"],
+QMainWindow[theme="win11-shell"] QLabel[ui="win11-status-chip"][tone="info"],
+QMainWindow[theme="win11-shell"] QLabel[ui="win11-table-tag"][tone="info"],
+QMainWindow[theme="win11-shell"] QLabel[class="topbar-chip-info"] {
+    background-color: #edf6ff;
+    border: 1px solid #d0e4fa;
+    color: #2b85e5;
+}
+
+QMainWindow[theme="win11-shell"] QLabel[ui="win11-status-chip"][tone="success"],
+QMainWindow[theme="win11-shell"] QLabel[ui="win11-table-tag"][tone="success"],
+QMainWindow[theme="win11-shell"] QLabel[class="topbar-chip-success"] {
+    background-color: #edf6ff;
+    color: #2e95d9;
+}
+
+QMainWindow[theme="win11-shell"] QLabel[ui="win11-status-chip"][tone="neutral"],
+QMainWindow[theme="win11-shell"] QLabel[class="topbar-chip-neutral"] {
+    background-color: #f1f6fb;
+    color: #6a859d;
+}
+
+QMainWindow[theme="win11-shell"] *[td="win11-input"],
+QMainWindow[theme="win11-shell"] QLineEdit,
+QMainWindow[theme="win11-shell"] QSpinBox,
+QMainWindow[theme="win11-shell"] QComboBox,
+QMainWindow[theme="win11-shell"] QDateEdit,
+QMainWindow[theme="win11-shell"] QTimeEdit,
+QMainWindow[theme="win11-shell"] QTextEdit,
+QMainWindow[theme="win11-shell"] QPlainTextEdit,
+QWidget#combo_popup_container,
+QPushButton[class="combo-btn"] {
+    background-color: #ffffff;
+    border: 1px solid #d7e6f3;
+    color: #29465f;
+    selection-background-color: #4ca8f8;
+}
+
+QMainWindow[theme="win11-shell"] *[td="win11-input"]:focus,
+QMainWindow[theme="win11-shell"] QLineEdit:focus,
+QMainWindow[theme="win11-shell"] QSpinBox:focus,
+QMainWindow[theme="win11-shell"] QComboBox:focus,
+QMainWindow[theme="win11-shell"] QTextEdit:focus,
+QMainWindow[theme="win11-shell"] QPlainTextEdit:focus,
+QPushButton[class="combo-btn"]:hover {
+    border-color: #4ca8f8;
+    background-color: #fbfdff;
+}
+
+QMainWindow[theme="win11-shell"] QComboBox QAbstractItemView,
+QListWidget#combo_popup_list::item:selected {
+    background-color: #eef7ff;
+    border-color: #d7e6f3;
+    color: #2578da;
+}
+
+QLineEdit#combo_popup_search,
+QListWidget#combo_popup_list::item:hover {
+    background-color: #f4faff;
+}
+
+QMainWindow[theme="win11-shell"] QPushButton {
+    background-color: #ffffff;
+    border: 1px solid #d8e7f4;
+    color: #42607a;
+}
+
+QMainWindow[theme="win11-shell"] QPushButton:hover {
+    background-color: #f2f8ff;
+    border-color: #bfd9f2;
+    color: #244861;
+}
+
+QMainWindow[theme="win11-shell"] QPushButton:pressed {
+    background-color: #e7f1fb;
+}
+
+QMainWindow[theme="win11-shell"] QPushButton[class="primary"],
+QMainWindow[theme="win11-shell"] QPushButton[class="btn-primary"],
+QMainWindow[theme="win11-shell"] QCheckBox::indicator:checked,
+QMainWindow[theme="win11-shell"] QWidget[ui="win11-page"] QProgressBar::chunk,
+QMainWindow[theme="win11-shell"] QLabel#topbar_user {
+    background-color: #4ca8f8;
+    border-color: #4ca8f8;
+    color: #ffffff;
+}
+
+QMainWindow[theme="win11-shell"] QPushButton[class="primary"]:hover,
+QMainWindow[theme="win11-shell"] QPushButton[class="btn-primary"]:hover {
+    background-color: #3a98ee;
+    border-color: #3a98ee;
+}
+
+QMainWindow[theme="win11-shell"] QPushButton[class="secondary"],
+QMainWindow[theme="win11-shell"] QPushButton[class="btn-ghost"] {
+    background-color: #f8fbff;
+    border-color: #d9e7f3;
+    color: #5b7891;
+}
+
+QMainWindow[theme="win11-shell"] QPushButton[class="secondary"]:hover,
+QMainWindow[theme="win11-shell"] QPushButton[class="btn-ghost"]:hover {
+    background-color: #edf6ff;
+    border-color: #c4dbf2;
+    color: #2d4f6b;
+}
+
+QMainWindow[theme="win11-shell"] QWidget[ui="win11-page"] QProgressBar {
+    background-color: #dcecf9;
+}
+
+QMainWindow[theme="win11-shell"] QTableWidget[ui="win11-data-table"] {
+    background-color: #ffffff;
+    border: 1px solid #dbe8f4;
+    gridline-color: #eaf2f9;
+    selection-background-color: #edf6ff;
+}
+
+QMainWindow[theme="win11-shell"] QTableWidget[ui="win11-data-table"]::item {
+    border-bottom: 1px solid #edf3f8;
+    color: #35516b;
+}
+
+QMainWindow[theme="win11-shell"] QTableWidget[ui="win11-data-table"] QHeaderView::section {
+    background-color: #f8fbff;
+    color: #6d879f;
+    border-bottom: 1px solid #dbe8f4;
+    border-right: 1px solid #eaf2f9;
+}
+
+QMainWindow[theme="win11-shell"] QLabel[ui="win11-page-badge"] {
+    border: 1px solid #cfe2f5;
+    background-color: #edf6ff;
+    color: #2578da;
+}
+
+QMainWindow[theme="win11-shell"] QTextEdit[class="win11-log"] {
+    background-color: #eff6fc;
+    border: 1px solid #d4e4f1;
+    color: #2b465f;
+}
+
+QMainWindow[theme="win11-shell"] QTextEdit[class="win11-log"]:focus {
+    border-color: #4ca8f8;
+}
+
+QMainWindow[theme="win11-shell"] QLabel[class="state-badge state-badge-empty"],
+QMainWindow[theme="win11-shell"] QLabel[class="state-badge state-badge-loading"] {
+    background-color: #edf6ff;
+    border: 1px solid #d3e5fa;
+    color: #2b85e5;
+}
+
+QToolTip {
+    background-color: #203d5c;
+    border: 1px solid #3f6d99;
+    color: #f4fbff;
+}

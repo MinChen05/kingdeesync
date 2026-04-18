@@ -300,18 +300,18 @@ class HistoryManager:
                     sql_top = """
                         SELECT failed_forms
                         FROM sync_runs
-                        WHERE status IN (?, ?)
+                        WHERE status IN (?, ?, ?)
                           AND start_time >= DATEADD(day, -30, GETDATE())
                     """
-                    mysql_manager.cursor.execute(sql_top, ("failed", "partial"))
+                    mysql_manager.cursor.execute(sql_top, ("failed", "partial", "failed_abnormal_exit"))
                 else:
                     sql_top = """
                         SELECT failed_forms
                         FROM sync_runs
-                        WHERE status IN (%s, %s)
+                        WHERE status IN (%s, %s, %s)
                           AND start_time >= DATE_SUB(NOW(), INTERVAL 30 DAY)
                     """
-                    mysql_manager.cursor.execute(sql_top, ("failed", "partial"))
+                    mysql_manager.cursor.execute(sql_top, ("failed", "partial", "failed_abnormal_exit"))
 
                 counter: Counter[str] = Counter()
                 for row in mysql_manager.cursor.fetchall() or []:

@@ -292,55 +292,50 @@ class MySQLManager:
 
     def connect(self) -> bool:
         """从连接池获取连接"""
-        try:
-            # 先关闭现有连接
-            self.disconnect()
+        retries = max(1, int(self.config.get("connect_retries", 3) or 3))
+        retry_delay = max(0.2, float(self.config.get("connect_retry_delay_secs", 1.0) or 1.0))
 
-            # 如果连接池不存在，初始化连接池
-            if not self.pool:
-                if getattr(self, '_pool_init_failed', False):
-                    return False
-                if not self._init_pool():
-                    return False
-
-            # 从连接池获取连接
-            self.connection = self.pool.connection()
-            self.cursor = self.connection.cursor()
-
-            # 验证连接有效
-            self.cursor.execute("SELECT 1")
-            result = self.cursor.fetchone()
-            valid = False
-            if isinstance(result, dict):
-                valid = (result.get("1") == 1) or (list(result.values())[0] == 1 if result else False)
-            else:
-                try:
-                    valid = result[0] == 1
-                except Exception:
-                    valid = bool(result)
-            if valid:
-                logger.debug("成功从连接池获取数据库连接")
-                return True
-            else:
-                logger.warning("从连接池获取的连接无效，尝试重新初始化连接池")
+        for attempt in range(1, retries + 1):
+            try:
                 self.disconnect()
-                self._init_pool()
-                return self.connect()
-        except pymysql.OperationalError as e:
-            logger.error(f"MySQL连接操作失败: {str(e)}")
-            time.sleep(1)
+
+                if not self.pool:
+                    if getattr(self, "_pool_init_failed", False):
+                        return False
+                    if not self._init_pool():
+                        raise ConnectionError("连接池初始化失败")
+
+                self.connection = self.pool.connection()
+                self.cursor = self.connection.cursor()
+
+                self.cursor.execute("SELECT 1")
+                result = self.cursor.fetchone()
+                valid = False
+                if isinstance(result, dict):
+                    valid = (result.get("1") == 1) or (list(result.values())[0] == 1 if result else False)
+                else:
+                    try:
+                        valid = result[0] == 1
+                    except Exception:
+                        valid = bool(result)
+
+                if valid:
+                    logger.debug("成功从连接池获取数据库连接")
+                    return True
+
+                raise ConnectionError("从连接池获取的连接无效")
+            except (pymysql.OperationalError, pyodbc.OperationalError) as exc:
+                logger.warning("数据库连接操作失败（第 %s/%s 次）: %s", attempt, retries, exc)
+            except Exception as exc:
+                logger.warning("获取数据库连接失败（第 %s/%s 次）: %s: %s", attempt, retries, type(exc).__name__, exc)
+
+            self.disconnect()
             self._init_pool()
-            return False
-        except pyodbc.OperationalError as e:
-            logger.error(f"SQL Server连接操作失败: {str(e)}")
-            time.sleep(1)
-            self._init_pool()
-            return False
-        except Exception as e:
-            logger.error(f"从连接池获取数据库连接失败 ({type(e).__name__}): {str(e)}")
-            time.sleep(1)
-            self._init_pool()
-            return False
+            if attempt < retries:
+                time.sleep(retry_delay)
+
+        logger.error("数据库连接在 %s 次重试后仍然失败", retries)
+        return False
 
     def disconnect(self):
         """归还连接到连接池"""
@@ -362,31 +357,42 @@ class MySQLManager:
 
     def test_connection(self) -> bool:
         """测试数据库连接"""
-        try:
-            # 获取新连接进行测试
-            test_conn = self.pool.connection() if self.pool else None
-            if not test_conn:
-                return self.connect()  # 如果没有连接池，尝试建立连接
+        retries = max(1, int(self.config.get("connect_retries", 3) or 3))
+        retry_delay = max(0.2, float(self.config.get("connect_retry_delay_secs", 1.0) or 1.0))
 
-            # 执行简单查询测试连接
-            with test_conn.cursor() as test_cursor:
-                test_cursor.execute("SELECT 1")
-                result = test_cursor.fetchone()
-                success = False
-                if isinstance(result, dict):
-                    success = result is not None and ((result.get("1") == 1) or (list(result.values())[0] == 1))
-                else:
+        for attempt in range(1, retries + 1):
+            test_conn = None
+            try:
+                test_conn = self.pool.connection() if self.pool else None
+                if not test_conn:
+                    return self.connect()
+
+                with test_conn.cursor() as test_cursor:
+                    test_cursor.execute("SELECT 1")
+                    result = test_cursor.fetchone()
+                    success = False
+                    if isinstance(result, dict):
+                        success = result is not None and ((result.get("1") == 1) or (list(result.values())[0] == 1))
+                    else:
+                        try:
+                            success = result is not None and result[0] == 1
+                        except Exception:
+                            success = result is not None
+
+                return success
+            except Exception as exc:
+                logger.warning("测试数据库连接失败（第 %s/%s 次）: %s", attempt, retries, exc)
+                if attempt < retries:
+                    time.sleep(retry_delay)
+            finally:
+                if test_conn is not None:
                     try:
-                        success = result is not None and result[0] == 1
+                        test_conn.close()
                     except Exception:
-                        success = result is not None
+                        pass
 
-            # 归还测试连接
-            test_conn.close()
-            return success
-        except Exception as e:
-            logger.error(f"测试数据库连接失败: {str(e)}")
-            return False
+        logger.error("测试数据库连接在 %s 次重试后仍然失败", retries)
+        return False
 
     def insert_generic_data(self, table_name: str, data: List[Dict[str, Any]]) -> int:
         """通用数据插入方法，依据字典键自动匹配列"""
@@ -498,9 +504,16 @@ class MySQLManager:
         """Execute a registered writer by name."""
         return self.writer_registry.execute(self, method_name, data)
 
-    def recover_stale_sync_runs(self, reason: str | None = None) -> int:
+    def recover_stale_sync_runs(
+        self,
+        reason: str | None = None,
+        heartbeat_timeout_seconds: int | None = None,
+    ) -> int:
         """Recover leftover sync runs that are still marked as running."""
-        return self.sync_run_repository.recover_running_runs(reason=reason)
+        return self.sync_run_repository.recover_running_runs(
+            reason=reason,
+            heartbeat_timeout_seconds=heartbeat_timeout_seconds,
+        )
 
     def table_exists(self, table_name: str) -> bool:
         """检查数据表是否存在。"""
@@ -533,6 +546,14 @@ class MySQLManager:
     def start_sync_run(self, run_id: str, sync_type: str, forms: Optional[List[str]], start_time: datetime) -> bool:
         """Delegate sync run start persistence to the sync run repository."""
         return self.sync_run_repository.start_run(run_id, sync_type, forms, start_time)
+
+    def heartbeat_sync_run(self, run_id: str, message: str | None = None, heartbeat_at: datetime | None = None) -> bool:
+        """Delegate running task heartbeat persistence to the sync run repository."""
+        return self.sync_run_repository.heartbeat_run(
+            run_id=run_id,
+            message=message,
+            heartbeat_at=heartbeat_at,
+        )
 
     def finish_sync_run(
         self,

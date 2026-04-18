@@ -4,6 +4,7 @@
 """
 
 import logging
+import threading
 import time
 import uuid
 from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -18,6 +19,7 @@ from src.core.filter_builder import FilterBuilder
 from src.core.form_sync_runner import FormSyncRunner, create_shared_db_manager
 from src.core.kingdee_api import kingdee_client
 from src.core.mysql_manager import mysql_manager, MySQLManager
+from src.core.audit_logging import emit_audit_log
 from src.config.config_manager import config_manager
 from src.core.retry_manager import CheckpointManager, SyncCheckpoint
 
@@ -40,6 +42,7 @@ class SyncStatus(Enum):
     SUCCESS = "success"
     FAILED = "failed"
     PARTIAL = "partial"
+    FAILED_ABNORMAL_EXIT = "failed_abnormal_exit"
 
 
 class DataSyncManager:
@@ -67,6 +70,8 @@ class DataSyncManager:
         self._checkpoint_manager = CheckpointManager()
         self.filter_builder = FilterBuilder(logger_=logger)
         self.form_sync_runner = FormSyncRunner(self, self.filter_builder, logger_=logger)
+        self._active_run_id: str | None = None
+        self._active_run_message = ""
 
     def add_sync_callback(self, callback):
         """添加同步进度回调函数"""
@@ -82,6 +87,8 @@ class DataSyncManager:
 
     def _notify_progress(self, message: str, progress: int = 0):
         """通知同步进度"""
+        if self._active_run_id:
+            self._active_run_message = str(message)
         for callback in self.sync_callbacks:
             try:
                 callback(message, progress)
@@ -98,12 +105,38 @@ class DataSyncManager:
 
         requested_forms = list(form_names)
         run_id = uuid.uuid4().hex
-        results = {}
+        results: Dict[str, Dict[str, Any]] = {}
         total_records = 0
-        failed_tables = []
+        failed_tables: List[str] = []
+        final_status = SyncStatus.FAILED
+        final_message = "同步任务未正常完成"
+        final_end_time = start_time
+        final_result: Dict[str, Any] | None = None
+        run_started = False
+        sync_config = config_manager.get_sync_config()
+        heartbeat_interval = int(sync_config.get("run_heartbeat_interval_secs", 15) or 15)
+        heartbeat_timeout = int(sync_config.get("run_heartbeat_timeout_secs", 120) or 120)
+        heartbeat_stop = threading.Event()
+        heartbeat_thread: threading.Thread | None = None
+
+        self._active_run_id = run_id
+        self._active_run_message = "开始数据同步..."
+
+        emit_audit_log(
+            logger,
+            "sync_run",
+            "start",
+            run_id=run_id,
+            sync_type=sync_type.value,
+            form_count=len(requested_forms),
+            forms=requested_forms,
+            heartbeat_interval=heartbeat_interval,
+            heartbeat_timeout=heartbeat_timeout,
+            start_time=start_time,
+        )
 
         def finalize_run(run_status: SyncStatus, message: str, end_time: Optional[datetime] = None):
-            final_end_time = end_time or datetime.now()
+            final_dt = end_time or datetime.now()
             try:
                 success_count = sum(
                     1
@@ -121,51 +154,22 @@ class DataSyncManager:
                     status=run_status.value,
                     message=message,
                     start_time=start_time,
-                    end_time=final_end_time,
+                    end_time=final_dt,
                     failed_forms=failed_tables,
                     details=results,
                 )
-            except Exception as e:
-                logger.debug(f"记录任务级历史失败: {e}")
+            except Exception as exc:
+                logger.debug("记录任务级历史失败: %s", exc)
 
-        if not self._check_connections():
-            message = "连接检查失败"
-            finalize_run(SyncStatus.FAILED, message)
-            result = self._create_sync_result(SyncStatus.FAILED, message, start_time)
-            result["run_id"] = run_id
-            return result
-
-        self._notify_progress("连接检查完成，开始同步数据...", 10)
-        try:
-            mysql_manager.start_sync_run(run_id, sync_type.value, requested_forms, start_time)
-        except Exception as e:
-            logger.debug(f"记录任务开始失败: {e}")
-
-        isolated_complete_forms = []
-        if sync_type == SyncType.COMPLETE:
-            isolated_complete_forms = [
-                form_name for form_name in requested_forms if form_name in self.ISOLATED_COMPLETE_FORMS
-            ]
-            if isolated_complete_forms:
-                form_names = [
-                    form_name for form_name in requested_forms if form_name not in self.ISOLATED_COMPLETE_FORMS
-                ]
-                logger.info("检测到需要单独执行完全同步的表单: %s", ", ".join(isolated_complete_forms))
-                self._notify_progress(
-                    f"检测到 {', '.join(isolated_complete_forms)}，将单独执行完全同步...",
-                    15,
-                )
+        def heartbeat_loop() -> None:
+            while not heartbeat_stop.wait(heartbeat_interval):
+                try:
+                    mysql_manager.heartbeat_sync_run(run_id, self._active_run_message or "任务运行中", datetime.now())
+                except Exception as exc:
+                    logger.debug("更新同步任务心跳失败: %s", exc)
 
         total_tables = len(requested_forms)
         completed_tables = 0
-        sync_config = config_manager.get_sync_config()
-        table_concurrency = sync_config.get("table_concurrency", sync_config.get("fetch_concurrency", 1))
-        try:
-            table_concurrency = max(1, int(table_concurrency))
-        except Exception:
-            table_concurrency = 1
-        if sync_type in (SyncType.FULL, SyncType.COMPLETE):
-            table_concurrency = min(8, max(table_concurrency, 8))
 
         def calc_progress() -> int:
             if total_tables <= 0:
@@ -185,13 +189,70 @@ class DataSyncManager:
                 calc_progress(),
             )
 
-        priority_map = self.PRIORITY_MAP
-        grouped_forms = {}
-        for form_name in form_names:
-            priority = priority_map.get(form_name, 1)
-            grouped_forms.setdefault(priority, []).append(form_name)
-
         try:
+            if not self._check_connections():
+                final_status = SyncStatus.FAILED
+                final_message = "连接检查失败"
+                final_end_time = datetime.now()
+                final_result = self._create_sync_result(final_status, final_message, start_time)
+                final_result["run_id"] = run_id
+                emit_audit_log(
+                    logger,
+                    "sync_run",
+                    "failure",
+                    level="error",
+                    run_id=run_id,
+                    sync_type=sync_type.value,
+                    reason=final_message,
+                    error_type="connection_check_failed",
+                )
+                return final_result
+
+            self._notify_progress("连接检查完成，开始同步数据...", 10)
+            try:
+                run_started = bool(mysql_manager.start_sync_run(run_id, sync_type.value, requested_forms, start_time))
+            except Exception as exc:
+                logger.debug("记录任务开始失败: %s", exc)
+                run_started = False
+
+            if run_started:
+                mysql_manager.heartbeat_sync_run(run_id, "连接检查完成，准备执行同步", start_time)
+                heartbeat_thread = threading.Thread(
+                    target=heartbeat_loop,
+                    name=f"SyncHeartbeat-{run_id[:8]}",
+                    daemon=True,
+                )
+                heartbeat_thread.start()
+
+            isolated_complete_forms: List[str] = []
+            if sync_type == SyncType.COMPLETE:
+                isolated_complete_forms = [
+                    form_name for form_name in requested_forms if form_name in self.ISOLATED_COMPLETE_FORMS
+                ]
+                if isolated_complete_forms:
+                    form_names = [
+                        form_name for form_name in requested_forms if form_name not in self.ISOLATED_COMPLETE_FORMS
+                    ]
+                    logger.info("检测到需要单独执行完全同步的表单: %s", ", ".join(isolated_complete_forms))
+                    self._notify_progress(
+                        f"检测到 {', '.join(isolated_complete_forms)}，将单独执行完全同步...",
+                        15,
+                    )
+
+            table_concurrency = sync_config.get("table_concurrency", sync_config.get("fetch_concurrency", 1))
+            try:
+                table_concurrency = max(1, int(table_concurrency))
+            except Exception:
+                table_concurrency = 1
+            if sync_type in (SyncType.FULL, SyncType.COMPLETE):
+                table_concurrency = min(8, max(table_concurrency, 8))
+
+            priority_map = self.PRIORITY_MAP
+            grouped_forms: Dict[int, List[str]] = {}
+            for form_name in form_names:
+                priority = priority_map.get(form_name, 1)
+                grouped_forms.setdefault(priority, []).append(form_name)
+
             for _, group in sorted(grouped_forms.items(), key=lambda item: item[0]):
                 if table_concurrency <= 1 or len(group) <= 1:
                     for form_name in group:
@@ -209,13 +270,13 @@ class DataSyncManager:
                             form_name = future_map[future]
                             try:
                                 result = future.result()
-                            except Exception as e:
-                                logger.error(f"同步 {form_name} 失败: {str(e)}")
+                            except Exception as exc:
+                                logger.error("同步 %s 失败: %s", form_name, exc)
                                 result = {
                                     "status": SyncStatus.FAILED.value,
-                                    "message": f"同步失败: {str(e)}",
+                                    "message": f"同步失败 ({type(exc).__name__}): {str(exc)}",
                                     "record_count": 0,
-                                    "error_type": type(e).__name__,
+                                    "error_type": type(exc).__name__,
                                 }
                             collect_result(form_name, result)
 
@@ -224,49 +285,97 @@ class DataSyncManager:
                 result = self._sync_single_form(form_name, SyncType.COMPLETE)
                 collect_result(form_name, result)
 
-        except Exception as e:
-            logger.error(f"数据同步过程中发生错误: {str(e)}")
-            message = f"同步过程中发生错误: {str(e)}"
-            finalize_run(SyncStatus.FAILED, message)
-            result = self._create_sync_result(SyncStatus.FAILED, message, start_time)
-            result["run_id"] = run_id
-            return result
+            final_end_time = datetime.now()
+            config_manager.update_config("SYNC", "last_sync_time", final_end_time.strftime("%Y-%m-%d %H:%M:%S"))
 
+            if not failed_tables:
+                final_status = SyncStatus.SUCCESS
+                final_message = f"所有表同步成功，共同步 {total_records} 条记录"
+                self._notify_progress("数据同步完成", 100)
+            elif len(failed_tables) == total_tables:
+                final_status = SyncStatus.FAILED
+                final_message = "所有表同步失败"
+                self._notify_progress("数据同步失败", 100)
+            else:
+                final_status = SyncStatus.PARTIAL
+                final_message = f"部分表同步成功，失败的表: {', '.join(failed_tables)}"
+                self._notify_progress("数据同步部分完成", 100)
+
+            final_result = {
+                "run_id": run_id,
+                "status": final_status.value,
+                "message": final_message,
+                "total_records": total_records,
+                "start_time": start_time,
+                "end_time": final_end_time,
+                "duration": (final_end_time - start_time).total_seconds(),
+                "details": results,
+            }
+            return final_result
+        except Exception as exc:
+            final_status = SyncStatus.FAILED
+            final_message = f"同步过程中发生错误 ({type(exc).__name__}): {str(exc)}"
+            final_end_time = datetime.now()
+            logger.error("数据同步过程中发生错误: %s", exc, exc_info=True)
+            emit_audit_log(
+                logger,
+                "sync_run",
+                "failure",
+                level="error",
+                run_id=run_id,
+                sync_type=sync_type.value,
+                reason=final_message,
+                error_type=type(exc).__name__,
+                failed_forms=failed_tables,
+                total_records=total_records,
+            )
+            final_result = {
+                "run_id": run_id,
+                "status": final_status.value,
+                "message": final_message,
+                "total_records": total_records,
+                "start_time": start_time,
+                "end_time": final_end_time,
+                "duration": (final_end_time - start_time).total_seconds(),
+                "details": results,
+            }
+            return final_result
         finally:
+            heartbeat_stop.set()
+            if heartbeat_thread is not None and heartbeat_thread.is_alive():
+                heartbeat_thread.join(timeout=2)
+
+            try:
+                mysql_manager.heartbeat_sync_run(
+                    run_id,
+                    final_message or self._active_run_message or "任务结束",
+                    final_end_time or datetime.now(),
+                )
+            except Exception:
+                pass
+
+            finalize_run(final_status, final_message, final_end_time)
+            emit_audit_log(
+                logger,
+                "sync_run",
+                "finish",
+                run_id=run_id,
+                sync_type=sync_type.value,
+                status=final_status.value,
+                message=final_message,
+                total_records=total_records,
+                failed_forms=failed_tables,
+                duration_seconds=(final_end_time - start_time).total_seconds(),
+            )
+
             try:
                 if not config_manager.get_kingdee_config().get("keep_session_alive", False):
                     kingdee_client.logout(force=True)
             except Exception:
                 pass
 
-        end_time = datetime.now()
-        config_manager.update_config("SYNC", "last_sync_time", end_time.strftime("%Y-%m-%d %H:%M:%S"))
-
-        if not failed_tables:
-            status = SyncStatus.SUCCESS
-            message = f"所有表同步成功，共同步 {total_records} 条记录"
-            self._notify_progress("数据同步完成", 100)
-        elif len(failed_tables) == total_tables:
-            status = SyncStatus.FAILED
-            message = "所有表同步失败"
-            self._notify_progress("数据同步失败", 100)
-        else:
-            status = SyncStatus.PARTIAL
-            message = f"部分表同步成功，失败的表: {', '.join(failed_tables)}"
-            self._notify_progress("数据同步部分完成", 100)
-
-        finalize_run(status, message, end_time)
-
-        return {
-            "run_id": run_id,
-            "status": status.value,
-            "message": message,
-            "total_records": total_records,
-            "start_time": start_time,
-            "end_time": end_time,
-            "duration": (end_time - start_time).total_seconds(),
-            "details": results,
-        }
+            self._active_run_id = None
+            self._active_run_message = ""
 
     def _sync_single_form(self, form_name: str, sync_type: SyncType) -> Dict[str, Any]:
         """Delegate single-form execution to the dedicated form sync runner."""

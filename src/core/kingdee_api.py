@@ -9,7 +9,7 @@ import logging
 import threading
 from typing import Dict, List, Any, Optional
 from src.config.config_manager import config_manager
-from src.core.retry_manager import retry_manager, RetryConfig, RetryStrategy
+from src.core.retry_manager import RetryConfig, RetryManager, RetryStrategy
 
 try:
     import urllib3
@@ -46,6 +46,31 @@ class KingdeeAPIClient:
             self._min_interval = 0.0
         self._last_request_ts = 0.0
         self._throttle_lock = threading.Lock()
+
+    def _build_retry_manager(self) -> RetryManager:
+        return RetryManager(
+            RetryConfig(
+                max_retries=max(1, int(self.config.get("request_retries", 4) or 4)),
+                base_delay=max(0.5, float(self.config.get("retry_base_delay", 1.5) or 1.5)),
+                max_delay=max(1.0, float(self.config.get("retry_max_delay", 30) or 30)),
+                strategy=RetryStrategy.EXPONENTIAL,
+                jitter=True,
+            )
+        )
+
+    def _connect_timeout(self) -> int:
+        return max(5, int(self.config.get("request_connect_timeout", 15) or 15))
+
+    def _read_timeout(self) -> int:
+        legacy_timeout = int(self.config.get("request_timeout", 0) or 0)
+        configured_timeout = max(15, int(self.config.get("request_read_timeout", 120) or 120))
+        return legacy_timeout if legacy_timeout > 0 else configured_timeout
+
+    def _max_read_timeout(self) -> int:
+        return max(self._read_timeout(), int(self.config.get("max_request_read_timeout", 600) or 600))
+
+    def _timeout_tuple(self, read_timeout: int | None = None) -> tuple[int, int]:
+        return (self._connect_timeout(), max(self._connect_timeout(), int(read_timeout or self._read_timeout())))
 
     def _throttle(self):
         """简单限流：控制最小请求间隔（线程安全）
@@ -86,7 +111,7 @@ class KingdeeAPIClient:
             response = self.session.post(
                 self.config['login_url'],
                 json=login_data,
-                timeout=60
+                timeout=self._timeout_tuple(self._read_timeout()),
             )
             if response.status_code == 200:
                 result = response.json()
@@ -110,6 +135,7 @@ class KingdeeAPIClient:
                 raise requests.exceptions.HTTPError(f"HTTP {response.status_code}")
 
         try:
+            retry_manager = self._build_retry_manager()
             result, _ = retry_manager.execute_with_retry(
                 _do_login,
                 "登录金蝶系统",
@@ -140,8 +166,11 @@ class KingdeeAPIClient:
         }
         try:
             self._throttle()
-            # 心跳请求不设置超时（或很小），避免长时间阻塞退出流程
-            resp = self.session.post(self.config['query_url'], json=payload, timeout=30)
+            resp = self.session.post(
+                self.config['query_url'],
+                json=payload,
+                timeout=self._timeout_tuple(min(30, self._read_timeout())),
+            )
             if resp.status_code == 200:
                 # 尝试解析以确认是否需要重登录
                 data = resp.json()
@@ -267,26 +296,16 @@ class KingdeeAPIClient:
             # 在长查询开始前暂停心跳，避免心跳超时触发重登
             self._pause_keepalive.set()
 
-            # 超时与重试参数（支持禁用超时）
-            # 当 request_timeout<=0 时，不传入 timeout 参数，表示无限等待（无超时限制）
-            cfg_timeout = 0
-            try:
-                cfg_timeout = int(str(self.config.get('request_timeout', '0')).strip())
-            except Exception:
-                cfg_timeout = 0
-            timeout_enabled = cfg_timeout > 0
-            base_timeout = 60
+            retry_manager = self._build_retry_manager()
+            timeout_enabled = True
+            base_timeout = self._read_timeout()
             if form_id in large_tables:
-                # 强制取消超时限制
-                timeout_enabled = False
-                logger.info(f"[{form_id}] 数据量较大，强制取消超时限制")
+                base_timeout = self._max_read_timeout()
+                logger.info(f"[{form_id}] 数据量较大，已提升读超时至 {base_timeout}s")
             
             # DIAGNOSTIC LOG
             logger.info(f"[{form_id}] Query Config: UsePaging={use_paging}, PageSize={page_size}, StartRow={start_row}, TimeoutEnabled={timeout_enabled}")
 
-            if timeout_enabled and cfg_timeout > 0:
-                # 若有明确配置，则以配置为初始超时
-                base_timeout = cfg_timeout
             all_rows: List[Any] = []
             total_fetched = 0
             page_index = 0
@@ -326,18 +345,16 @@ class KingdeeAPIClient:
 
                 def _do_request():
                     self._throttle()
-                    if timeout_enabled:
-                        return self.session.post(
-                            target_url,
-                            json=request_payload,
-                            timeout=timeout_secs
-                        )
-                    return self.session.post(target_url, json=request_payload)
+                    return self.session.post(
+                        target_url,
+                        json=request_payload,
+                        timeout=self._timeout_tuple(timeout_secs),
+                    )
 
                 def _on_retry(attempt, exc):
                     nonlocal timeout_secs
                     if isinstance(exc, requests.exceptions.ReadTimeout):
-                        timeout_secs = min(timeout_secs * 2, 300)
+                        timeout_secs = min(timeout_secs * 2, self._max_read_timeout())
                         logger.warning(
                             f"[{form_id}] 第{page_index}页查询超时，超时时间调整为 {timeout_secs}s (第{attempt}次重试)"
                         )

@@ -143,6 +143,18 @@ class ConfigAccessors:
         cfg["page_size"] = _as_int(cfg.get("page_size", "50000"), 50000)
         cfg["max_pages"] = _as_int(cfg.get("max_pages", "100000"), 100000)
         cfg["rate_limit_qps"] = _as_float(cfg.get("rate_limit_qps", "2"), 2.0)
+        cfg["request_connect_timeout"] = max(5, _as_int(cfg.get("request_connect_timeout", "15"), 15))
+        cfg["request_read_timeout"] = max(15, _as_int(cfg.get("request_read_timeout", "120"), 120))
+        cfg["max_request_read_timeout"] = max(
+            cfg["request_read_timeout"],
+            _as_int(cfg.get("max_request_read_timeout", "600"), 600),
+        )
+        cfg["request_retries"] = max(1, _as_int(cfg.get("request_retries", "4"), 4))
+        cfg["retry_base_delay"] = max(0.5, _as_float(cfg.get("retry_base_delay", "1.5"), 1.5))
+        cfg["retry_max_delay"] = max(
+            cfg["retry_base_delay"],
+            _as_float(cfg.get("retry_max_delay", "30"), 30.0),
+        )
         cfg["keep_session_alive"] = _as_bool(cfg.get("keep_session_alive", "true"), True)
         cfg["keep_alive_interval_secs"] = _as_int(cfg.get("keep_alive_interval_secs", "600"), 600)
         cfg["auto_logout_on_exit"] = _as_bool(cfg.get("auto_logout_on_exit", "false"), False)
@@ -216,6 +228,14 @@ class ConfigAccessors:
         time_window_days = _as_int(sync_config.get("time_window_days", "30"), 30)
         sync_config["time_window_days"] = max(1, min(time_window_days, 365))
         sync_config["full_start_date"] = sync_config.get("full_start_date", "2000-01-01")
+        sync_config["run_heartbeat_interval_secs"] = max(
+            5,
+            _as_int(sync_config.get("run_heartbeat_interval_secs", "15"), 15),
+        )
+        sync_config["run_heartbeat_timeout_secs"] = max(
+            sync_config["run_heartbeat_interval_secs"] * 2,
+            _as_int(sync_config.get("run_heartbeat_timeout_secs", "120"), 120),
+        )
 
         default_forms_raw = sync_config.get("default_forms", "")
         if default_forms_raw:

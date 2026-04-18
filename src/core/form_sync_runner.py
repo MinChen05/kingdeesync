@@ -13,6 +13,7 @@ from typing import TYPE_CHECKING, Any, Dict, List, Optional
 import requests  # type: ignore[import-untyped]
 
 from src.config.config_manager import config_manager
+from src.core.audit_logging import emit_audit_log
 from src.core.filter_builder import FilterBuilder
 from src.core.kingdee_api import kingdee_client
 from src.core.mysql_manager import MySQLManager, mysql_manager
@@ -88,12 +89,34 @@ class FormSyncRunner:
         perf_start = time.perf_counter()
         local_db = create_shared_db_manager(mysql_manager)
         table_name = self.owner.table_mapping.get(form_name)
+        sync_type_value = self._sync_type_value(sync_type)
+
+        emit_audit_log(
+            self.logger,
+            "sync_form",
+            "start",
+            form_name=form_name,
+            table_name=table_name,
+            sync_type=sync_type_value,
+            start_time=start_time,
+        )
 
         try:
             if not table_name:
                 error_msg = f"未找到表单 {form_name} 的映射表"
                 self.logger.error(error_msg)
                 self.owner._notify_progress(f"[{form_name}] {error_msg}", 100)
+                emit_audit_log(
+                    self.logger,
+                    "sync_form",
+                    "failure",
+                    level="error",
+                    form_name=form_name,
+                    table_name=table_name,
+                    sync_type=sync_type_value,
+                    reason=error_msg,
+                    error_type="mapping_error",
+                )
                 return {
                     "status": FAILED_STATUS,
                     "message": error_msg,
@@ -108,6 +131,17 @@ class FormSyncRunner:
                 if not self.truncate_table_for_complete(table_name, local_db):
                     error_msg = f"清空表 {table_name} 失败，终止完全同步"
                     self.owner._notify_progress(f"[{form_name}] {error_msg}", 100)
+                    emit_audit_log(
+                        self.logger,
+                        "sync_form",
+                        "failure",
+                        level="error",
+                        form_name=form_name,
+                        table_name=table_name,
+                        sync_type=sync_type_value,
+                        reason=error_msg,
+                        error_type="truncate_error",
+                    )
                     return {
                         "status": FAILED_STATUS,
                         "message": error_msg,
@@ -312,7 +346,7 @@ class FormSyncRunner:
                 self.owner._notify_progress(f"[{form_name}] {error_msg}", 100)
                 end_time = datetime.now()
                 local_db.log_sync_operation(
-                    self._sync_type_value(sync_type),
+                    sync_type_value,
                     table_name,
                     "sync",
                     0,
@@ -320,6 +354,17 @@ class FormSyncRunner:
                     error_msg,
                     start_time,
                     end_time,
+                    error_type="query_error",
+                )
+                emit_audit_log(
+                    self.logger,
+                    "sync_form",
+                    "failure",
+                    level="error",
+                    form_name=form_name,
+                    table_name=table_name,
+                    sync_type=sync_type_value,
+                    reason=error_msg,
                     error_type="query_error",
                 )
                 return {
@@ -368,7 +413,7 @@ class FormSyncRunner:
             end_time = datetime.now()
             duration = (end_time - start_time).total_seconds()
             local_db.log_sync_operation(
-                self._sync_type_value(sync_type),
+                sync_type_value,
                 table_name,
                 "sync",
                 inserted_count,
@@ -380,6 +425,18 @@ class FormSyncRunner:
 
             self.logger.info("[%s] 同步完成，耗时 %.2f 秒", form_name, duration)
             self.owner._notify_progress(f"[{form_name}] 同步完成", 100)
+            emit_audit_log(
+                self.logger,
+                "sync_form",
+                "finish",
+                form_name=form_name,
+                table_name=table_name,
+                sync_type=sync_type_value,
+                status=SUCCESS_STATUS,
+                fetched=record_count,
+                inserted=inserted_count,
+                duration_seconds=duration,
+            )
             return {
                 "status": SUCCESS_STATUS,
                 "message": f"成功同步 {inserted_count} 条记录",
@@ -406,7 +463,7 @@ class FormSyncRunner:
 
             try:
                 local_db.log_sync_operation(
-                    self._sync_type_value(sync_type),
+                    sync_type_value,
                     table_name,
                     "sync",
                     0,
@@ -418,6 +475,19 @@ class FormSyncRunner:
                 )
             except Exception:
                 pass
+
+            emit_audit_log(
+                self.logger,
+                "sync_form",
+                "failure",
+                level="error",
+                form_name=form_name,
+                table_name=table_name,
+                sync_type=sync_type_value,
+                reason=error_msg,
+                error_type=error_type,
+                duration_seconds=duration,
+            )
 
             return {
                 "status": FAILED_STATUS,

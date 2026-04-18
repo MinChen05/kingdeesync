@@ -92,6 +92,7 @@ class HistoryPage(Win11PageScaffold):
         self.combo_status.addItem("成功", "success")
         self.combo_status.addItem("部分成功", "partial")
         self.combo_status.addItem("失败", "failed")
+        self.combo_status.addItem("异常退出", "failed_abnormal_exit")
 
         self.combo_type = QComboBox()
         self.combo_type.setProperty("td", "win11-input")
@@ -396,6 +397,8 @@ class HistoryPage(Win11PageScaffold):
             return "部分成功", "info"
         if status == "failed":
             return "失败", "danger"
+        if status == "failed_abnormal_exit":
+            return "异常退出", "danger"
         return str(status or "--"), "info"
 
     def update_pagination(self) -> None:
@@ -417,7 +420,7 @@ class HistoryPage(Win11PageScaffold):
 
         normalized_days = 30 if int(days or 0) >= 30 else 7
         self._set_combo_by_data(self.combo_time_range, normalized_days)
-        if status in ("success", "partial", "failed"):
+        if status in ("success", "partial", "failed", "failed_abnormal_exit"):
             self._set_combo_by_data(self.combo_status, status)
         else:
             self._set_combo_by_data(self.combo_status, None)

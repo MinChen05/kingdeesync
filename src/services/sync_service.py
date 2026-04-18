@@ -62,8 +62,10 @@ class SyncService:
     def repair_stale_sync_runs() -> int:
         """Repair leftover running sync tasks from abnormal exit or restart."""
         try:
+            sync_cfg = config_manager.get_sync_config()
             return mysql_manager.recover_stale_sync_runs(
-                reason="Recovered stale running task during application startup or before a new sync"
+                reason="Recovered stale running task during application startup or before a new sync",
+                heartbeat_timeout_seconds=sync_cfg.get("run_heartbeat_timeout_secs", 120),
             )
         except Exception as exc:
             logger.warning("Failed to repair stale sync runs: %s", exc)

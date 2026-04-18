@@ -7,6 +7,8 @@ import logging
 from datetime import datetime
 from typing import TYPE_CHECKING, Any, Dict, List, Optional
 
+from src.core.audit_logging import emit_audit_log
+
 if TYPE_CHECKING:
     from src.core.mysql_manager import MySQLManager
 
@@ -21,6 +23,34 @@ class SyncRunRepository:
 
     def reset(self) -> None:
         self._table_ready = False
+
+    def _column_exists(self, column_name: str) -> bool:
+        try:
+            if self.manager.db_type == "sqlserver":
+                self.manager.cursor.execute(
+                    "SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME = 'sync_runs' AND COLUMN_NAME = ?",
+                    (column_name,),
+                )
+            else:
+                self.manager.cursor.execute("SHOW COLUMNS FROM sync_runs LIKE %s", (column_name,))
+            return self.manager.cursor.fetchone() is not None
+        except Exception as exc:
+            self.logger.debug("检查 sync_runs.%s 列失败: %s", column_name, exc)
+            return False
+
+    def _ensure_optional_columns(self) -> None:
+        if not self.manager.table_exists("sync_runs"):
+            return
+
+        try:
+            if not self._column_exists("heartbeat_at"):
+                if self.manager.db_type == "sqlserver":
+                    self.manager.cursor.execute("ALTER TABLE sync_runs ADD heartbeat_at DATETIME2 NULL")
+                else:
+                    self.manager.cursor.execute("ALTER TABLE sync_runs ADD COLUMN heartbeat_at DATETIME NULL")
+                self.logger.info("sync_runs.heartbeat_at 列已补齐")
+        except Exception as exc:
+            self.logger.warning("补齐 sync_runs 可选列失败: %s", exc)
 
     @staticmethod
     def format_forms_summary(forms: Optional[List[str]]) -> str:
@@ -41,6 +71,7 @@ class SyncRunRepository:
                     return False
 
             if self.manager.table_exists("sync_runs"):
+                self._ensure_optional_columns()
                 self._table_ready = True
                 return True
 
@@ -60,6 +91,7 @@ class SyncRunRepository:
                         failed_forms NVARCHAR(MAX) NULL,
                         details_json NVARCHAR(MAX) NULL,
                         start_time DATETIME2 NOT NULL,
+                        heartbeat_at DATETIME2 NULL,
                         end_time DATETIME2 NULL,
                         duration_seconds FLOAT NULL
                     )
@@ -93,6 +125,7 @@ class SyncRunRepository:
                         failed_forms TEXT NULL,
                         details_json LONGTEXT NULL,
                         start_time DATETIME NOT NULL,
+                        heartbeat_at DATETIME NULL,
                         end_time DATETIME NULL,
                         duration_seconds DOUBLE NULL,
                         KEY idx_sync_runs_start_time (start_time),
@@ -102,6 +135,7 @@ class SyncRunRepository:
                 """
                 self.manager.cursor.execute(create_sql)
 
+            self._ensure_optional_columns()
             self._table_ready = self.manager.table_exists("sync_runs")
             if self._table_ready:
                 self.logger.info("任务级历史表 sync_runs 已就绪")
@@ -110,7 +144,7 @@ class SyncRunRepository:
             self.logger.warning("准备 sync_runs 表失败: %s", exc)
             return False
 
-    def recover_running_runs(self, reason: str | None = None) -> int:
+    def recover_running_runs(self, reason: str | None = None, heartbeat_timeout_seconds: int | None = None) -> int:
         """Mark leftover running runs as failed after abnormal exit or restart."""
         try:
             if not self.ensure_table():
@@ -118,14 +152,14 @@ class SyncRunRepository:
 
             if self.manager.db_type == "sqlserver":
                 select_sql = """
-                    SELECT run_id, start_time
+                    SELECT run_id, start_time, heartbeat_at, message
                     FROM sync_runs
                     WHERE status = ? AND end_time IS NULL
                 """
                 select_params = ("running",)
             else:
                 select_sql = """
-                    SELECT run_id, start_time
+                    SELECT run_id, start_time, heartbeat_at, message
                     FROM sync_runs
                     WHERE status = %s AND end_time IS NULL
                 """
@@ -137,19 +171,35 @@ class SyncRunRepository:
                 return 0
 
             now = datetime.now()
-            message_text = reason or "Recovered stale running task after previous abnormal exit"
+            timeout_seconds = max(int(heartbeat_timeout_seconds or 120), 1)
             recovered = 0
 
             for row in rows:
                 if isinstance(row, dict):
                     run_id = row.get("run_id")
                     start_time = row.get("start_time")
+                    heartbeat_at = row.get("heartbeat_at")
+                    last_message = row.get("message")
                 else:
                     run_id = row[0] if len(row) > 0 else None
                     start_time = row[1] if len(row) > 1 else None
+                    heartbeat_at = row[2] if len(row) > 2 else None
+                    last_message = row[3] if len(row) > 3 else None
 
                 if not run_id:
                     continue
+
+                reference_time = heartbeat_at if isinstance(heartbeat_at, datetime) else start_time
+                if not isinstance(reference_time, datetime):
+                    reference_time = now
+                stale_seconds = max(0.0, (now - reference_time).total_seconds())
+                if stale_seconds < timeout_seconds:
+                    continue
+
+                detail_reason = f"Heartbeat timeout exceeded ({int(stale_seconds)}s > {timeout_seconds}s) after previous abnormal exit"
+                message_text = f"{reason}; {detail_reason}" if reason else detail_reason
+                if last_message:
+                    message_text = f"{message_text}; last_progress={last_message}"
 
                 duration_seconds = 0.0
                 if isinstance(start_time, datetime):
@@ -158,12 +208,13 @@ class SyncRunRepository:
                 if self.manager.db_type == "sqlserver":
                     update_sql = """
                         UPDATE sync_runs
-                        SET status = ?, message = ?, end_time = ?, duration_seconds = ?
+                        SET status = ?, message = ?, heartbeat_at = ?, end_time = ?, duration_seconds = ?
                         WHERE run_id = ? AND status = ? AND end_time IS NULL
                     """
                     update_params = (
-                        "failed",
+                        "failed_abnormal_exit",
                         message_text,
+                        now,
                         now,
                         duration_seconds,
                         run_id,
@@ -172,12 +223,13 @@ class SyncRunRepository:
                 else:
                     update_sql = """
                         UPDATE sync_runs
-                        SET status = %s, message = %s, end_time = %s, duration_seconds = %s
+                        SET status = %s, message = %s, heartbeat_at = %s, end_time = %s, duration_seconds = %s
                         WHERE run_id = %s AND status = %s AND end_time IS NULL
                     """
                     update_params = (
-                        "failed",
+                        "failed_abnormal_exit",
                         message_text,
+                        now,
                         now,
                         duration_seconds,
                         run_id,
@@ -189,7 +241,15 @@ class SyncRunRepository:
                     recovered += 1
 
             if recovered:
-                self.logger.warning("Recovered %s stale running sync run(s)", recovered)
+                self.logger.warning("Recovered %s stale running sync run(s) by heartbeat timeout", recovered)
+                emit_audit_log(
+                    self.logger,
+                    "sync_run",
+                    "heartbeat_timeout_recovered",
+                    level="warning",
+                    recovered=recovered,
+                    timeout_seconds=timeout_seconds,
+                )
             return recovered
         except Exception as exc:
             self.logger.warning("Failed to recover stale running sync runs: %s", exc)
@@ -215,9 +275,9 @@ class SyncRunRepository:
                     INSERT INTO sync_runs (
                         run_id, sync_type, forms_summary, form_count,
                         total_records, success_count, failure_count,
-                        status, message, start_time
+                        status, message, start_time, heartbeat_at
                     )
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """
                 params = (
                     run_id,
@@ -230,15 +290,16 @@ class SyncRunRepository:
                     "running",
                     "任务开始",
                     start_time,
+                    start_time,
                 )
             else:
                 sql = """
                     INSERT INTO sync_runs (
                         run_id, sync_type, forms_summary, form_count,
                         total_records, success_count, failure_count,
-                        status, message, start_time
+                        status, message, start_time, heartbeat_at
                     )
-                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
                 """
                 params = (
                     run_id,
@@ -250,6 +311,7 @@ class SyncRunRepository:
                     0,
                     "running",
                     "任务开始",
+                    start_time,
                     start_time,
                 )
 
@@ -290,7 +352,7 @@ class SyncRunRepository:
                     UPDATE sync_runs
                     SET sync_type = ?, forms_summary = ?, form_count = ?, total_records = ?,
                         success_count = ?, failure_count = ?, status = ?, message = ?,
-                        failed_forms = ?, details_json = ?, start_time = ?, end_time = ?, duration_seconds = ?
+                        failed_forms = ?, details_json = ?, start_time = ?, heartbeat_at = ?, end_time = ?, duration_seconds = ?
                     WHERE run_id = ?
                 """
                 update_params = (
@@ -306,6 +368,7 @@ class SyncRunRepository:
                     details_json,
                     start_time,
                     end_time,
+                    end_time,
                     duration_seconds,
                     run_id,
                 )
@@ -313,16 +376,16 @@ class SyncRunRepository:
                     INSERT INTO sync_runs (
                         run_id, sync_type, forms_summary, form_count, total_records,
                         success_count, failure_count, status, message, failed_forms,
-                        details_json, start_time, end_time, duration_seconds
+                        details_json, start_time, heartbeat_at, end_time, duration_seconds
                     )
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """
             else:
                 update_sql = """
                     UPDATE sync_runs
                     SET sync_type = %s, forms_summary = %s, form_count = %s, total_records = %s,
                         success_count = %s, failure_count = %s, status = %s, message = %s,
-                        failed_forms = %s, details_json = %s, start_time = %s, end_time = %s, duration_seconds = %s
+                        failed_forms = %s, details_json = %s, start_time = %s, heartbeat_at = %s, end_time = %s, duration_seconds = %s
                     WHERE run_id = %s
                 """
                 update_params = (
@@ -338,6 +401,7 @@ class SyncRunRepository:
                     details_json,
                     start_time,
                     end_time,
+                    end_time,
                     duration_seconds,
                     run_id,
                 )
@@ -345,9 +409,9 @@ class SyncRunRepository:
                     INSERT INTO sync_runs (
                         run_id, sync_type, forms_summary, form_count, total_records,
                         success_count, failure_count, status, message, failed_forms,
-                        details_json, start_time, end_time, duration_seconds
+                        details_json, start_time, heartbeat_at, end_time, duration_seconds
                     )
-                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
                 """
 
             self.manager.cursor.execute(update_sql, update_params)
@@ -366,10 +430,40 @@ class SyncRunRepository:
                     details_json,
                     start_time,
                     end_time,
+                    end_time,
                     duration_seconds,
                 )
                 self.manager.cursor.execute(insert_sql, insert_params)
             return True
         except Exception as exc:
             self.logger.warning("记录任务结束失败: %s", exc)
+            return False
+
+    def heartbeat_run(self, run_id: str, message: str | None = None, heartbeat_at: datetime | None = None) -> bool:
+        """Refresh heartbeat and latest progress message for a running sync task."""
+        try:
+            if not self.ensure_table():
+                return False
+
+            heartbeat_time = heartbeat_at or datetime.now()
+            progress_message = str(message or "任务运行中")
+            if self.manager.db_type == "sqlserver":
+                sql = """
+                    UPDATE sync_runs
+                    SET heartbeat_at = ?, message = ?
+                    WHERE run_id = ? AND status = ? AND end_time IS NULL
+                """
+                params = (heartbeat_time, progress_message, run_id, "running")
+            else:
+                sql = """
+                    UPDATE sync_runs
+                    SET heartbeat_at = %s, message = %s
+                    WHERE run_id = %s AND status = %s AND end_time IS NULL
+                """
+                params = (heartbeat_time, progress_message, run_id, "running")
+
+            self.manager.cursor.execute(sql, params)
+            return getattr(self.manager.cursor, "rowcount", 0) > 0
+        except Exception as exc:
+            self.logger.debug("更新任务心跳失败: %s", exc)
             return False

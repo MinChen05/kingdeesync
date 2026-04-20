@@ -246,6 +246,10 @@ class AutoSyncScheduler:
         """执行同步任务"""
         if self.status != SchedulerStatus.RUNNING:
             return
+
+        if sync_manager.is_shutdown_requested():
+            logger.info("检测到应用正在退出，跳过新的定时同步任务")
+            return
         
         # 构建头部日志
         forms_text = "同步所有表单"

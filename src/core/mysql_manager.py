@@ -17,6 +17,7 @@ from src.core.sync_run_repository import SyncRunRepository
 from src.core.upsert_engine_mysql import UpsertEngineMySQL
 from src.core.upsert_engine_sqlserver import UpsertEngineSqlServer
 from src.core.writers_registry import WriterRegistry
+from src.core.write_outcome import WriteOutcome
 from dbutils.pooled_db import PooledDB
 
 
@@ -81,6 +82,7 @@ class MySQLManager:
         self.connection = None
         self.cursor = None
         self._pool_init_failed = False
+        self._last_write_outcome = WriteOutcome()
         self.sync_run_repository = SyncRunRepository(self, logger=logger)
         self.sync_log_repository = SyncLogRepository(self, logger=logger)
         self.mysql_upsert_engine = UpsertEngineMySQL(self, logger=logger)
@@ -108,6 +110,16 @@ class MySQLManager:
         if missing_writers:
             logger.error("tables.json contains unmapped writers: %s", missing_writers)
         self._init_pool()
+
+    def execute_writer_with_outcome(self, method_name: str, data: List[Dict]) -> WriteOutcome:
+        self._last_write_outcome = WriteOutcome()
+        inserted = self.writer_registry.execute(self, method_name, data)
+        if self._last_write_outcome.inserted == 0:
+            self._last_write_outcome.inserted = max(0, int(inserted or 0))
+        return self._last_write_outcome
+
+    def execute_writer(self, method_name: str, data: List[Dict]) -> int:
+        return self.execute_writer_with_outcome(method_name, data).inserted
 
     def _init_pool(self) -> bool:
         """初始化数据库连接池"""
@@ -499,10 +511,6 @@ class MySQLManager:
             if self.connection:
                 self.connection.rollback()
             return 0
-
-    def execute_writer(self, method_name: str, data: List[Dict]) -> int:
-        """Execute a registered writer by name."""
-        return self.writer_registry.execute(self, method_name, data)
 
     def recover_stale_sync_runs(
         self,
@@ -1630,14 +1638,14 @@ class MySQLManager:
         try:
             if isinstance(item, dict):
                 raw_fid = item.get("FID") or item.get("FId") or item.get("Id")
-                fid = self._to_int_or_none(raw_fid) or 0
-                # 明细行主键可能返回为 FEntity_FENTRYID 或 FENTRYID
+                fid = self._to_int_or_none(raw_fid)
                 raw_fentryid = item.get("FEntity_FENTRYID") or item.get("FENTRYID")
-                fentryid = self._to_int_or_none(raw_fentryid) or 0
-                if fid is None and fentryid is not None:
-                    fid = fentryid
+                fentryid = self._to_int_or_none(raw_fentryid)
+                billno = self._extract_scalar(item.get("FBILLNO") or item.get("FBillNo"))
+                billno = str(billno).strip() if billno is not None else ""
+
                 if fid is None or fentryid is None:
-                    billno = item.get("FBILLNO") or item.get("FBillNo")
+                    self._last_write_outcome.invalid += 1
                     logger.warning(
                         "生产入库单主键为空，已跳过: FID=%s(%s) FENTRYID=%s(%s) FBILLNO=%s",
                         raw_fid,
@@ -1647,7 +1655,12 @@ class MySQLManager:
                         billno,
                     )
                     return None
-                billno = item.get("FBILLNO") or item.get("FBillNo")
+
+                if not billno:
+                    self._last_write_outcome.invalid += 1
+                    logger.warning("生产入库单单号为空，已跳过: FID=%s FENTRYID=%s", fid, fentryid)
+                    return None
+
                 fdate = self._parse_datetime(item.get("FDATE") or item.get("FDate"))
                 materialid = self._to_int_or_none(item.get("FMATERIALID") or 0) or item.get("FMaterialId")
                 realqty = self._to_decimal_or_none(item.get("FREALQTY") or 0.0) or item.get("FRealQty")
@@ -1678,21 +1691,20 @@ class MySQLManager:
                 get_item = lambda i: (item[i] if i < len(item) else None)
                 raw_fid = get_item(0)
                 raw_fentryid = get_item(1)
-                fid = self._to_int_or_none(raw_fid) or 0
-                fentryid = self._to_int_or_none(raw_fentryid) or 0
-                if fid is None and fentryid is not None:
-                    fid = fentryid
+                fid = self._to_int_or_none(raw_fid)
+                fentryid = self._to_int_or_none(raw_fentryid)
+                billno = str(self._extract_scalar(get_item(2)) or "").strip()
+
                 if fid is None or fentryid is None:
-                    logger.warning(
-                        "生产入库单主键为空，已跳过: FID=%s(%s) FENTRYID=%s(%s) len=%s",
-                        raw_fid,
-                        type(raw_fid).__name__,
-                        raw_fentryid,
-                        type(raw_fentryid).__name__,
-                        len(item),
-                    )
+                    self._last_write_outcome.invalid += 1
+                    logger.warning("生产入库单主键为空，已跳过: FID=%s FENTRYID=%s", raw_fid, raw_fentryid)
                     return None
-                billno = get_item(2)
+
+                if not billno:
+                    self._last_write_outcome.invalid += 1
+                    logger.warning("生产入库单单号为空，已跳过: FID=%s FENTRYID=%s", fid, fentryid)
+                    return None
+
                 fdate = self._parse_datetime(get_item(3))
                 materialid = self._to_int_or_none(get_item(4) or 0)
                 realqty = self._to_decimal_or_none(get_item(5) or 0.0)

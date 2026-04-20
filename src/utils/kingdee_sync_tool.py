@@ -175,7 +175,11 @@ def handle_exception(exc_type, exc_value, exc_traceback):
 def cleanup_and_exit():
     """清理资源并退出"""
     logger = logging.getLogger(__name__)
-    
+
+    from src.core.data_sync import sync_manager
+
+    sync_manager.request_shutdown("application_exit")
+
     try:
         # 停止调度器
         if auto_scheduler.status.value != "stopped":

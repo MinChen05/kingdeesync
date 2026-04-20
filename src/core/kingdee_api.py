@@ -21,7 +21,61 @@ logger = logging.getLogger(__name__)
 
 class KingdeeAPIClient:
     """金蝶API客户端"""
-    
+
+    SESSION_ERROR_KEYWORDS = ("会话信息已丢失", "请重新登录")
+
+    def _extract_response_status(self, payload: Any) -> Dict[str, Any]:
+        if isinstance(payload, dict):
+            result = payload.get("Result")
+            if isinstance(result, dict):
+                return result.get("ResponseStatus", {}) or {}
+        if isinstance(payload, list) and payload and isinstance(payload[0], dict):
+            wrapped = payload[0].get("Result")
+            if isinstance(wrapped, dict):
+                return wrapped.get("ResponseStatus", {}) or {}
+        return {}
+
+    def _extract_response_errors(self, payload: Any) -> list[str]:
+        status = self._extract_response_status(payload)
+        errors = status.get("Errors", []) or []
+        messages: list[str] = []
+        for item in errors:
+            if isinstance(item, dict):
+                message = item.get("Message") or item.get("FieldName")
+                if message:
+                    messages.append(str(message))
+            elif item:
+                messages.append(str(item))
+        return messages
+
+    def _is_session_error(self, messages: list[str]) -> bool:
+        joined = " ".join(messages)
+        return any(keyword in joined for keyword in self.SESSION_ERROR_KEYWORDS)
+
+    def _extract_business_rows(self, payload: Any) -> tuple[list[Any], list[str]]:
+        errors = self._extract_response_errors(payload)
+        if errors:
+            return [], errors
+
+        if isinstance(payload, dict):
+            result = payload.get("Result", {})
+            if isinstance(result, dict):
+                if "Rows" in result:
+                    return result.get("Rows", []) or [], []
+                if "Result" in result:
+                    return result.get("Result", []) or [], []
+            return [], ["未知的字典响应结构"]
+
+        if isinstance(payload, list):
+            if payload and isinstance(payload[0], dict) and "Result" in payload[0]:
+                wrapped = payload[0]["Result"]
+                if isinstance(wrapped, dict):
+                    return wrapped.get("Result", []) or [], []
+                return [], ["未知的列表包裹响应结构"]
+            return payload, []
+
+        return [], [f"未知的返回结构类型: {type(payload).__name__}"]
+
     def __init__(self):
         self.config = config_manager.get_kingdee_config()
         self._ssl_verify = str(self.config.get('ssl_verify', 'false')).lower() not in ('false', '0', 'no')
@@ -309,6 +363,7 @@ class KingdeeAPIClient:
             all_rows: List[Any] = []
             total_fetched = 0
             page_index = 0
+            session_retry_used = False
 
             # 低效分页检测与自愈变量
             inefficient_paging_count = 0
@@ -371,33 +426,19 @@ class KingdeeAPIClient:
                     return None
 
                 result = response.json()
-                # 解析返回的数据（兼容字典或直接列表）
-                page_rows: List[Any] = []
-                if isinstance(result, dict):
-                    # 优先检查是否存在 Rows 列表（报表或特殊查询结构）
-                    if 'Result' in result and isinstance(result['Result'], dict) and 'Rows' in result['Result']:
-                        rs = result['Result']
-                        page_rows = rs.get('Rows', []) or []
-                    else:
-                        rs = result.get('Result', {})
-                        status = rs.get('ResponseStatus', {})
-                        if not status.get('IsSuccess', True):
-                            logger.error(f"查询失败: {status.get('Errors', [])}")
-                            return None
-                        page_rows = rs.get('Result', []) or []
-                elif isinstance(result, list):
-                    # 少数情况下直接返回列表
-                    if len(result) > 0 and isinstance(result[0], dict) and 'Result' in result[0]:
-                        status = result[0]['Result'].get('ResponseStatus', {})
-                        if not status.get('IsSuccess', True):
-                            logger.error(f"查询失败: {status.get('Errors', [])}")
-                            return None
-                        page_rows = result[0]['Result'].get('Result', []) or []
-                    else:
-                        page_rows = result
-                else:
-                    logger.error(f"未知的返回结构类型: {type(result)}")
+                page_rows, errors = self._extract_business_rows(result)
+                if errors:
+                    logger.error("查询失败: %s", errors)
+                    if self._is_session_error(errors) and not session_retry_used:
+                        logger.warning("[%s] 当前页检测到会话异常，尝试重登后重试...", form_id)
+                        self.logout(force=True)
+                        if self.login():
+                            session_retry_used = True
+                            page_index -= 1
+                            continue
                     return None
+
+                session_retry_used = False
 
                 # 统一尝试映射：如果数据是列表且配置了 FieldKeys，则转换为字典
                 if page_rows and isinstance(page_rows[0], list):

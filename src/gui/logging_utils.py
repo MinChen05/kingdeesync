@@ -12,4 +12,13 @@ class GuiLogHandler(logging.Handler):
     def emit(self, record):
         msg = self.format(record)
         level = record.levelname
-        self.signal_emitter.text_written.emit(msg, level)
+        emitter = self.signal_emitter
+        signal = getattr(emitter, "text_written", None)
+        if signal is None:
+            return
+        try:
+            signal.emit(msg, level)
+        except RuntimeError as exc:
+            if "Signal source has been deleted" in str(exc):
+                return
+            raise

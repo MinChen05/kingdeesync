@@ -23,6 +23,7 @@ from src.core.sync_run_repository import SyncRunRepository
 from src.core.upsert_engine_mysql import UpsertEngineMySQL
 from src.core.upsert_engine_sqlserver import UpsertEngineSqlServer
 from src.core.writers_registry import WriterRegistry
+from src.core.write_outcome import WriteOutcome
 
 if TYPE_CHECKING:
     from src.core.data_sync import DataSyncManager
@@ -204,6 +205,8 @@ class FormSyncRunner:
             retry_count = 0
             total_inserted_ref = [total_inserted_ref_init]
             total_fetched_ref = [0]
+            total_invalid_ref = [0]
+            total_deduped_ref = [0]
 
             queue_size = 50 if self._is_full_or_complete(sync_type) else 10
             data_queue: "queue.Queue[Optional[List[Dict[str, Any]]]]" = queue.Queue(maxsize=queue_size)
@@ -218,8 +221,10 @@ class FormSyncRunner:
                         data_queue.task_done()
                         break
                     try:
-                        count = self.insert_database_data(form_name, page_data, db_manager=local_db)
-                        total_inserted_ref[0] += count
+                        outcome = self.insert_database_data(form_name, page_data, db_manager=local_db)
+                        total_inserted_ref[0] += outcome.inserted
+                        total_invalid_ref[0] += outcome.invalid
+                        total_deduped_ref[0] += outcome.deduped
                         total_fetched_ref[0] += len(page_data)
                         self.owner._notify_progress(f"[{form_name}] 已同步 {total_inserted_ref[0]} 条数据...", 60)
                     except Exception as exc:
@@ -332,9 +337,11 @@ class FormSyncRunner:
                 if insert_errors:
                     raise insert_errors[0]
             elif all_rows_buffer:
-                count = self.insert_database_data(form_name, all_rows_buffer, db_manager=local_db)
-                total_inserted_ref[0] = count
-                self.owner._notify_progress(f"[{form_name}] 批量写入完成，共 {count} 条", 75)
+                outcome = self.insert_database_data(form_name, all_rows_buffer, db_manager=local_db)
+                total_inserted_ref[0] = outcome.inserted
+                total_invalid_ref[0] = outcome.invalid
+                total_deduped_ref[0] = outcome.deduped
+                self.owner._notify_progress(f"[{form_name}] 批量写入完成，共 {outcome.inserted} 条", 75)
 
             perf_after_query = time.perf_counter()
             query_duration = perf_after_query - perf_after_filter
@@ -382,30 +389,27 @@ class FormSyncRunner:
             self.logger.info("[%s] 获取 %s 条，插入 %s 条数据", form_name, record_count, inserted_count)
 
             insert_duration = 0.0
+            summary = self._build_write_summary(
+                form_name,
+                fetched=record_count,
+                outcome=WriteOutcome(
+                    inserted=inserted_count,
+                    invalid=total_invalid_ref[0],
+                    deduped=total_deduped_ref[0],
+                ),
+            )
             if record_count > 0:
                 success_rate = (inserted_count / record_count) * 100 if record_count > 0 else 0
                 self.owner._notify_progress(
                     f"[{form_name}] 成功插入 {inserted_count}/{record_count} 条数据 (成功率 {success_rate:.1f}%)",
                     90,
                 )
-
-                skipped = record_count - inserted_count
-                if skipped > 0:
-                    if form_name.strip() in self.owner.DEDUPLICATION_FORMS and inserted_count > 0:
-                        self.logger.info(
-                            "[%s] 已去重跳过 %s 条重复记录，非插入失败 (实际有效数据: %s)",
-                            form_name,
-                            skipped,
-                            inserted_count,
-                        )
-                        effective_total = record_count - skipped
-                        effective_rate = (inserted_count / effective_total * 100) if effective_total > 0 else 100.0
-                        self.owner._notify_progress(
-                            f"[{form_name}] 去重整合完成，有效数据 {inserted_count} 条 (API返回 {record_count} 条，有效成功率 {effective_rate:.1f}%)",
-                            90,
-                        )
-                    else:
-                        self.logger.warning("[%s] 部分数据插入失败: %s 条记录未能插入", form_name, skipped)
+                if summary["invalid"] > 0:
+                    self.logger.warning("[%s] 无效记录跳过: %s 条", form_name, summary["invalid"])
+                if summary["deduped"] > 0:
+                    self.logger.info("[%s] 去重跳过: %s 条", form_name, summary["deduped"])
+                if summary["failed"] > 0:
+                    self.logger.warning("[%s] 写库失败: %s 条", form_name, summary["failed"])
             else:
                 self.logger.info("[%s] 没有新数据需要同步", form_name)
                 self.owner._notify_progress(f"[{form_name}] 没有新数据需要同步", 90)
@@ -441,6 +445,10 @@ class FormSyncRunner:
                 "status": SUCCESS_STATUS,
                 "message": f"成功同步 {inserted_count} 条记录",
                 "record_count": inserted_count,
+                "fetched": summary["fetched"],
+                "invalid": summary["invalid"],
+                "deduped": summary["deduped"],
+                "failed": summary["failed"],
                 "inserted": inserted_count,
                 "updated": 0,
                 "duration": duration,
@@ -529,22 +537,35 @@ class FormSyncRunner:
             self.logger.error("查询金蝶 %s 数据失败: %s", form_name, exc)
             return None
 
-    def insert_database_data(self, form_name: str, data: List[Dict], db_manager=None) -> int:
+    def _build_write_summary(self, form_name: str, fetched: int, outcome: "WriteOutcome") -> Dict[str, int]:
+        deduped = outcome.deduped if form_name.strip() in self.owner.DEDUPLICATION_FORMS else 0
+        invalid = outcome.invalid
+        failed = max(0, fetched - invalid - deduped - outcome.inserted)
+        return {
+            "fetched": fetched,
+            "inserted": outcome.inserted,
+            "invalid": invalid,
+            "deduped": deduped,
+            "failed": failed,
+        }
+
+    def insert_database_data(self, form_name: str, data: List[Dict], db_manager=None) -> WriteOutcome:
         """Insert queried form data using writer mappings."""
         manager = db_manager or mysql_manager
         method_name = self.owner.INSERT_METHOD_MAP.get(form_name)
         if method_name:
             try:
-                return manager.execute_writer(method_name, data)
+                return manager.execute_writer_with_outcome(method_name, data)
             except KeyError as exc:
                 self.logger.error("Writer 映射无效: form=%s, method=%s, error=%s", form_name, method_name, exc)
-                return 0
+                return WriteOutcome(failed=len(data))
 
         if form_name == "科目余额表":
-            return manager.insert_generic_data("GL_RPT_AccountBalance", data)
+            inserted = manager.insert_generic_data("GL_RPT_AccountBalance", data)
+            return WriteOutcome.from_insert_count(inserted)
 
         self.logger.error("未知的表单类型或未配置插入方法: %s", form_name)
-        return 0
+        return WriteOutcome(failed=len(data))
 
     def truncate_table_for_complete(self, table_name: str, manager: MySQLManager) -> bool:
         """Truncate a target table before complete sync."""

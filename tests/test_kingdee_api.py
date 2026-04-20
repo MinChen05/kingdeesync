@@ -1,0 +1,114 @@
+from __future__ import annotations
+
+import unittest
+from unittest.mock import Mock, patch
+
+from src.core.kingdee_api import KingdeeAPIClient
+
+
+class FakeResponse:
+    def __init__(self, payload, status_code: int = 200) -> None:
+        self._payload = payload
+        self.status_code = status_code
+
+    def json(self):
+        return self._payload
+
+
+class KingdeeAPIClientQueryTests(unittest.TestCase):
+    def _make_client(self) -> KingdeeAPIClient:
+        with patch("src.core.kingdee_api.config_manager") as mock_config_manager:
+            mock_config_manager.get_kingdee_config.return_value = {
+                "ssl_verify": "false",
+                "login_url": "https://example.com/login",
+                "query_url": "https://example.com/query",
+                "rate_limit_qps": 0,
+                "request_retries": 1,
+                "retry_base_delay": 0.01,
+                "retry_max_delay": 0.01,
+                "request_connect_timeout": 5,
+                "request_read_timeout": 5,
+                "max_request_read_timeout": 5,
+                "page_size": 20000,
+                "max_pages": 2,
+            }
+            client = KingdeeAPIClient()
+        client.is_authenticated = True
+        return client
+
+    def test_query_data_rejects_list_wrapped_session_error_payload(self) -> None:
+        client = self._make_client()
+        page_callback = Mock()
+        client.session.post = Mock(
+            return_value=FakeResponse(
+                [
+                    {
+                        "Result": {
+                            "ResponseStatus": {
+                                "IsSuccess": False,
+                                "Errors": [{"Message": "会话信息已丢失，请重新登录"}],
+                            }
+                        }
+                    }
+                ]
+            )
+        )
+
+        rows = client.query_data(
+            "销售订单",
+            {
+                "FormId": "SAL_SaleOrder",
+                "FieldKeys": "FID,FBillNo",
+                "StartRow": 0,
+                "Limit": 0,
+            },
+            page_callback=page_callback,
+        )
+
+        self.assertIsNone(rows)
+        page_callback.assert_not_called()
+
+    def test_query_data_retries_same_page_once_after_session_error(self) -> None:
+        client = self._make_client()
+        client.logout = Mock()
+        client.login = Mock(return_value=True)
+        client.session.post = Mock(
+            side_effect=[
+                FakeResponse(
+                    {
+                        "Result": {
+                            "ResponseStatus": {
+                                "IsSuccess": False,
+                                "Errors": [{"Message": "会话信息已丢失，请重新登录"}],
+                            }
+                        }
+                    }
+                ),
+                FakeResponse(
+                    {
+                        "Result": {
+                            "ResponseStatus": {"IsSuccess": True},
+                            "Result": [[1, "SO001"]],
+                        }
+                    }
+                ),
+            ]
+        )
+
+        rows = client.query_data(
+            "销售订单",
+            {
+                "FormId": "SAL_SaleOrder",
+                "FieldKeys": "FID,FBillNo",
+                "StartRow": 0,
+                "Limit": 0,
+            },
+        )
+
+        self.assertEqual(rows, [{"FID": 1, "FBillNo": "SO001"}])
+        client.logout.assert_called_once_with(force=True)
+        client.login.assert_called_once()
+
+
+if __name__ == "__main__":
+    unittest.main()

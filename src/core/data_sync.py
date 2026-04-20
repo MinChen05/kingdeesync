@@ -72,6 +72,8 @@ class DataSyncManager:
         self.form_sync_runner = FormSyncRunner(self, self.filter_builder, logger_=logger)
         self._active_run_id: str | None = None
         self._active_run_message = ""
+        self._shutdown_requested = threading.Event()
+        self._shutdown_reason = ""
 
     def add_sync_callback(self, callback):
         """添加同步进度回调函数"""
@@ -95,9 +97,23 @@ class DataSyncManager:
             except Exception as e:
                 logger.error(f"回调函数执行失败: {str(e)}")
 
+    def request_shutdown(self, reason: str = "application_exit") -> None:
+        self._shutdown_reason = reason
+        self._shutdown_requested.set()
+
+    def clear_shutdown(self) -> None:
+        self._shutdown_reason = ""
+        self._shutdown_requested.clear()
+
+    def is_shutdown_requested(self) -> bool:
+        return self._shutdown_requested.is_set()
+
     def sync_data(self, form_names: List[str], sync_type: SyncType = SyncType.INCREMENTAL) -> Dict[str, Any]:
         """同步数据主方法。"""
         start_time = datetime.now()
+        if self.is_shutdown_requested():
+            message = f"同步任务拒绝启动: {self._shutdown_reason or 'shutdown requested'}"
+            return self._create_sync_result(SyncStatus.FAILED_ABNORMAL_EXIT, message, start_time)
         self._notify_progress("开始数据同步...", 0)
 
         if form_names is None:
@@ -254,6 +270,12 @@ class DataSyncManager:
                 grouped_forms.setdefault(priority, []).append(form_name)
 
             for _, group in sorted(grouped_forms.items(), key=lambda item: item[0]):
+                if self.is_shutdown_requested():
+                    final_status = SyncStatus.FAILED_ABNORMAL_EXIT
+                    final_message = (
+                        f"同步在关闭过程中停止调度新任务: {self._shutdown_reason or 'shutdown requested'}"
+                    )
+                    break
                 if table_concurrency <= 1 or len(group) <= 1:
                     for form_name in group:
                         self._notify_progress(f"正在同步 {form_name}...", calc_progress())

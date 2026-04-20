@@ -7,6 +7,8 @@ import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import TYPE_CHECKING, Any, List
 
+from src.core.write_outcome import WriteOutcome
+
 if TYPE_CHECKING:
     from src.core.mysql_manager import MySQLManager
 
@@ -17,6 +19,58 @@ class UpsertEngineSqlServer:
     def __init__(self, manager: "MySQLManager", *, logger: logging.Logger | None = None) -> None:
         self.manager = manager
         self.logger = logger or logging.getLogger(__name__)
+
+    def _filter_required_rows(
+        self,
+        table: str,
+        columns: List[str],
+        values: List[List[Any]],
+    ) -> tuple[List[List[Any]], WriteOutcome]:
+        required_map = {
+            "sal_deliverynotice": ["FID", "FENTRYID"],
+            "prd_instock": ["FID", "FENTRYID", "FBILLNO"],
+            "ap_payable": ["FID", "FENTRYID"],
+        }
+        table_name = str(table).split(".")[-1].replace("[", "").replace("]", "").strip().lower()
+        required_cols = required_map.get(table_name, [])
+        if not required_cols:
+            return values, WriteOutcome()
+
+        required_indices = []
+        for required_col in required_cols:
+            for index, column in enumerate(columns):
+                if str(column).strip().upper() == required_col:
+                    required_indices.append(index)
+                    break
+
+        filtered: List[List[Any]] = []
+        invalid_required = 0
+        for row in values:
+            try:
+                if any((row[i] is None) or (str(row[i]).strip() == "") for i in required_indices):
+                    invalid_required += 1
+                    continue
+            except Exception:
+                invalid_required += 1
+                continue
+            filtered.append(row)
+
+        if invalid_required > 0:
+            self.logger.warning("[%s] 必填字段为空已跳过: %s 条", table, invalid_required)
+        return filtered, WriteOutcome(invalid=invalid_required)
+
+    def _finalize_outcome(
+        self,
+        inserted: int,
+        required_outcome: WriteOutcome,
+        deduped_count: int,
+    ) -> int:
+        self.manager._last_write_outcome = WriteOutcome(
+            inserted=inserted,
+            invalid=required_outcome.invalid,
+            deduped=deduped_count,
+        )
+        return inserted
 
     def execute(
         self,
@@ -66,41 +120,8 @@ class UpsertEngineSqlServer:
                 except Exception as e:
                     logger.warning(f"[{table}] 数据对齐检查失败: {e}")
 
-            try:
-                required_map = {
-                    "sal_deliverynotice": ["FID", "FENTRYID"],
-                    "prd_instock": ["FID", "FENTRYID"],
-                    "ap_payable": ["FID", "FENTRYID"],
-                }
-                required_cols = required_map.get(str(table).strip().lower())
-                if required_cols:
-                    required_indices = []
-                    for rc in required_cols:
-                        idx = None
-                        for i, c in enumerate(columns):
-                            if str(c).strip().upper() == rc:
-                                idx = i
-                                break
-                        if idx is not None:
-                            required_indices.append(idx)
-                    if required_indices:
-                        original_count = len(values)
-                        filtered = []
-                        invalid_required = 0
-                        for row in values:
-                            try:
-                                if any((row[i] is None) or (str(row[i]).strip() == "") for i in required_indices):
-                                    invalid_required += 1
-                                    continue
-                            except Exception:
-                                invalid_required += 1
-                                continue
-                            filtered.append(row)
-                        values = filtered
-                        if invalid_required > 0:
-                            logger.warning(f"[{table}] 必填字段为空已跳过: {invalid_required} 条")
-            except Exception:
-                pass
+            values, required_outcome = self._filter_required_rows(base_name, columns, values)
+            deduped_count = 0
 
             is_inventory_table = str(table).strip().lower() == "stk_inventory"
             # 即时库存：为了提升速度，使用较大批次并由临时表一次性提交
@@ -800,7 +821,7 @@ class UpsertEngineSqlServer:
                         if hasattr(manager.connection, "autocommit"):
                             manager.connection.autocommit = True
                         logger.info(f"成功插入/更新 {total_inserted} 条记录 (SQL Server, 临时表 MERGE)")
-                        return total_inserted
+                        return self._finalize_outcome(total_inserted, required_outcome, deduped_count)
                     except Exception as e:
                         try:
                             manager.connection.rollback()
@@ -971,7 +992,7 @@ class UpsertEngineSqlServer:
                         if hasattr(manager.connection, "autocommit"):
                             manager.connection.autocommit = True
                         logger.info(f"成功插入/更新 {total_inserted} 条记录 (SQL Server)")
-                        return total_inserted
+                        return self._finalize_outcome(total_inserted, required_outcome, deduped_count)
                     except Exception as e:
                         try:
                             manager.connection.rollback()
@@ -1074,7 +1095,7 @@ class UpsertEngineSqlServer:
                             cnt = fut.result()
                             total_inserted += cnt
                     logger.info(f"成功并发插入/更新 {total_inserted} 条记录 (SQL Server, 线程数 {insert_threads})")
-                    return total_inserted
+                    return self._finalize_outcome(total_inserted, required_outcome, deduped_count)
             except Exception as e:
                 logger.error(f"批量插入数据失败 (SQL Server): {str(e)}")
                 return 0

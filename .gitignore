@@ -30,6 +30,7 @@ checkpoints/
 .claude/
 .install_salt
 config.local.ini
+.worktrees
 .worktrees/
 .DS_Store
 tmp-*.png

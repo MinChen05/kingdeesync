@@ -3422,6 +3422,9 @@ class MySQLManager:
             return None
 
     def _prepare_eng_bom_child_data(self, item) -> Optional[Tuple]:
+        # ENG_BOM 子项当前按 19 个字段准备数据，FieldKeys 中包含
+        # FMATERIALIDCHILD.FNUMBER、FMATERIALIDCHILD.FNAME 和 FMODIFYDATE，
+        # 并分别映射到写入列 FCHILDNUMBER、FCHILDNAME、FMODIFYDATE。
         """准备物料清单子项数据�?6字段），兼容字典与列表格�?        FieldKeys 顺序(来源�?API):
         FID, FTreeEntity_FENTRYID, FTreeEntity_FSEQ, FMATERIALID, FMATERIALIDCHILD.FNUMBER, FMATERIALIDCHILD.FNAME, FNUMERATOR, FDENOMINATOR,
         FISSUETYPE, FBACKFLUSHTYPE, FSUPPLYORG, FSTOCKID, FENTRYROWID, FREPLACEGROUP, FQTY, FACTUALQTY, FMASTERID, FMATERIALTYPE

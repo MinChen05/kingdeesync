@@ -3,6 +3,7 @@ from __future__ import annotations
 import unittest
 
 from src.core.mysql_manager import MySQLManager
+from src.core.masterdata_writer import insert_eng_bom_child
 
 
 class FakeCursor:
@@ -34,6 +35,11 @@ class FakeConnection:
 
     def commit(self) -> None:
         self.commit_count += 1
+
+
+class FakeEngBomChildWriteManager(MySQLManager):
+    def __init__(self) -> None:
+        pass
 
 
 class EngBomChildFieldMappingTests(unittest.TestCase):
@@ -200,6 +206,53 @@ class EngBomChildFieldMappingTests(unittest.TestCase):
 
         self.assertIn("eng_bomchild", "\n".join(captured.output))
         self.assertIn("alter failed", "\n".join(captured.output))
+
+    def test_insert_eng_bom_child_locks_sql_order_with_prepare_mapping(self) -> None:
+        manager = FakeEngBomChildWriteManager.__new__(FakeEngBomChildWriteManager)
+        manager.connection = object()
+        manager.cursor = object()
+        manager.ensure_called = False
+        manager.captured_sql = None
+        manager.captured_prepared_row = None
+
+        def ensure_columns() -> None:
+            manager.ensure_called = True
+
+        def batch_insert(sql, data, prepare_func) -> int:
+            manager.captured_sql = sql
+            manager.captured_prepared_row = prepare_func(data[0])
+            return 1
+
+        manager._ensure_additional_columns_for_eng_bomchild = ensure_columns
+        manager._batch_insert = batch_insert
+
+        inserted = insert_eng_bom_child(
+            manager,
+            [
+                {
+                    "FID": 101,
+                    "FTreeEntity_FENTRYID": 202,
+                    "FTreeEntity_FSEQ": 3,
+                    "FMATERIALID": "MAT-PARENT",
+                    "FMATERIALIDCHILD.FNUMBER": "MAT-CHILD-005",
+                    "FMATERIALIDCHILD.FNAME": "Child Material 005",
+                    "FNUMERATOR": "2",
+                    "FDENOMINATOR": "1",
+                    "FMATERIALTYPE": "5",
+                }
+            ],
+        )
+
+        self.assertEqual(inserted, 1)
+        self.assertTrue(manager.ensure_called)
+        self.assertIn(
+            "(FID, FENTRYID, FSEQ, FMATERIALID, FCHILDNUMBER, FCHILDNAME, FNUMERATOR, FDENOMINATOR",
+            manager.captured_sql,
+        )
+        self.assertEqual(manager.captured_prepared_row[3], "MAT-PARENT")
+        self.assertEqual(manager.captured_prepared_row[4], "MAT-CHILD-005")
+        self.assertEqual(manager.captured_prepared_row[5], "Child Material 005")
+        self.assertEqual(manager.captured_prepared_row[6], 2.0)
 
 
 if __name__ == "__main__":

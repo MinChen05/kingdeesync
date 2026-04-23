@@ -16,6 +16,28 @@ if TYPE_CHECKING:
 class UpsertEngineSqlServer:
     """Encapsulates SQL Server-specific batch upsert behavior."""
 
+    _ENG_BOMCHILD_STAGING_COLUMNS = [
+        "FID",
+        "FENTRYID",
+        "FSEQ",
+        "FMATERIALID",
+        "FCHILDNUMBER",
+        "FCHILDNAME",
+        "FNUMERATOR",
+        "FDENOMINATOR",
+        "FISSUETYPE",
+        "FBACKFLUSHTYPE",
+        "FSUPPLYORG",
+        "FSTOCKID",
+        "FENTRYROWID",
+        "FREPLACEGROUP",
+        "FQTY",
+        "FACTUALQTY",
+        "FMASTERID",
+        "FMATERIALTYPE",
+        "FMODIFYDATE",
+    ]
+
     def __init__(self, manager: "MySQLManager", *, logger: logging.Logger | None = None) -> None:
         self.manager = manager
         self.logger = logger or logging.getLogger(__name__)
@@ -23,6 +45,9 @@ class UpsertEngineSqlServer:
     def _is_driver18(self, manager: "MySQLManager") -> bool:
         drv = getattr(manager, "config", {}).get("driver", "ODBC Driver 17 for SQL Server")
         return "ODBC Driver 18" in str(drv)
+
+    def _normalize_column_name(self, column: Any) -> str:
+        return str(column).strip().upper()
 
     def execute(
         self,
@@ -609,6 +634,16 @@ class UpsertEngineSqlServer:
                                 # 针对 eng_bomchild 显式构建 TRY_CAST，防止 8114 (varchar to numeric) 错误
                                 # 字段: FID, FENTRYID, FSEQ, FMATERIALID, FCHILDNUMBER, FCHILDNAME, FNUMERATOR, FDENOMINATOR, FISSUETYPE, FBACKFLUSHTYPE,
                                 #       FSUPPLYORG, FSTOCKID, FENTRYROWID, FREPLACEGROUP, FQTY, FACTUALQTY, FMASTERID, FMATERIALTYPE, FMODIFYDATE
+                                expected_columns = [
+                                    self._normalize_column_name(column)
+                                    for column in self._ENG_BOMCHILD_STAGING_COLUMNS
+                                ]
+                                actual_columns = [self._normalize_column_name(column) for column in columns]
+                                if actual_columns != expected_columns:
+                                    raise ValueError(
+                                        "eng_bomchild staging column order mismatch: "
+                                        f"expected {self._ENG_BOMCHILD_STAGING_COLUMNS}, got {columns}"
+                                    )
                                 insert_stage_sql = (
                                     f"INSERT INTO {stage_ref} (FID, FENTRYID, FSEQ, FMATERIALID, FCHILDNUMBER, FCHILDNAME, FNUMERATOR, FDENOMINATOR, FISSUETYPE, FBACKFLUSHTYPE, "
                                     f"FSUPPLYORG, FSTOCKID, FENTRYROWID, FREPLACEGROUP, FQTY, FACTUALQTY, FMASTERID, FMATERIALTYPE, FMODIFYDATE) "
@@ -818,6 +853,8 @@ class UpsertEngineSqlServer:
                         logger.info(f"成功插入/更新 {total_inserted} 条记录 (SQL Server, 临时表 MERGE)")
                         return total_inserted
                     except Exception as e:
+                        if isinstance(e, ValueError):
+                            raise
                         try:
                             manager.connection.rollback()
                         except Exception:
@@ -1114,6 +1151,8 @@ class UpsertEngineSqlServer:
                     logger.info(f"成功并发插入/更新 {total_inserted} 条记录 (SQL Server, 线程数 {insert_threads})")
                     return total_inserted
             except Exception as e:
+                if isinstance(e, ValueError):
+                    raise
                 logger.error(f"批量插入数据失败 (SQL Server): {str(e)}")
                 return 0
 

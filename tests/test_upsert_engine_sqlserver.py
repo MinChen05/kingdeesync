@@ -311,6 +311,94 @@ class UpsertEngineSqlServerTests(unittest.TestCase):
             ),
         )
 
+    def test_eng_bomchild_staging_raises_when_column_order_mismatches(self) -> None:
+        manager = FakeSqlServerManager()
+        manager.config["force_staging_tables"] = "eng_bomchild"
+        manager.cursor._fetchone_queue = [(1,)]
+        manager.cursor._fetchall_queue = [[]]
+        manager._parse_insert_sql = lambda sql: (
+            "eng_bomchild",
+            [
+                "FID",
+                "FENTRYID",
+                "FSEQ",
+                "FMATERIALID",
+                "FCHILDNAME",
+                "FCHILDNUMBER",
+                "FNUMERATOR",
+                "FDENOMINATOR",
+                "FISSUETYPE",
+                "FBACKFLUSHTYPE",
+                "FSUPPLYORG",
+                "FSTOCKID",
+                "FENTRYROWID",
+                "FREPLACEGROUP",
+                "FQTY",
+                "FACTUALQTY",
+                "FMASTERID",
+                "FMATERIALTYPE",
+                "FMODIFYDATE",
+            ],
+        )
+        manager._get_table_columns_info = lambda table: {
+            "FID": "int",
+            "FENTRYID": "int",
+            "FSEQ": "int",
+            "FMATERIALID": "nvarchar",
+            "FCHILDNUMBER": "nvarchar",
+            "FCHILDNAME": "nvarchar",
+            "FNUMERATOR": "decimal",
+            "FDENOMINATOR": "decimal",
+            "FISSUETYPE": "nvarchar",
+            "FBACKFLUSHTYPE": "nvarchar",
+            "FSUPPLYORG": "int",
+            "FSTOCKID": "int",
+            "FENTRYROWID": "nvarchar",
+            "FREPLACEGROUP": "int",
+            "FQTY": "decimal",
+            "FACTUALQTY": "decimal",
+            "FMASTERID": "int",
+            "FMATERIALTYPE": "nvarchar",
+            "FMODIFYDATE": "datetime",
+        }
+        manager._get_primary_key = lambda table: "FID,FENTRYID"
+        engine = UpsertEngineSqlServer(manager)
+
+        with self.assertRaisesRegex(ValueError, "eng_bomchild staging column order mismatch"):
+            engine.execute(
+                sql=(
+                    "INSERT INTO eng_bomchild (FID, FENTRYID, FSEQ, FMATERIALID, FCHILDNAME, FCHILDNUMBER, FNUMERATOR, "
+                    "FDENOMINATOR, FISSUETYPE, FBACKFLUSHTYPE, FSUPPLYORG, FSTOCKID, FENTRYROWID, FREPLACEGROUP, "
+                    "FQTY, FACTUALQTY, FMASTERID, FMATERIALTYPE, FMODIFYDATE) "
+                    "VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)"
+                ),
+                values=[
+                    [
+                        10,
+                        1001,
+                        1,
+                        "MAT-001",
+                        "Child Name 001",
+                        "CHILD-001",
+                        2,
+                        1,
+                        "1",
+                        "2",
+                        200,
+                        300,
+                        "ROW-1",
+                        0,
+                        5,
+                        4,
+                        900,
+                        "1",
+                        "2026-04-23 10:00:00",
+                    ]
+                ],
+                batch_size=10000,
+                commit_every_n_batches=0,
+            )
+
 
 if __name__ == "__main__":
     unittest.main()

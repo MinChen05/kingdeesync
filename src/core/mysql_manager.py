@@ -17,7 +17,7 @@ from src.core.sync_run_repository import SyncRunRepository
 from src.core.upsert_engine_mysql import UpsertEngineMySQL
 from src.core.upsert_engine_sqlserver import UpsertEngineSqlServer
 from src.core.writers_registry import WriterRegistry
-from src.core.write_outcome import WriteOutcome
+from src.core.performance_logging import log_prepare_metrics
 from dbutils.pooled_db import PooledDB
 
 
@@ -42,7 +42,10 @@ class MySQLManager:
     _identity_column_cache: Dict[Tuple[str, str], Optional[str]] = {}
 
     def _maybe_create_stage_index(self, stage_ref: str, base_name: str, pk_cols: List[str], row_count: int) -> None:
-        """为大批量 staging 表创建主键索引，加速后续 MERGE 匹配。"""
+        """为大批量 staging 表创建主键索引，加速后续 MERGE 匹配。
+
+        注意：使用独立 cursor 执行，避免与同一连接上其他 cursor 的状态冲突。
+        """
         if getattr(self, "db_type", "mysql") != "sqlserver":
             return
         if not stage_ref or not pk_cols or row_count <= 0:
@@ -71,18 +74,28 @@ class MySQLManager:
         idx_name = f"IX_STAGE_{base_name[:40]}_{idx_suffix}"
         idx_cols_sql = ", ".join(stage_pk_cols)
         create_idx_sql = f"CREATE CLUSTERED INDEX [{idx_name}] ON {stage_ref} ({idx_cols_sql})"
+
+        # 使用独立的 cursor 创建索引，避免与其他操作的 cursor 状态冲突
+        idx_cursor = None
         try:
-            self.cursor.execute(create_idx_sql)
-            logger.info(f"[STAGE] 已为阶段表创建聚集索引: {idx_name} ({idx_cols_sql})")
+            if self.connection:
+                idx_cursor = self.connection.cursor()
+                idx_cursor.execute(create_idx_sql)
+                logger.info(f"[STAGE] 已为阶段表创建聚集索引: {idx_name} ({idx_cols_sql})")
         except Exception as e:
             logger.debug(f"[STAGE] 创建阶段表索引失败，继续执行无索引 MERGE: {e}")
+        finally:
+            if idx_cursor:
+                try:
+                    idx_cursor.close()
+                except Exception:
+                    pass
 
     def __init__(self):
         self.pool = None
         self.connection = None
         self.cursor = None
         self._pool_init_failed = False
-        self._last_write_outcome = WriteOutcome()
         self.sync_run_repository = SyncRunRepository(self, logger=logger)
         self.sync_log_repository = SyncLogRepository(self, logger=logger)
         self.mysql_upsert_engine = UpsertEngineMySQL(self, logger=logger)
@@ -111,16 +124,6 @@ class MySQLManager:
             logger.error("tables.json contains unmapped writers: %s", missing_writers)
         self._init_pool()
 
-    def execute_writer_with_outcome(self, method_name: str, data: List[Dict]) -> WriteOutcome:
-        self._last_write_outcome = WriteOutcome()
-        inserted = self.writer_registry.execute(self, method_name, data)
-        if self._last_write_outcome.inserted == 0:
-            self._last_write_outcome.inserted = max(0, int(inserted or 0))
-        return self._last_write_outcome
-
-    def execute_writer(self, method_name: str, data: List[Dict]) -> int:
-        return self.execute_writer_with_outcome(method_name, data).inserted
-
     def _init_pool(self) -> bool:
         """初始化数据库连接池"""
         try:
@@ -143,20 +146,23 @@ class MySQLManager:
                 except Exception:
                     available_drivers = []
                 preferred = [
-                    "ODBC Driver 18 for SQL Server",
                     "ODBC Driver 17 for SQL Server",
+                    "ODBC Driver 18 for SQL Server",
                     "ODBC Driver 13 for SQL Server",
                     "SQL Server",
                 ]
                 driver = configured_driver
                 if available_drivers:
-                    for cand in preferred:
-                        if cand in available_drivers:
-                            driver = cand
-                            break
-                    if driver not in available_drivers:
-                        # 如果配置的驱动名在可用列表中不存在，则选择列表中的第一项
-                        driver = available_drivers[0]
+                    # 如果配置的驱动在可用列表中，直接使用（跳过 preferred 优先级遍历）
+                    if configured_driver and configured_driver in available_drivers:
+                        driver = configured_driver
+                    else:
+                        for cand in preferred:
+                            if cand in available_drivers:
+                                driver = cand
+                                break
+                        if driver not in available_drivers:
+                            driver = available_drivers[0]
                 logger.info(f"检测到可用SQL Server ODBC驱动列表: {available_drivers}")
                 logger.info(f"使用 SQL Server ODBC 驱动: {driver}")
                 # 统一构建连接字符串，确保 DRIVER 名称被花括号包裹
@@ -477,7 +483,13 @@ class MySQLManager:
             if batch_size < 100:
                 batch_size = 100
             if self.db_type == "sqlserver" and hasattr(self.cursor, "fast_executemany"):
-                self.cursor.fast_executemany = True
+                # ODBC Driver 18 的 fast_executemany 在并发/大批量场景下会触发驱动崩溃，改为禁用
+                configured_driver = self.config.get("driver", "ODBC Driver 17 for SQL Server")
+                if "ODBC Driver 18" in configured_driver:
+                    self.cursor.fast_executemany = False
+                    logger.warning("检测到 ODBC Driver 18，已禁用 fast_executemany 以避免驱动崩溃")
+                else:
+                    self.cursor.fast_executemany = True
             for i in range(0, len(values_list), batch_size):
                 batch = values_list[i : i + batch_size]
                 self.cursor.executemany(sql, batch)
@@ -511,6 +523,10 @@ class MySQLManager:
             if self.connection:
                 self.connection.rollback()
             return 0
+
+    def execute_writer(self, method_name: str, data: List[Dict]) -> int:
+        """Execute a registered writer by name."""
+        return self.writer_registry.execute(self, method_name, data)
 
     def recover_stale_sync_runs(
         self,
@@ -592,6 +608,19 @@ class MySQLManager:
             end_time=end_time,
             failed_forms=failed_forms,
             details=details,
+        )
+
+    def mark_sync_run_abnormal_exit(
+        self,
+        run_id: str,
+        reason: str,
+        end_time: datetime | None = None,
+    ) -> bool:
+        """Delegate abnormal-exit task persistence to the sync run repository."""
+        return self.sync_run_repository.mark_run_abnormal_exit(
+            run_id=run_id,
+            reason=reason,
+            end_time=end_time,
         )
 
     def log_sync_operation(
@@ -989,6 +1018,7 @@ class MySQLManager:
             "prd_instock": "FENTRYID",
             "pur_purchaseorder": "FID,FENTRYID",
             "sub_subreqorder": "FID,FENTRYID",
+            "ar_receivable": "FENTRYID",
             "ap_payable": "FENTRYID",
         }
         return mapping.get((table_name or "").lower())
@@ -1075,11 +1105,28 @@ class MySQLManager:
                     return 0
 
             # 准备数据
+            table_name = "unknown_table"
+            try:
+                parsed_table_name, _cols = self._parse_insert_sql(sql)
+                if parsed_table_name:
+                    table_name = str(parsed_table_name)
+            except Exception:
+                pass
+
+            prepare_started_at = time.perf_counter()
             values = []
             for item in data:
                 prepared_data = prepare_func(item)
                 if prepared_data:
                     values.append(self._normalize_row(prepared_data))
+            prepare_duration = time.perf_counter() - prepare_started_at
+            log_prepare_metrics(
+                logger,
+                table_name=table_name,
+                source_rows=len(data or []),
+                prepared_rows=len(values),
+                duration_seconds=prepare_duration,
+            )
 
             if not values:
                 logger.warning("没有有效数据需要插入")
@@ -1087,7 +1134,6 @@ class MySQLManager:
 
             # 在插入/合并前统一确保目标表存在 SYNC_TIME 列
             try:
-                table_name, _cols = self._parse_insert_sql(sql)
                 if table_name:
                     self._ensure_sync_time_column(table_name)
             except Exception as e:
@@ -1638,14 +1684,14 @@ class MySQLManager:
         try:
             if isinstance(item, dict):
                 raw_fid = item.get("FID") or item.get("FId") or item.get("Id")
-                fid = self._to_int_or_none(raw_fid)
+                fid = self._to_int_or_none(raw_fid) or 0
+                # 明细行主键可能返回为 FEntity_FENTRYID 或 FENTRYID
                 raw_fentryid = item.get("FEntity_FENTRYID") or item.get("FENTRYID")
-                fentryid = self._to_int_or_none(raw_fentryid)
-                billno = self._extract_scalar(item.get("FBILLNO") or item.get("FBillNo"))
-                billno = str(billno).strip() if billno is not None else ""
-
+                fentryid = self._to_int_or_none(raw_fentryid) or 0
+                if fid is None and fentryid is not None:
+                    fid = fentryid
                 if fid is None or fentryid is None:
-                    self._last_write_outcome.invalid += 1
+                    billno = item.get("FBILLNO") or item.get("FBillNo")
                     logger.warning(
                         "生产入库单主键为空，已跳过: FID=%s(%s) FENTRYID=%s(%s) FBILLNO=%s",
                         raw_fid,
@@ -1655,12 +1701,7 @@ class MySQLManager:
                         billno,
                     )
                     return None
-
-                if not billno:
-                    self._last_write_outcome.invalid += 1
-                    logger.warning("生产入库单单号为空，已跳过: FID=%s FENTRYID=%s", fid, fentryid)
-                    return None
-
+                billno = item.get("FBILLNO") or item.get("FBillNo")
                 fdate = self._parse_datetime(item.get("FDATE") or item.get("FDate"))
                 materialid = self._to_int_or_none(item.get("FMATERIALID") or 0) or item.get("FMaterialId")
                 realqty = self._to_decimal_or_none(item.get("FREALQTY") or 0.0) or item.get("FRealQty")
@@ -1691,20 +1732,21 @@ class MySQLManager:
                 get_item = lambda i: (item[i] if i < len(item) else None)
                 raw_fid = get_item(0)
                 raw_fentryid = get_item(1)
-                fid = self._to_int_or_none(raw_fid)
-                fentryid = self._to_int_or_none(raw_fentryid)
-                billno = str(self._extract_scalar(get_item(2)) or "").strip()
-
+                fid = self._to_int_or_none(raw_fid) or 0
+                fentryid = self._to_int_or_none(raw_fentryid) or 0
+                if fid is None and fentryid is not None:
+                    fid = fentryid
                 if fid is None or fentryid is None:
-                    self._last_write_outcome.invalid += 1
-                    logger.warning("生产入库单主键为空，已跳过: FID=%s FENTRYID=%s", raw_fid, raw_fentryid)
+                    logger.warning(
+                        "生产入库单主键为空，已跳过: FID=%s(%s) FENTRYID=%s(%s) len=%s",
+                        raw_fid,
+                        type(raw_fid).__name__,
+                        raw_fentryid,
+                        type(raw_fentryid).__name__,
+                        len(item),
+                    )
                     return None
-
-                if not billno:
-                    self._last_write_outcome.invalid += 1
-                    logger.warning("生产入库单单号为空，已跳过: FID=%s FENTRYID=%s", fid, fentryid)
-                    return None
-
+                billno = get_item(2)
                 fdate = self._parse_datetime(get_item(3))
                 materialid = self._to_int_or_none(get_item(4) or 0)
                 realqty = self._to_decimal_or_none(get_item(5) or 0.0)
@@ -1918,6 +1960,95 @@ class MySQLManager:
 
     def insert_ap_payable(self, data: List[Dict]) -> int:
         return self.execute_writer("insert_ap_payable", data)
+
+    def insert_ar_receivable(self, data: List[Dict]) -> int:
+        return self.execute_writer("insert_ar_receivable", data)
+
+    def _prepare_ar_receivable_data(self, item) -> Optional[Tuple]:
+        """准备应收单数据 - 返回顺序必须与SQL字段顺序一致"""
+        try:
+            if isinstance(item, dict):
+                fid = self._to_int_or_none(item.get("FID"))
+                fentryid = self._to_int_or_none(item.get("FEntityDetail_FENTRYID") or item.get("FENTRYID"))
+                fseq = self._to_int_or_none(item.get("FEntityDetail_FSEQ") or item.get("FSEQ"))
+                fbillname = self._safe_str(
+                    item.get("FBillTypeID.FNAME")
+                    or item.get("FBillTypeID.FName")
+                    or item.get("FBILLTYPEID.FNAME")
+                    or item.get("FBILLTYPEID.FName")
+                    or item.get("FBILLNAME")
+                )
+                fbillno = self._safe_str(item.get("FBillNo") or item.get("FBILLNO"))
+                fdate = self._parse_date(item.get("FDATE") or item.get("FDate"))
+                fcustomername = self._safe_str(item.get("FCUSTOMERID.FNAME") or item.get("FCUSTOMERID.FName") or item.get("FCUSTOMERNAME"))
+                fsetaccounttype = self._safe_str(item.get("FSETACCOUNTTYPE") or item.get("FSetAccountType"))
+                fbaseproperty1 = self._safe_str(item.get("F_ora_BaseProperty1") or item.get("FBASEPROPERTY1"))
+                fmaterialnumber = self._safe_str(item.get("FMATERIALID.FNUMBER") or item.get("FMATERIALID.FNumber") or item.get("FMATERIALNUMBER"))
+                fmaterialname = self._safe_str(item.get("FMATERIALID.FNAME") or item.get("FMATERIALID.FName") or item.get("FMATERIALNAME"))
+                ftaxprice = self._to_decimal_or_none(item.get("FTaxPrice") or item.get("FTAXPRICE") or 0)
+                fpriceqty = self._to_decimal_or_none(item.get("FPriceQty") or item.get("FPRICEQTY") or 0)
+                fallamountfor_d = self._to_decimal_or_none(item.get("FALLAMOUNTFOR_D") or 0)
+                fmodifydate = self._parse_datetime(item.get("FModifyDate") or item.get("FMODIFYDATE"))
+
+                if fid is None or fentryid is None or fid <= 0 or fentryid <= 0:
+                    return None
+                return (
+                    fid,
+                    fentryid,
+                    fseq,
+                    fbillname,
+                    fbillno,
+                    fdate,
+                    fcustomername,
+                    fsetaccounttype,
+                    fbaseproperty1,
+                    fmaterialnumber,
+                    fmaterialname,
+                    ftaxprice,
+                    fpriceqty,
+                    fallamountfor_d,
+                    fmodifydate,
+                )
+            elif isinstance(item, (list, tuple)) and len(item) >= 15:
+                fid = self._to_int_or_none(item[0])
+                fentryid = self._to_int_or_none(item[1])
+                fseq = self._to_int_or_none(item[2])
+                fbillname = self._safe_str(item[3])
+                fbillno = self._safe_str(item[4])
+                fdate = self._parse_date(item[5])
+                fcustomername = self._safe_str(item[6])
+                fsetaccounttype = self._safe_str(item[7])
+                fbaseproperty1 = self._safe_str(item[8])
+                fmaterialnumber = self._safe_str(item[9])
+                fmaterialname = self._safe_str(item[10])
+                ftaxprice = self._to_decimal_or_none(item[11]) or 0
+                fpriceqty = self._to_decimal_or_none(item[12]) or 0
+                fallamountfor_d = self._to_decimal_or_none(item[13]) or 0
+                fmodifydate = self._parse_datetime(item[14])
+
+                if fid is None or fentryid is None or fid <= 0 or fentryid <= 0:
+                    return None
+                return (
+                    fid,
+                    fentryid,
+                    fseq,
+                    fbillname,
+                    fbillno,
+                    fdate,
+                    fcustomername,
+                    fsetaccounttype,
+                    fbaseproperty1,
+                    fmaterialnumber,
+                    fmaterialname,
+                    ftaxprice,
+                    fpriceqty,
+                    fallamountfor_d,
+                    fmodifydate,
+                )
+            else:
+                return None
+        except Exception:
+            return None
 
     def _ensure_additional_columns_for_ap_payable(self) -> None:
         """确保 AP_Payable 存在应付单扩展字段与金额字段列。"""
@@ -2234,6 +2365,110 @@ class MySQLManager:
         except Exception as e:
             # 非致命：记录日志即可
             logger.debug(f"检查/添加 saleorder 列失败：{e}")
+
+    def _ensure_additional_columns_for_customer(self) -> None:
+        """确保 customer 存在当前同步依赖的扩展字段。"""
+        try:
+            table = "customer"
+            column = "FCUSTPYPE"
+            is_sqlserver = getattr(self, "db_type", "mysql") == "sqlserver"
+
+            if is_sqlserver:
+                self.cursor.execute(
+                    "SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME=? AND COLUMN_NAME=?",
+                    (table, column),
+                )
+            else:
+                self.cursor.execute(
+                    "SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME=%s AND COLUMN_NAME=%s",
+                    (table, column),
+                )
+
+            if self.cursor.fetchone():
+                return
+
+            if is_sqlserver:
+                self.cursor.execute(f"ALTER TABLE {table} ADD {column} NVARCHAR(255) NULL")
+            else:
+                self.cursor.execute(f"ALTER TABLE {table} ADD COLUMN {column} VARCHAR(255) NULL")
+
+            try:
+                self.connection.commit()
+            except Exception:
+                pass
+            self._invalidate_table_metadata_cache(table)
+            logger.info(f"已为 {table}.{column} 创建字段")
+        except Exception as e:
+            logger.debug(f"检查或新增 customer 扩展字段失败: {e}")
+
+    def _ensure_additional_columns_for_bd_material(self) -> None:
+        """确保 bd_material 存在当前同步依赖的扩展字段。"""
+        try:
+            table = "bd_material"
+            column = "F_ORA_TEXT_9SB"
+            is_sqlserver = getattr(self, "db_type", "mysql") == "sqlserver"
+
+            if is_sqlserver:
+                self.cursor.execute(
+                    "SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME=? AND COLUMN_NAME=?",
+                    (table, column),
+                )
+            else:
+                self.cursor.execute(
+                    "SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME=%s AND COLUMN_NAME=%s",
+                    (table, column),
+                )
+
+            if self.cursor.fetchone():
+                return
+
+            if is_sqlserver:
+                self.cursor.execute(f"ALTER TABLE {table} ADD {column} NVARCHAR(50) NULL")
+            else:
+                self.cursor.execute(f"ALTER TABLE {table} ADD COLUMN {column} VARCHAR(50) NULL")
+
+            try:
+                self.connection.commit()
+            except Exception:
+                pass
+            self._invalidate_table_metadata_cache(table)
+            logger.info(f"已为 {table}.{column} 创建字段")
+        except Exception as e:
+            logger.debug(f"检查或新增 bd_material 扩展字段失败: {e}")
+
+    def _ensure_additional_columns_for_eng_bomchild(self) -> None:
+        """确保 eng_bomchild 存在当前同步依赖的扩展字段。"""
+        try:
+            table = "eng_bomchild"
+            is_sqlserver = getattr(self, "db_type", "mysql") == "sqlserver"
+            for column in ("FCHILDNUMBER", "FCHILDNAME"):
+                if is_sqlserver:
+                    self.cursor.execute(
+                        "SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME=? AND COLUMN_NAME=?",
+                        (table, column),
+                    )
+                else:
+                    self.cursor.execute(
+                        "SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME=%s AND COLUMN_NAME=%s",
+                        (table, column),
+                    )
+
+                if self.cursor.fetchone():
+                    continue
+
+                if is_sqlserver:
+                    self.cursor.execute(f"ALTER TABLE {table} ADD {column} NVARCHAR(255) NULL")
+                else:
+                    self.cursor.execute(f"ALTER TABLE {table} ADD COLUMN {column} VARCHAR(255) NULL")
+
+                try:
+                    self.connection.commit()
+                except Exception:
+                    pass
+                self._invalidate_table_metadata_cache(table)
+                logger.info(f"已为 {table}.{column} 创建字段")
+        except Exception as e:
+            logger.error(f"检查或新增 eng_bomchild 扩展字段失败: {e}")
 
     def _ensure_bd_material_group_text_column(self) -> None:
         """确保 bd_material.FMATERIALGROUP 为可存中文的字符串列。"""
@@ -2651,8 +2886,8 @@ class MySQLManager:
 
     def _prepare_customer_data(self, item) -> Optional[Tuple]:
         """准备客户资料数据
-        按照数据库字段顺序: FCUSTID, FNUMBER, FNAME, FCREATEDATE, FMODIFYDATE,
-        FGROUP, FSELLERNAME, FSTAFF, FCUSTLEVEL
+        按照数据库字段顺序: FCUSTID, FNUMBER, FNAME, FGROUP, FSELLERNAME,
+        FSTAFF, FCUSTLEVEL, FCUSTPYPE, FCREATEDATE, FMODIFYDATE
         """
         try:
             # 检查数据类型
@@ -2662,26 +2897,28 @@ class MySQLManager:
                     item.get("FCUSTID"),  # FCUSTID
                     item.get("FNumber"),  # FNUMBER
                     item.get("FNAME"),  # FNAME
-                    self._format_date_only(item.get("FCreateDate")),  # FCREATEDATE
-                    self._parse_datetime(item.get("FModifyDate")),  # FMODIFYDATE
                     item.get("FGROUP.FNAME"),  # FGROUP
                     item.get("FSELLER.FNAME"),  # FSELLERNAME
                     item.get("F_ora_Base.FNAME"),  # FSTAFF
                     item.get("F_ora_Text_qtr"),  # FCUSTLEVEL
+                    item.get("F_ora_CUSTPYPE"),  # FCUSTPYPE
+                    self._format_date_only(item.get("FCreateDate")),  # FCREATEDATE
+                    self._parse_datetime(item.get("FModifyDate")),  # FMODIFYDATE
                 )
-            elif isinstance(item, list) and len(item) >= 9:
+            elif isinstance(item, list) and len(item) >= 10:
                 # 列表格式数据（金蝶 API 直接返回的数组格式）
                 # 根据 FieldKeys 的顺序映射到数据库字段
                 return (
                     item[0],  # FCUSTID
                     item[1],  # FNUMBER
                     item[2],  # FNAME
-                    self._format_date_only(str(item[3]) if item[3] else None),  # FCREATEDATE
-                    self._parse_datetime(str(item[4]) if item[4] else None),  # FMODIFYDATE
                     item[5],  # FGROUP
                     item[6],  # FSELLERNAME
                     item[7],  # FSTAFF
                     item[8],  # FCUSTLEVEL
+                    item[9],  # FCUSTPYPE
+                    self._format_date_only(str(item[3]) if item[3] else None),  # FCREATEDATE
+                    self._parse_datetime(str(item[4]) if item[4] else None),  # FMODIFYDATE
                 )
             else:
                 logger.warning(f"不支持的数据类型或列表数据项不足: {type(item)}")
@@ -2884,8 +3121,9 @@ class MySQLManager:
                     _s("F_JYX_ASSISTANT2"),  # 23 F_JYX_ASSISTANT2
                     _dec("F_JY_QTY", "F_F_JY_QTY"),  # 24 F_JY_QTY
                     _dec("F_JY_QTY1"),  # 25 F_JY_QTY1
-                    _s("F_KDKF_HJFS"),  # 26 F_KDKF_HJFS
-                    (_s("F_ORA_TEXT_QTR") or _s("F_ora_TEXT_qtr")),  # 27 F_ORA_TEXT_QTR
+                    _s("F_KDKF_HJFS"),  # 25 F_KDKF_HJFS
+                    (_s("F_ORA_TEXT_9SB") or _s("F_ora_Text_9sb")),  # 26 F_ORA_TEXT_9SB
+                    (_s("F_ORA_TEXT_QTR") or _s("F_ora_TEXT_qtr") or _s("F_ora_Text_qtr")),  # 27 F_ORA_TEXT_QTR
                     _s("F_ORA_TEXT_QTR1"),  # 28 F_ORA_TEXT_QTR1
                     _s("FERPCLSID"),  # 29 FERPCLSID
                     _s("FCATEGORYID", None),  # 30 FCATEGORYID
@@ -2923,14 +3161,15 @@ class MySQLManager:
                     (self._to_decimal_or_none(get_item(23, None) or 0.0)),  # F_JY_QTY
                     (self._to_decimal_or_none(get_item(24, None) or 0.0)),  # F_JY_QTY1
                     get_item(25),  # F_KDKF_HJFS
-                    get_item(26),  # F_ORA_TEXT_QTR
-                    get_item(27),  # F_ORA_TEXT_QTR1
-                    get_item(28),  # FERPCLSID
-                    get_item(29, None),  # FCATEGORYID
-                    get_item(30, None),  # FTYPEID
-                    get_item(31),  # FBARCODE
-                    get_item(32),  # FNAME
-                    get_item(33),  # FSPECIFICATION
+                    get_item(26),  # F_ORA_TEXT_9SB
+                    get_item(27),  # F_ORA_TEXT_QTR
+                    get_item(28),  # F_ORA_TEXT_QTR1
+                    get_item(29),  # FERPCLSID
+                    get_item(30, None),  # FCATEGORYID
+                    get_item(31, None),  # FTYPEID
+                    get_item(32),  # FBARCODE
+                    get_item(33),  # FNAME
+                    get_item(34),  # FSPECIFICATION
                 )
             else:
                 logger.warning(f"不支持的数据类型: {type(item)}")
@@ -3072,6 +3311,75 @@ class MySQLManager:
         except Exception as e:
             logger.error(f"诊断过程本身出错: {e}")
 
+    def _diagnose_string_truncation(self, table, columns, batch):
+        """Diagnose SQL Server string truncation by comparing value size with column width."""
+        try:
+            logger.warning(f"正在对表 {table} 进行字符串截断诊断 (共 {len(batch)} 条记录)...")
+            if getattr(self, "db_type", "mysql") != "sqlserver" or not self.cursor:
+                return
+
+            base_name = str(table).split(".")[-1].replace("[", "").replace("]", "").strip()
+            self.cursor.execute(
+                """
+                SELECT COLUMN_NAME, DATA_TYPE, CHARACTER_MAXIMUM_LENGTH
+                FROM INFORMATION_SCHEMA.COLUMNS
+                WHERE TABLE_NAME = ?
+                """,
+                (base_name,),
+            )
+            rows = self.cursor.fetchall() or []
+            length_map = {}
+            for row in rows:
+                if isinstance(row, dict):
+                    col_name = row.get("COLUMN_NAME")
+                    data_type = row.get("DATA_TYPE")
+                    max_len = row.get("CHARACTER_MAXIMUM_LENGTH")
+                else:
+                    col_name = row[0] if len(row) > 0 else None
+                    data_type = row[1] if len(row) > 1 else None
+                    max_len = row[2] if len(row) > 2 else None
+                if col_name:
+                    length_map[str(col_name).upper()] = (str(data_type or "").lower(), max_len)
+
+            suspects = []
+            check_rows = batch[:20]
+            if len(batch) > 20:
+                check_rows.extend(batch[-20:])
+
+            for row_idx, row in enumerate(check_rows):
+                if len(row) != len(columns):
+                    continue
+                for col_idx, value in enumerate(row):
+                    if value is None:
+                        continue
+                    column_name = str(columns[col_idx]).strip()
+                    data_type, max_len = length_map.get(column_name.upper(), ("", None))
+                    if data_type not in {"nvarchar", "varchar", "nchar", "char"}:
+                        continue
+                    if max_len in (None, -1):
+                        continue
+                    text_value = str(value)
+                    char_len = len(text_value)
+                    storage_len = char_len * 2 if data_type.startswith("n") else char_len
+                    if storage_len > int(max_len):
+                        suspects.append((column_name, char_len, storage_len, int(max_len), text_value[:120]))
+
+            if suspects:
+                for column_name, char_len, storage_len, allowed_len, preview in suspects[:10]:
+                    logger.error(
+                        "[TRUNCATION] 表 %s 列 %s 超长: chars=%s bytes=%s allowed_bytes=%s preview=%r",
+                        table,
+                        column_name,
+                        char_len,
+                        storage_len,
+                        allowed_len,
+                        preview,
+                    )
+            else:
+                logger.warning("字符串截断诊断未发现明确超长列，可能是驱动编码或隐式转换问题。")
+        except Exception as e:
+            logger.error(f"字符串截断诊断本身失败: {e}")
+
     def _prepare_eng_bom_data(self, item) -> Optional[Tuple]:
         """准备物料清单数据（32 字段），兼容字典与列表格式"""
         try:
@@ -3115,16 +3423,28 @@ class MySQLManager:
 
     def _prepare_eng_bom_child_data(self, item) -> Optional[Tuple]:
         """准备物料清单子项数据�?6字段），兼容字典与列表格�?        FieldKeys 顺序(来源�?API):
-        FID, FTreeEntity_FENTRYID, FTreeEntity_FSEQ, FMATERIALID, FNUMERATOR, FDENOMINATOR,
+        FID, FTreeEntity_FENTRYID, FTreeEntity_FSEQ, FMATERIALID, FMATERIALIDCHILD.FNUMBER, FMATERIALIDCHILD.FNAME, FNUMERATOR, FDENOMINATOR,
         FISSUETYPE, FBACKFLUSHTYPE, FSUPPLYORG, FSTOCKID, FENTRYROWID, FREPLACEGROUP, FQTY, FACTUALQTY, FMASTERID, FMATERIALTYPE
         直接映射�?MySQL/SQL Server 列（不再使用 FMATERIALIDCHILD �?FQTY2�?"""
         try:
             if isinstance(item, dict):
+                child_number = (
+                    item.get("FMATERIALIDCHILD.FNUMBER")
+                    or item.get("FMATERIALIDCHILD.FNumber")
+                    or item.get("FCHILDNUMBER")
+                )
+                child_name = (
+                    item.get("FMATERIALIDCHILD.FNAME")
+                    or item.get("FMATERIALIDCHILD.FName")
+                    or item.get("FCHILDNAME")
+                )
                 return (
                     (self._to_int_or_none(item.get("FID") or 0) or item.get("FId")),  # FID
                     (self._to_int_or_none(item.get("FTreeEntity_FENTRYID") or 0) or item.get("FENTRYID")),  # FENTRYID
                     (self._to_int_or_none(item.get("FTreeEntity_FSEQ") or 0) or item.get("FSEQ")),  # FSEQ
                     self._safe_str(item.get("FMATERIALID") or item.get("FTreeEntity_FMATERIALID")),  # FMATERIALID
+                    self._safe_str(child_number),  # FCHILDNUMBER
+                    self._safe_str(child_name),  # FCHILDNAME
                     (self._to_decimal_or_none(item.get("FNUMERATOR") or 0.0)),  # FNUMERATOR
                     (self._to_decimal_or_none(item.get("FDENOMINATOR") or 0.0)),  # FDENOMINATOR
                     self._safe_str(item.get("FISSUETYPE")),  # FISSUETYPE
@@ -3139,26 +3459,28 @@ class MySQLManager:
                     self._safe_str(item.get("FMATERIALTYPE") or item.get("FTreeEntity_FMATERIALTYPE")),  # FMATERIALTYPE
                     self._parse_datetime(item.get("FMODIFYDATE") or item.get("FModifyDate")),  # FMODIFYDATE
                 )
-            elif isinstance(item, list) and len(item) >= 16:
-                # 列表模式下，尝试兼容可能存在的第17个字段（FMODIFYDATE），若无则为None
-                fmodifydate = self._parse_datetime(item[16]) if len(item) > 16 else None
+            elif isinstance(item, list) and len(item) >= 18:
+                # 列表模式下，尝试兼容可能存在的第19个字段（FMODIFYDATE），若无则为None
+                fmodifydate = self._parse_datetime(item[18]) if len(item) > 18 else None
                 return (
                     (self._to_int_or_none(item[0]) or 0),  # FID
                     (self._to_int_or_none(item[1]) or 0),  # FENTRYID
                     (self._to_int_or_none(item[2]) or 0),  # FSEQ
                     self._safe_str(item[3]),  # FMATERIALID
-                    (self._to_decimal_or_none(item[4]) or 0.0),  # FNUMERATOR
-                    (self._to_decimal_or_none(item[5]) or 0.0),  # FDENOMINATOR
-                    self._safe_str(item[6]),  # FISSUETYPE
-                    self._safe_str(item[7]),  # FBACKFLUSHTYPE
-                    self._to_int_or_none(item[8]) or 0,  # FSUPPLYORG
-                    self._to_int_or_none(item[9]) or 0,  # FSTOCKID
-                    self._safe_str(item[10]),  # FENTRYROWID
-                    (self._to_int_or_none(item[11]) or 0),  # FREPLACEGROUP
-                    (self._to_decimal_or_none(item[12]) or 0.0),  # FQTY
-                    (self._to_decimal_or_none(item[13]) or 0.0),  # FACTUALQTY
-                    (self._to_int_or_none(item[14]) or 0),  # FMASTERID
-                    self._safe_str(item[15]),  # FMATERIALTYPE
+                    self._safe_str(item[4]),  # FCHILDNUMBER
+                    self._safe_str(item[5]),  # FCHILDNAME
+                    (self._to_decimal_or_none(item[6]) or 0.0),  # FNUMERATOR
+                    (self._to_decimal_or_none(item[7]) or 0.0),  # FDENOMINATOR
+                    self._safe_str(item[8]),  # FISSUETYPE
+                    self._safe_str(item[9]),  # FBACKFLUSHTYPE
+                    self._to_int_or_none(item[10]) or 0,  # FSUPPLYORG
+                    self._to_int_or_none(item[11]) or 0,  # FSTOCKID
+                    self._safe_str(item[12]),  # FENTRYROWID
+                    (self._to_int_or_none(item[13]) or 0),  # FREPLACEGROUP
+                    (self._to_decimal_or_none(item[14]) or 0.0),  # FQTY
+                    (self._to_decimal_or_none(item[15]) or 0.0),  # FACTUALQTY
+                    (self._to_int_or_none(item[16]) or 0),  # FMASTERID
+                    self._safe_str(item[17]),  # FMATERIALTYPE
                     fmodifydate,  # FMODIFYDATE
                 )
             else:

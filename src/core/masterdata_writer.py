@@ -29,22 +29,23 @@ def insert_customer_data(manager, data: List[Dict]) -> int:
             if not manager.connect():
                 logger.error("重新连接数据库失败，无法插入客户资料数据")
                 return 0
-        # 跳过自动字段检查与修改，直接执行插入
         try:
+            manager._ensure_additional_columns_for_customer()
             # 准备SQL语句
             sql = """
             INSERT INTO customer 
-            (FCUSTID, FNUMBER, FNAME, FCREATEDATE, FMODIFYDATE, FGROUP, FSELLERNAME, FSTAFF, FCUSTLEVEL)
-            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
+            (FCUSTID, FNUMBER, FNAME, FGROUP, FSELLERNAME, FSTAFF, FCUSTLEVEL, FCUSTPYPE, FCREATEDATE, FMODIFYDATE)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
             ON DUPLICATE KEY UPDATE 
             FNUMBER = VALUES(FNUMBER),
             FNAME = VALUES(FNAME),
-            FCREATEDATE = VALUES(FCREATEDATE),
-            FMODIFYDATE = VALUES(FMODIFYDATE),
             FGROUP = VALUES(FGROUP),
             FSELLERNAME = VALUES(FSELLERNAME),
             FSTAFF = VALUES(FSTAFF),
             FCUSTLEVEL = VALUES(FCUSTLEVEL),
+            FCUSTPYPE = VALUES(FCUSTPYPE),
+            FCREATEDATE = VALUES(FCREATEDATE),
+            FMODIFYDATE = VALUES(FMODIFYDATE),
             SYNC_TIME = CURRENT_TIMESTAMP
             """
             # 统一走批量插入路径，自动兼容 MySQL 与 SQL Server（转 MERGE）
@@ -128,6 +129,7 @@ def insert_bd_material(manager, data: List[Dict]) -> int:
                 return 0
         try:
             # 存储物料分组中文名称前，先确保目标列可写入文本
+            manager._ensure_additional_columns_for_bd_material()
             manager._ensure_bd_material_group_text_column()
 
             sql = """
@@ -136,10 +138,10 @@ def insert_bd_material(manager, data: List[Dict]) -> int:
                  FCREATEDATE, FMODIFYDATE, FDOCUMENTSTATUS, FFORBIDSTATUS, FAPPROVEDATE,
                  FREFSTATUS, F_TMHE_TEXT, F_JY_TEXT, F_JY_TEXT1, F_JY_TEXT2, F_JYX_TEXT1, F_JYX_TEXT2, F_JYX_TEXT4,
                  F_JYX_TEXT3, F_JYX_ASSISTANT, F_JYX_ASSISTANT1, F_JYX_ASSISTANT2, F_JY_QTY, F_JY_QTY1,
-                 F_KDKF_HJFS, F_ORA_TEXT_QTR, F_ORA_TEXT_QTR1, FERPCLSID, FCATEGORYID, FTYPEID,
+                 F_KDKF_HJFS, F_ORA_TEXT_9SB, F_ORA_TEXT_QTR, F_ORA_TEXT_QTR1, FERPCLSID, FCATEGORYID, FTYPEID,
                  FBARCODE, FNAME, FSPECIFICATION)
                 VALUES (
-                    %s, %s, %s, %s, %s, %s,
+                    %s, %s, %s, %s, %s, %s, %s,
                     %s, %s, %s, %s, %s,
                     %s, %s, %s, %s, %s, %s, %s, %s,
                     %s, %s, %s, %s, %s, %s,
@@ -172,6 +174,7 @@ def insert_bd_material(manager, data: List[Dict]) -> int:
                     F_JY_QTY = VALUES(F_JY_QTY),
                     F_JY_QTY1 = VALUES(F_JY_QTY1),
                     F_KDKF_HJFS = VALUES(F_KDKF_HJFS),
+                    F_ORA_TEXT_9SB = VALUES(F_ORA_TEXT_9SB),
                     F_ORA_TEXT_QTR = VALUES(F_ORA_TEXT_QTR),
                     F_ORA_TEXT_QTR1 = VALUES(F_ORA_TEXT_QTR1),
                     FERPCLSID = VALUES(FERPCLSID),
@@ -324,15 +327,17 @@ def insert_eng_bom_child(manager, data: List[Dict]) -> int:
                 logger.error("重新连接数据库失败，无法插入物料清单子项数据")
                 return 0
         try:
-            # 跳过自动建表与字段检查，直接执行插入
+            manager._ensure_additional_columns_for_eng_bomchild()
 
             sql = """
                 INSERT INTO eng_bomchild
-                (FID, FENTRYID, FSEQ, FMATERIALID, FNUMERATOR, FDENOMINATOR, FISSUETYPE, FBACKFLUSHTYPE, FSUPPLYORG, FSTOCKID, FENTRYROWID, FREPLACEGROUP, FQTY, FACTUALQTY, FMASTERID, FMATERIALTYPE, FMODIFYDATE)
-                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                (FID, FENTRYID, FSEQ, FMATERIALID, FCHILDNUMBER, FCHILDNAME, FNUMERATOR, FDENOMINATOR, FISSUETYPE, FBACKFLUSHTYPE, FSUPPLYORG, FSTOCKID, FENTRYROWID, FREPLACEGROUP, FQTY, FACTUALQTY, FMASTERID, FMATERIALTYPE, FMODIFYDATE)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
                 ON DUPLICATE KEY UPDATE
                     FSEQ = VALUES(FSEQ),
                     FMATERIALID = VALUES(FMATERIALID),
+                    FCHILDNUMBER = VALUES(FCHILDNUMBER),
+                    FCHILDNAME = VALUES(FCHILDNAME),
                     FNUMERATOR = VALUES(FNUMERATOR),
                     FDENOMINATOR = VALUES(FDENOMINATOR),
                     FISSUETYPE = VALUES(FISSUETYPE),

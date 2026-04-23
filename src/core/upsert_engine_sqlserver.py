@@ -7,7 +7,7 @@ import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import TYPE_CHECKING, Any, List
 
-from src.core.write_outcome import WriteOutcome
+from src.core.performance_logging import log_write_metrics
 
 if TYPE_CHECKING:
     from src.core.mysql_manager import MySQLManager
@@ -20,57 +20,9 @@ class UpsertEngineSqlServer:
         self.manager = manager
         self.logger = logger or logging.getLogger(__name__)
 
-    def _filter_required_rows(
-        self,
-        table: str,
-        columns: List[str],
-        values: List[List[Any]],
-    ) -> tuple[List[List[Any]], WriteOutcome]:
-        required_map = {
-            "sal_deliverynotice": ["FID", "FENTRYID"],
-            "prd_instock": ["FID", "FENTRYID", "FBILLNO"],
-            "ap_payable": ["FID", "FENTRYID"],
-        }
-        table_name = str(table).split(".")[-1].replace("[", "").replace("]", "").strip().lower()
-        required_cols = required_map.get(table_name, [])
-        if not required_cols:
-            return values, WriteOutcome()
-
-        required_indices = []
-        for required_col in required_cols:
-            for index, column in enumerate(columns):
-                if str(column).strip().upper() == required_col:
-                    required_indices.append(index)
-                    break
-
-        filtered: List[List[Any]] = []
-        invalid_required = 0
-        for row in values:
-            try:
-                if any((row[i] is None) or (str(row[i]).strip() == "") for i in required_indices):
-                    invalid_required += 1
-                    continue
-            except Exception:
-                invalid_required += 1
-                continue
-            filtered.append(row)
-
-        if invalid_required > 0:
-            self.logger.warning("[%s] 必填字段为空已跳过: %s 条", table, invalid_required)
-        return filtered, WriteOutcome(invalid=invalid_required)
-
-    def _finalize_outcome(
-        self,
-        inserted: int,
-        required_outcome: WriteOutcome,
-        deduped_count: int,
-    ) -> int:
-        self.manager._last_write_outcome = WriteOutcome(
-            inserted=inserted,
-            invalid=required_outcome.invalid,
-            deduped=deduped_count,
-        )
-        return inserted
+    def _is_driver18(self, manager: "MySQLManager") -> bool:
+        drv = getattr(manager, "config", {}).get("driver", "ODBC Driver 17 for SQL Server")
+        return "ODBC Driver 18" in str(drv)
 
     def execute(
         self,
@@ -82,6 +34,7 @@ class UpsertEngineSqlServer:
         manager = self.manager
         logger = self.logger
         total_inserted = 0
+        is_d18 = self._is_driver18(manager)
         # SQL Server 路径：将 MySQL 的 INSERT ... ON DUPLICATE 语句转为 MERGE
         if getattr(manager, "db_type", "mysql") == "sqlserver":
             table, columns = manager._parse_insert_sql(sql)
@@ -120,8 +73,41 @@ class UpsertEngineSqlServer:
                 except Exception as e:
                     logger.warning(f"[{table}] 数据对齐检查失败: {e}")
 
-            values, required_outcome = self._filter_required_rows(base_name, columns, values)
-            deduped_count = 0
+            try:
+                required_map = {
+                    "sal_deliverynotice": ["FID", "FENTRYID"],
+                    "prd_instock": ["FID", "FENTRYID"],
+                    "ap_payable": ["FID", "FENTRYID"],
+                }
+                required_cols = required_map.get(str(table).strip().lower())
+                if required_cols:
+                    required_indices = []
+                    for rc in required_cols:
+                        idx = None
+                        for i, c in enumerate(columns):
+                            if str(c).strip().upper() == rc:
+                                idx = i
+                                break
+                        if idx is not None:
+                            required_indices.append(idx)
+                    if required_indices:
+                        original_count = len(values)
+                        filtered = []
+                        invalid_required = 0
+                        for row in values:
+                            try:
+                                if any((row[i] is None) or (str(row[i]).strip() == "") for i in required_indices):
+                                    invalid_required += 1
+                                    continue
+                            except Exception:
+                                invalid_required += 1
+                                continue
+                            filtered.append(row)
+                        values = filtered
+                        if invalid_required > 0:
+                            logger.warning(f"[{table}] 必填字段为空已跳过: {invalid_required} 条")
+            except Exception:
+                pass
 
             is_inventory_table = str(table).strip().lower() == "stk_inventory"
             # 即时库存：为了提升速度，使用较大批次并由临时表一次性提交
@@ -239,48 +225,61 @@ class UpsertEngineSqlServer:
             )
             on_clause = " AND ".join([f"t.{c} = s.{c}" for c in pk_cols])
             source_sql = f"USING (VALUES ({', '.join(['?' for _ in columns])})) AS s({', '.join(columns)}) "
-            # 对需要类型转换的表启用类型安全转换
-            if base_name in ("sub_subreqorder", "ap_payable"):
-                col_type_map = {}
-                try:
-                    manager.cursor.execute(
-                        """
-                        SELECT COLUMN_NAME, DATA_TYPE
-                        FROM INFORMATION_SCHEMA.COLUMNS
-                        WHERE TABLE_NAME = ?
-                        """,
-                        (base_name,),
-                    )
-                    rows = manager.cursor.fetchall() or []
-                    for r in rows:
-                        if isinstance(r, dict):
-                            name = r.get("COLUMN_NAME")
-                            dtype = r.get("DATA_TYPE")
-                        else:
-                            name = r[0] if len(r) > 0 else None
-                            dtype = r[1] if len(r) > 1 else None
-                        if name:
-                            col_type_map[str(name).upper()] = str(dtype).lower() if dtype is not None else ""
-                except Exception:
-                    col_type_map = {}
-                int_types = {"int", "bigint", "smallint", "tinyint"}
-                dec_types = {"numeric", "decimal", "float", "real", "money", "smallmoney"}
-                dt_types = {"datetime", "datetime2", "smalldatetime", "date", "time"}
-                source_parts = []
-                for c in columns:
-                    c_up = str(c).strip().upper()
-                    dtype = col_type_map.get(c_up, "")
-                    if dtype in int_types:
-                        source_parts.append(f"COALESCE(TRY_CONVERT(BIGINT, CONVERT(NVARCHAR(64), ?)), 0) AS {c}")
-                    elif dtype in dec_types:
-                        source_parts.append(
-                            f"COALESCE(TRY_CONVERT(DECIMAL(23,10), CONVERT(NVARCHAR(64), ?)), 0) AS {c}"
-                        )
-                    elif dtype in dt_types:
-                        source_parts.append(f"TRY_CONVERT(DATETIME, ?) AS {c}")
+            # 对所有表启用类型安全转换：将非数值字符串（如 'C'）安全转换为数值，避免 8114 错误
+            col_type_map = {}
+            try:
+                manager.cursor.execute(
+                    """
+                    SELECT COLUMN_NAME, DATA_TYPE, CHARACTER_MAXIMUM_LENGTH
+                    FROM INFORMATION_SCHEMA.COLUMNS
+                    WHERE TABLE_NAME = ?
+                    """,
+                    (base_name,),
+                )
+                rows = manager.cursor.fetchall() or []
+                for r in rows:
+                    if isinstance(r, dict):
+                        name = r.get("COLUMN_NAME")
+                        dtype = r.get("DATA_TYPE")
+                        max_len = r.get("CHARACTER_MAXIMUM_LENGTH")
                     else:
-                        source_parts.append(f"TRY_CONVERT(NVARCHAR(255), ?) AS {c}")
-                source_sql = f"USING (SELECT {', '.join(source_parts)}) AS s({', '.join(columns)}) "
+                        name = r[0] if len(r) > 0 else None
+                        dtype = r[1] if len(r) > 1 else None
+                        max_len = r[2] if len(r) > 2 else None
+                    if name:
+                        col_type_map[str(name).upper()] = (
+                            str(dtype).lower() if dtype is not None else "",
+                            max_len,
+                        )
+            except Exception:
+                col_type_map = {}
+            int_types = {"int", "bigint", "smallint", "tinyint"}
+            dec_types = {"numeric", "decimal", "float", "real", "money", "smallmoney"}
+            dt_types = {"datetime", "datetime2", "smalldatetime", "date", "time"}
+            text_types = {"nvarchar", "varchar", "nchar", "char"}
+            source_parts = []
+            for c in columns:
+                c_up = str(c).strip().upper()
+                dtype, max_len = col_type_map.get(c_up, ("", None))
+                if dtype in int_types:
+                    source_parts.append(f"COALESCE(TRY_CONVERT(BIGINT, CONVERT(NVARCHAR(64), ?)), 0) AS {c}")
+                elif dtype in dec_types:
+                    source_parts.append(
+                        f"COALESCE(TRY_CONVERT(DECIMAL(23,10), CONVERT(NVARCHAR(64), ?)), 0) AS {c}"
+                    )
+                elif dtype in dt_types:
+                    source_parts.append(f"TRY_CONVERT(DATETIME, ?) AS {c}")
+                elif dtype in text_types:
+                    if max_len == -1:
+                        cast_type = f"{dtype.upper()}(MAX)"
+                    elif max_len is not None and int(max_len) > 0:
+                        cast_type = f"{dtype.upper()}({int(max_len)})"
+                    else:
+                        cast_type = f"{dtype.upper()}(255)"
+                    source_parts.append(f"TRY_CONVERT({cast_type}, ?) AS {c}")
+                else:
+                    source_parts.append(f"TRY_CONVERT(NVARCHAR(255), ?) AS {c}")
+            source_sql = f"USING (SELECT {', '.join(source_parts)}) AS s({', '.join(columns)}) "
             merge_sql = (
                 f"MERGE INTO {table} AS t "
                 + source_sql
@@ -344,9 +343,9 @@ class UpsertEngineSqlServer:
                         pass
                 elif values_len <= 50000:
                     try:
-                        insert_threads = min(max(insert_threads, 4), 6)
+                        insert_threads = min(max(insert_threads, 1), 2)
                     except Exception:
-                        insert_threads = 4
+                        insert_threads = 1
                     try:
                         batch_size = max(batch_size, 5000)
                     except Exception:
@@ -356,7 +355,9 @@ class UpsertEngineSqlServer:
                     except Exception:
                         pass
                 else:
-                    use_staging = True
+                    # 大数据量（>50000）默认启用 staging 以提升性能，
+                    # 但尊重全局 use_staging 配置：用户明确禁用时不再强制启用
+                    use_staging = str(manager.config.get("use_staging", "true")).strip().lower() == "true"
                     insert_threads = 1
             except Exception:
                 pass
@@ -387,14 +388,11 @@ class UpsertEngineSqlServer:
             # 对关键表强制启用临时表（即使 force_threads_all 为 true）
             try:
                 current_table_base = str(table).split(".")[-1].replace("[", "").replace("]", "").strip().lower()
-                always_stage_tables = {"eng_bomchild", "prd_ppbomentry", "sub_subreqorder"}
+                always_stage_tables: set = set()  # 空集：禁用硬编码强制 staging，通过配置控制
                 force_subreq_staging = False
-                try:
-                    force_subreq_staging = (
-                        str(manager.config.get("force_subreq_staging", "true")).strip().lower() == "true"
-                    )
-                except Exception:
-                    force_subreq_staging = True
+                force_subreq_staging = (
+                    str(manager.config.get("force_subreq_staging", "false")).strip().lower() == "true"
+                )
                 if (current_table_base in always_stage_tables) or (
                     current_table_base == "sub_subreqorder" and force_subreq_staging
                 ):
@@ -403,25 +401,21 @@ class UpsertEngineSqlServer:
                     logger.info(f"表 {table} 强制启用 staging 模式（单线程）")
             except Exception:
                 pass
-            # 销售订单：为验证与提升批量性能，临时启用临时表极速模式
-            try:
-                if (str(table).strip().lower() == "saleorder") and (not force_threads_all):
-                    use_staging = True
-            except Exception:
-                pass
+            # 销售订单：默认通过 use_staging 配置控制，不再硬编码启用
+            # 采购订单：默认通过 use_staging 配置控制
+            # 即时库存：默认通过 use_staging 配置控制
             try:
                 if (
                     (str(table).strip().lower() == "pur_purchaseorder")
                     and (not force_threads_all)
                     and values_len > 50000
                 ):
-                    use_staging = True
-                    insert_threads = 1
+                    pass  # 不再强制启用 staging，通过 use_staging 配置统一控制
             except Exception:
                 pass
-            # 即时库存：强制启用临时表路径，但在插入时对参数显式 CAST，避免类型推断错误
+            # 即时库存：默认通过 use_staging 配置控制，不再强制启用
             if is_inventory_table and (not force_threads_all):
-                use_staging = True
+                pass  # staging 由 use_staging 配置统一控制
             try:
                 if current_table_base == "sub_subreqorder":
                     allow_subreq_threads = True
@@ -433,8 +427,6 @@ class UpsertEngineSqlServer:
                         allow_subreq_threads = False
                     if allow_subreq_threads:
                         use_staging = False
-                        if insert_threads < 2:
-                            insert_threads = 4
                         logger.info(f"表 {table} 已启用多线程模式，线程数: {insert_threads}")
             except Exception:
                 pass
@@ -444,9 +436,9 @@ class UpsertEngineSqlServer:
                     try:
                         if hasattr(manager.connection, "autocommit"):
                             manager.connection.autocommit = False
-                        # 为提升插入速度，开启 fast_executemany；即时库存通过显式 CAST 保证类型安全
+                        # 为提升插入速度，开启 fast_executemany；ODBC Driver 18 禁用以避免崩溃
                         if hasattr(manager.cursor, "fast_executemany"):
-                            manager.cursor.fast_executemany = True
+                            manager.cursor.fast_executemany = not is_d18
                         # 生成安全的临时表名（去掉架构/括号/特殊字符），避免 dbo.TableName 带点导致失败
                         base_name = table.split(".")[-1].replace("[", "").replace("]", "")
                         safe_name = "".join(ch if (ch.isalnum() or ch == "_") else "_" for ch in base_name)
@@ -526,8 +518,8 @@ class UpsertEngineSqlServer:
                                     f"[STAGE] 针对表 {base_name} 禁用 fast_executemany 以避免驱动类型转换错误"
                                 )
                             elif hasattr(manager.cursor, "fast_executemany"):
-                                manager.cursor.fast_executemany = True
-                                logger.debug("[STAGE] 已启用 fast_executemany 以加速批量插入")
+                                manager.cursor.fast_executemany = not is_d18
+                                logger.debug("[STAGE] fast_executemany=%s (ODBC Driver 18 compat)", not is_d18)
                         except Exception:
                             pass
                         identity_insert_enabled = False
@@ -615,16 +607,18 @@ class UpsertEngineSqlServer:
                                 )
                             elif base_name.strip().lower() == "eng_bomchild":
                                 # 针对 eng_bomchild 显式构建 TRY_CAST，防止 8114 (varchar to numeric) 错误
-                                # 字段: FID, FENTRYID, FSEQ, FMATERIALID, FNUMERATOR, FDENOMINATOR, FISSUETYPE, FBACKFLUSHTYPE,
+                                # 字段: FID, FENTRYID, FSEQ, FMATERIALID, FCHILDNUMBER, FCHILDNAME, FNUMERATOR, FDENOMINATOR, FISSUETYPE, FBACKFLUSHTYPE,
                                 #       FSUPPLYORG, FSTOCKID, FENTRYROWID, FREPLACEGROUP, FQTY, FACTUALQTY, FMASTERID, FMATERIALTYPE, FMODIFYDATE
                                 insert_stage_sql = (
-                                    f"INSERT INTO {stage_ref} (FID, FENTRYID, FSEQ, FMATERIALID, FNUMERATOR, FDENOMINATOR, FISSUETYPE, FBACKFLUSHTYPE, "
+                                    f"INSERT INTO {stage_ref} (FID, FENTRYID, FSEQ, FMATERIALID, FCHILDNUMBER, FCHILDNAME, FNUMERATOR, FDENOMINATOR, FISSUETYPE, FBACKFLUSHTYPE, "
                                     f"FSUPPLYORG, FSTOCKID, FENTRYROWID, FREPLACEGROUP, FQTY, FACTUALQTY, FMASTERID, FMATERIALTYPE, FMODIFYDATE) "
                                     f"SELECT "
                                     f"TRY_CAST(? AS INT), "  # FID
                                     f"TRY_CAST(? AS INT), "  # FENTRYID
                                     f"TRY_CAST(? AS INT), "  # FSEQ
                                     f"TRY_CAST(? AS NVARCHAR(64)), "  # FMATERIALID
+                                    f"TRY_CAST(? AS NVARCHAR(255)), "  # FCHILDNUMBER
+                                    f"TRY_CAST(? AS NVARCHAR(255)), "  # FCHILDNAME
                                     f"COALESCE(TRY_CAST(? AS DECIMAL(23,10)), 0), "  # FNUMERATOR
                                     f"COALESCE(TRY_CAST(? AS DECIMAL(23,10)), 0), "  # FDENOMINATOR
                                     f"TRY_CAST(? AS NVARCHAR(32)), "  # FISSUETYPE
@@ -690,6 +684,7 @@ class UpsertEngineSqlServer:
                         loaded = 0
                         for b_idx, i in enumerate(range(0, len(values), batch_size), start=1):
                             batch = values[i : i + batch_size]
+                            batch_exec_seconds = 0.0
                             logger.info(f"[STAGE] 加载批次 {b_idx}/{total_batches}，记录数: {len(batch)}")
                             try:
                                 manager.cursor.executemany(insert_stage_sql, batch)
@@ -821,7 +816,7 @@ class UpsertEngineSqlServer:
                         if hasattr(manager.connection, "autocommit"):
                             manager.connection.autocommit = True
                         logger.info(f"成功插入/更新 {total_inserted} 条记录 (SQL Server, 临时表 MERGE)")
-                        return self._finalize_outcome(total_inserted, required_outcome, deduped_count)
+                        return total_inserted
                     except Exception as e:
                         try:
                             manager.connection.rollback()
@@ -861,12 +856,11 @@ class UpsertEngineSqlServer:
                     try:
                         if hasattr(manager.connection, "autocommit"):
                             manager.connection.autocommit = False
-                        # 普通路径仍开启 fast_executemany 以加速（准备函数已做类型安全）
-                        # 针对 eng_bomchild 显式禁用 fast_executemany 以避免 8114 错误
+                        # 普通路径：ODBC Driver 18 禁用 fast_executemany 以避免崩溃；eng_bomchild 禁用以避免 8114 错误
                         if hasattr(manager.cursor, "fast_executemany"):
-                            if str(table).strip().lower() in ("eng_bomchild",):
+                            if str(table).strip().lower() in ("eng_bomchild",) or is_d18:
                                 manager.cursor.fast_executemany = False
-                                logger.debug(f"针对表 {table} 禁用 fast_executemany 以兼容类型转换")
+                                logger.debug(f"针对表 {table} 禁用 fast_executemany (is_d18={is_d18})")
                             else:
                                 manager.cursor.fast_executemany = True
                         total_batches = (len(values) - 1) // batch_size + 1
@@ -898,8 +892,8 @@ class UpsertEngineSqlServer:
                         if str(table).strip().lower() == "bd_material" and fnum_idx is not None:
                             update_only_merge_sql = (
                                 f"MERGE INTO {table} AS t "
-                                f"USING (VALUES ({', '.join(['?' for _ in columns])})) AS s({', '.join(columns)}) "
-                                f"ON t.FNUMBER = s.FNUMBER "
+                                + source_sql
+                                + f"ON t.FNUMBER = s.FNUMBER "
                                 + (
                                     "WHEN MATCHED THEN UPDATE SET "
                                     + ", ".join([f"t.{c} = COALESCE(s.{c}, t.{c})" for c in non_pk_cols])
@@ -910,7 +904,9 @@ class UpsertEngineSqlServer:
                         for b_idx, i in enumerate(range(0, len(values), batch_size), start=1):
                             batch = values[i : i + batch_size]
                             logger.info(f"处理批次 {b_idx}/{total_batches}，记录数: {len(batch)}")
-                            if str(table).strip().lower() == "bd_material" and fnum_idx is not None:
+                            batch_exec_seconds = 0.0
+                            is_bd_material = str(table).strip().lower() == "bd_material" and fnum_idx is not None
+                            if is_bd_material:
                                 # 先更新已存在 FNUMBER 的记录
                                 update_rows = []
                                 insert_rows = []
@@ -927,11 +923,15 @@ class UpsertEngineSqlServer:
                                         dedup_new_map[key_str] = row
                                 insert_rows = list(dedup_new_map.values())
                                 if update_rows and update_only_merge_sql:
+                                    exec_started_at = time.perf_counter()
                                     manager.cursor.executemany(update_only_merge_sql, update_rows)
+                                    batch_exec_seconds += time.perf_counter() - exec_started_at
                                     logger.info(f"[bd_material] 按 FNUMBER 更新 {len(update_rows)} 条记录")
                                     total_inserted += len(update_rows)
                                 if insert_rows:
+                                    exec_started_at = time.perf_counter()
                                     manager.cursor.executemany(merge_sql, insert_rows)
+                                    batch_exec_seconds += time.perf_counter() - exec_started_at
                                     logger.info(f"[bd_material] 按 FMATERIALID 插入/更新 {len(insert_rows)} 条记录")
                                     total_inserted += len(insert_rows)
                                     # 将新插入的 FNUMBER 加入集合，避免后续批次重复
@@ -941,69 +941,86 @@ class UpsertEngineSqlServer:
                                         if not key_str:
                                             key_str = ""
                                         existing_fnumbers.add(key_str)
-                        else:
-                            # 非库存表：在批次内剔除主键为空的行，避免将 NULL 主键写入阶段表
-                            try:
-                                pk_raw_stage = manager._get_primary_key(table) or columns[0]
-                                pk_cols_stage = (
-                                    [c.strip() for c in pk_raw_stage.split(",")]
-                                    if isinstance(pk_raw_stage, str) and ("," in pk_raw_stage)
-                                    else [pk_raw_stage]
-                                )
-                                pk_idx_stage = []
-                                for pkc in pk_cols_stage:
-                                    idx = None
-                                    for i, c in enumerate(columns):
-                                        if str(c).strip().upper() == str(pkc).strip().upper():
-                                            idx = i
-                                            break
-                                    if idx is not None:
-                                        pk_idx_stage.append(idx)
-                                if pk_idx_stage:
-                                    filtered_batch = []
-                                    for row in batch:
-                                        try:
-                                            key_tuple = (
-                                                tuple([manager._hashable_key(row[i]) for i in pk_idx_stage])
-                                                if len(pk_idx_stage) > 1
-                                                else (manager._hashable_key(row[pk_idx_stage[0]]),)
-                                            )
-                                        except Exception:
-                                            key_tuple = tuple()
-                                        try:
-                                            if any((kv is None) or (str(kv).strip() == "") for kv in key_tuple):
+                            else:
+                                # 非库存表：在批次内剔除主键为空的行，避免将 NULL 主键写入阶段表
+                                try:
+                                    pk_raw_stage = manager._get_primary_key(table) or columns[0]
+                                    pk_cols_stage = (
+                                        [c.strip() for c in pk_raw_stage.split(",")]
+                                        if isinstance(pk_raw_stage, str) and ("," in pk_raw_stage)
+                                        else [pk_raw_stage]
+                                    )
+                                    pk_idx_stage = []
+                                    for pkc in pk_cols_stage:
+                                        idx = None
+                                        for i, c in enumerate(columns):
+                                            if str(c).strip().upper() == str(pkc).strip().upper():
+                                                idx = i
+                                                break
+                                        if idx is not None:
+                                            pk_idx_stage.append(idx)
+                                    if pk_idx_stage:
+                                        filtered_batch = []
+                                        for row in batch:
+                                            try:
+                                                key_tuple = (
+                                                    tuple([manager._hashable_key(row[i]) for i in pk_idx_stage])
+                                                    if len(pk_idx_stage) > 1
+                                                    else (manager._hashable_key(row[pk_idx_stage[0]]),)
+                                                )
+                                            except Exception:
+                                                key_tuple = tuple()
+                                            try:
+                                                if any((kv is None) or (str(kv).strip() == "") for kv in key_tuple):
+                                                    continue
+                                            except Exception:
                                                 continue
-                                        except Exception:
-                                            continue
-                                        filtered_batch.append(row)
-                                    batch = filtered_batch
-                            except Exception:
-                                pass
-                            # 其他表：按原逻辑执行 MERGE
-                            manager.cursor.executemany(merge_sql, batch)
-                            total_inserted += len(batch)
-                            # 间隔提交策略（>0 时启用）
-                            if commit_every_n_batches > 0 and (b_idx % commit_every_n_batches == 0):
+                                            filtered_batch.append(row)
+                                        batch = filtered_batch
+                                except Exception:
+                                    pass
+                                # 其他表：按原逻辑执行 MERGE
+                                exec_started_at = time.perf_counter()
+                                manager.cursor.executemany(merge_sql, batch)
+                                batch_exec_seconds = time.perf_counter() - exec_started_at
+                                logger.info(f"批次 {b_idx} 执行成功，写入 {len(batch)} 条记录")
+                                total_inserted += len(batch)
+                            # 间隔提交策略（>0 时每 N 批提交一次，==0 时每批提交以降低大事务风险）
+                            batch_commit_seconds = 0.0
+                            if commit_every_n_batches > 0:
+                                if b_idx % commit_every_n_batches == 0:
+                                    commit_started_at = time.perf_counter()
+                                    manager.connection.commit()
+                                    batch_commit_seconds = time.perf_counter() - commit_started_at
+                                    logger.debug(f"已间隔提交至批次 {b_idx}")
+                            else:
+                                commit_started_at = time.perf_counter()
                                 manager.connection.commit()
-                                logger.debug(f"已间隔提交至批次 {b_idx}")
-                            logger.debug(f"已处理批次 {b_idx}，累计待提交: {total_inserted}")
-                        # 统一最终提交（即使有间隔提交也再做一次确保一致）
+                                batch_commit_seconds = time.perf_counter() - commit_started_at
+                            log_write_metrics(
+                                logger,
+                                table_name=base_name,
+                                batch_index=b_idx,
+                                total_batches=total_batches,
+                                row_count=len(batch),
+                                exec_seconds=batch_exec_seconds,
+                                commit_seconds=batch_commit_seconds,
+                            )
+                        # 循环结束后统一最终提交（确保无遗漏）
                         manager.connection.commit()
-                        if hasattr(manager.connection, "autocommit"):
-                            manager.connection.autocommit = True
                         logger.info(f"成功插入/更新 {total_inserted} 条记录 (SQL Server)")
-                        return self._finalize_outcome(total_inserted, required_outcome, deduped_count)
+                        return total_inserted
                     except Exception as e:
                         try:
                             manager.connection.rollback()
                         except Exception:
                             pass
-                        if hasattr(manager.connection, "autocommit"):
-                            manager.connection.autocommit = True
                         logger.error(f"批量插入过程中发生错误，已回滚: {str(e)}")
                         # 诊断：如果是 8114 错误，尝试分析数据
                         if "8114" in str(e) or "data type" in str(e).lower():
                             manager._diagnose_data_type_error(table, columns, values)
+                        if "right truncation" in str(e).lower() or "string data" in str(e).lower():
+                            manager._diagnose_string_truncation(table, columns, batch)
                         raise
                 else:
                     # 多线程路径：分片并发，每线程独立连接与提交
@@ -1026,7 +1043,7 @@ class UpsertEngineSqlServer:
                                 if hasattr(local_conn, "autocommit"):
                                     local_conn.autocommit = False
                                 if hasattr(local_cursor, "fast_executemany"):
-                                    if base_name == "sub_subreqorder":
+                                    if base_name == "sub_subreqorder" or is_d18:
                                         local_cursor.fast_executemany = False
                                     else:
                                         local_cursor.fast_executemany = True
@@ -1095,7 +1112,7 @@ class UpsertEngineSqlServer:
                             cnt = fut.result()
                             total_inserted += cnt
                     logger.info(f"成功并发插入/更新 {total_inserted} 条记录 (SQL Server, 线程数 {insert_threads})")
-                    return self._finalize_outcome(total_inserted, required_outcome, deduped_count)
+                    return total_inserted
             except Exception as e:
                 logger.error(f"批量插入数据失败 (SQL Server): {str(e)}")
                 return 0

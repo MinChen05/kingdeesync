@@ -18,6 +18,7 @@ from src.core.upsert_engine_mysql import UpsertEngineMySQL
 from src.core.upsert_engine_sqlserver import UpsertEngineSqlServer
 from src.core.writers_registry import WriterRegistry
 from src.core.performance_logging import log_prepare_metrics
+from src.core.write_outcome import WriteOutcome
 from dbutils.pooled_db import PooledDB
 
 
@@ -96,6 +97,7 @@ class MySQLManager:
         self.connection = None
         self.cursor = None
         self._pool_init_failed = False
+        self._last_write_outcome = WriteOutcome()
         self.sync_run_repository = SyncRunRepository(self, logger=logger)
         self.sync_log_repository = SyncLogRepository(self, logger=logger)
         self.mysql_upsert_engine = UpsertEngineMySQL(self, logger=logger)
@@ -524,9 +526,17 @@ class MySQLManager:
                 self.connection.rollback()
             return 0
 
+    def execute_writer_with_outcome(self, method_name: str, data: List[Dict]) -> WriteOutcome:
+        """Execute a writer and preserve structured write outcome metadata."""
+        self._last_write_outcome = WriteOutcome()
+        inserted = self.writer_registry.execute(self, method_name, data)
+        if self._last_write_outcome.inserted == 0:
+            self._last_write_outcome.inserted = WriteOutcome.from_insert_count(inserted).inserted
+        return self._last_write_outcome
+
     def execute_writer(self, method_name: str, data: List[Dict]) -> int:
         """Execute a registered writer by name."""
-        return self.writer_registry.execute(self, method_name, data)
+        return self.execute_writer_with_outcome(method_name, data).inserted
 
     def recover_stale_sync_runs(
         self,

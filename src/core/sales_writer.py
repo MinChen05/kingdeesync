@@ -2,17 +2,10 @@
 
 from __future__ import annotations
 
-
-
 import logging
-
 from typing import Dict, List
 
-
-
 from src.config.config_manager import config_manager
-
-
 
 logger = logging.getLogger(__name__)
 
@@ -479,9 +472,9 @@ def insert_ap_payable(manager, data: List[Dict]) -> int:
             INSERT INTO AP_Payable (
                 FID, FENTRYID, FSEQ, FBILLNAME, FBILLNO, FDATE, FPURCHASEORGNAME, FCUSTOMER,
                 FSUPPLIERNAME, FSETACCOUNTTYPE, FMATERIALNUMBER, FMATERIALNAME, FPRICEUNITNAME,
-                FPRICEQTY, FALLAMOUNTFOR_D, FNOTAXAMOUNTFOR, FDISCOUNTAMOUNTFOR, FModifyDate
+                FPRICEQTY, FALLAMOUNTFOR_D, FNOTAXAMOUNTFOR, FDISCOUNTAMOUNTFOR, FENTRYDISCOUNTRATE, FENTRYTAXRATE, FModifyDate
             ) VALUES (
-                %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s
+                %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s
             )
             ON DUPLICATE KEY UPDATE
                 FID=VALUES(FID),
@@ -500,6 +493,8 @@ def insert_ap_payable(manager, data: List[Dict]) -> int:
                 FALLAMOUNTFOR_D=VALUES(FALLAMOUNTFOR_D),
                 FNOTAXAMOUNTFOR=VALUES(FNOTAXAMOUNTFOR),
                 FDISCOUNTAMOUNTFOR=VALUES(FDISCOUNTAMOUNTFOR),
+                FENTRYDISCOUNTRATE=VALUES(FENTRYDISCOUNTRATE),
+                FENTRYTAXRATE=VALUES(FENTRYTAXRATE),
                 FModifyDate=VALUES(FModifyDate),
                 SYNC_TIME=CURRENT_TIMESTAMP
         """

@@ -2,24 +2,26 @@
 负责与数据库进行数据交互，并使用连接池提高性能。"""
 
 import json
-import pymysql
-import pyodbc
 import logging
-import time
 import threading
-from typing import List, Dict, Any, Optional, Tuple
+import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime
 from decimal import Decimal, InvalidOperation
+from typing import Any, Dict, List, Optional, Tuple
+
+import pymysql
+import pyodbc
+from dbutils.pooled_db import PooledDB
+
 from src.config.config_manager import config_manager
+from src.core.performance_logging import log_prepare_metrics
 from src.core.sync_log_repository import SyncLogRepository
 from src.core.sync_run_repository import SyncRunRepository
 from src.core.upsert_engine_mysql import UpsertEngineMySQL
 from src.core.upsert_engine_sqlserver import UpsertEngineSqlServer
-from src.core.writers_registry import WriterRegistry
-from src.core.performance_logging import log_prepare_metrics
 from src.core.write_outcome import WriteOutcome
-from dbutils.pooled_db import PooledDB
+from src.core.writers_registry import WriterRegistry
 
 
 # 轻量连接池（失败降级用）：每次调用返回一个新连接
@@ -362,14 +364,14 @@ class MySQLManager:
         if self.cursor:
             try:
                 self.cursor.close()
-            except:
+            except Exception:
                 pass
             self.cursor = None
 
         if self.connection:
             try:
                 self.connection.close()  # 使用连接池时，close实际上是归还连接
-            except:
+            except Exception:
                 pass
             self.connection = None
 
@@ -2170,13 +2172,15 @@ class MySQLManager:
                 fallamountfor_d = self._to_decimal_or_none(item.get("FALLAMOUNTFOR_D") or 0)
                 fnotaxamountfor = self._to_decimal_or_none(item.get("FNOTAXAMOUNTFOR") or 0)
                 fdiscountamountfor = self._to_decimal_or_none(item.get("FDISCOUNTAMOUNTFOR") or 0)
+                fentrydiscountrate = self._to_decimal_or_none(item.get("FENTRYDISCOUNTRATE"))
+                fentrytaxrate = self._to_decimal_or_none(item.get("FENTRYTAXRATE"))
                 fmodifydate = self._parse_datetime(item.get("FModifyDate") or item.get("FMODIFYDATE"))
 
                 if fid is None or fentryid is None or fid <= 0 or fentryid <= 0:
                     return None
                 # 返回顺序: FID, FENTRYID, FSEQ, FBILLNAME, FBILLNO, FDATE, FPURCHASEORGNAME, FCUSTOMER,
                 #           FSUPPLIERNAME, FSETACCOUNTTYPE, FMATERIALNUMBER, FMATERIALNAME, FPRICEUNITNAME,
-                #           FPRICEQTY, FALLAMOUNTFOR_D, FNOTAXAMOUNTFOR, FDISCOUNTAMOUNTFOR, FModifyDate
+                #           FPRICEQTY, FALLAMOUNTFOR_D, FNOTAXAMOUNTFOR, FDISCOUNTAMOUNTFOR, FENTRYDISCOUNTRATE, FENTRYTAXRATE, FModifyDate
                 return (
                     fid,
                     fentryid,
@@ -2195,9 +2199,11 @@ class MySQLManager:
                     fallamountfor_d,
                     fnotaxamountfor,
                     fdiscountamountfor,
+                    fentrydiscountrate,
+                    fentrytaxrate,
                     fmodifydate,
                 )
-            elif isinstance(item, (list, tuple)) and len(item) >= 18:
+            elif isinstance(item, (list, tuple)) and len(item) >= 20:
                 fid = self._to_int_or_none(item[0])
                 fentryid = self._to_int_or_none(item[1])
                 fseq = self._to_int_or_none(item[2])
@@ -2215,7 +2221,9 @@ class MySQLManager:
                 fallamountfor_d = self._to_decimal_or_none(item[14]) or 0
                 fnotaxamountfor = self._to_decimal_or_none(item[15]) or 0
                 fdiscountamountfor = self._to_decimal_or_none(item[16]) or 0
-                fmodifydate = self._parse_datetime(item[17])
+                fentrydiscountrate = self._to_decimal_or_none(item[17])
+                fentrytaxrate = self._to_decimal_or_none(item[18])
+                fmodifydate = self._parse_datetime(item[19])
 
                 if fid is None or fentryid is None or fid <= 0 or fentryid <= 0:
                     return None
@@ -2233,6 +2241,14 @@ class MySQLManager:
                     fmaterialnumber,
                     fmaterialname,
                     fpriceunitname,
+                    fpriceqty,
+                    fallamountfor_d,
+                    fnotaxamountfor,
+                    fdiscountamountfor,
+                    fentrydiscountrate,
+                    fentrytaxrate,
+                    fmodifydate,
+                )
                     fpriceqty,
                     fallamountfor_d,
                     fnotaxamountfor,

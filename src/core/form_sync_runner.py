@@ -213,14 +213,16 @@ class FormSyncRunner:
             if checkpoint and checkpoint.status == "pending" and self._is_incremental(sync_type):
                 resume_start_row = checkpoint.next_start_row or checkpoint.start_row
                 total_inserted_ref_init = checkpoint.total_inserted
+                total_fetched_ref_init = checkpoint.total_fetched
                 self.logger.info("[%s] 检测到断点，从 StartRow=%s 继续同步", form_name, resume_start_row)
             else:
                 total_inserted_ref_init = 0
+                total_fetched_ref_init = 0
 
             max_retries = 3
             retry_count = 0
             total_inserted_ref = [total_inserted_ref_init]
-            total_fetched_ref = [0]
+            total_fetched_ref = [total_fetched_ref_init]
             total_invalid_ref = [0]
             total_deduped_ref = [0]
             failure_details_ref: list[WriteFailureDetail] = []

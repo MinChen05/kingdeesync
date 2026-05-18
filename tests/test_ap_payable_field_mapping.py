@@ -1,8 +1,11 @@
 from __future__ import annotations
 
+import importlib.util
 import sys
 import types
 import unittest
+from contextlib import contextmanager
+from pathlib import Path
 from unittest.mock import Mock
 
 _STUBBED_MODULES: list[str] = []
@@ -11,6 +14,17 @@ _STUBBED_MODULES: list[str] = []
 class _DummyUpsertEngine:
     def __init__(self, *args, **kwargs):
         pass
+
+
+class _DummyRepository:
+    def __init__(self, *args, **kwargs):
+        pass
+
+    def reset(self):
+        return None
+
+    def missing_methods(self, *args, **kwargs):
+        return []
 
 
 class _DummyPool:
@@ -34,6 +48,23 @@ class _DummyConfigManager:
         return {}
 
 
+@contextmanager
+def _temporary_modules(stubs: dict[str, object]):
+    sentinel = object()
+    original: dict[str, object] = {}
+    try:
+        for module_name, module in stubs.items():
+            original[module_name] = sys.modules.get(module_name, sentinel)
+            sys.modules[module_name] = module
+        yield
+    finally:
+        for module_name, previous in original.items():
+            if previous is sentinel:
+                sys.modules.pop(module_name, None)
+            else:
+                sys.modules[module_name] = previous
+
+
 def _install_stub(module_name: str, module: object) -> None:
     if module_name in sys.modules:
         return
@@ -51,11 +82,40 @@ _install_stub("src.core.upsert_engine_mysql", types.SimpleNamespace(UpsertEngine
 _install_stub("src.core.upsert_engine_sqlserver", types.SimpleNamespace(UpsertEngineSqlServer=_DummyUpsertEngine))
 _install_stub("src.core.write_outcome", types.SimpleNamespace(WriteOutcome=object))
 
-from src.core.mysql_manager import MySQLManager
 
-sys.modules.pop("src.core.mysql_manager", None)
-for _module_name in _STUBBED_MODULES:
-    sys.modules.pop(_module_name, None)
+def _load_mysql_manager_class():
+    stubs = {
+        "pyodbc": types.SimpleNamespace(),
+        "pymysql": types.SimpleNamespace(cursors=types.SimpleNamespace(DictCursor=object)),
+        "dbutils": types.SimpleNamespace(),
+        "dbutils.pooled_db": types.SimpleNamespace(PooledDB=_DummyPool),
+        "src.config.config_manager": types.SimpleNamespace(config_manager=_DummyConfigManager()),
+        "src.core.performance_logging": types.SimpleNamespace(log_prepare_metrics=lambda *args, **kwargs: None),
+        "src.core.sync_log_repository": types.SimpleNamespace(SyncLogRepository=_DummyRepository),
+        "src.core.sync_run_repository": types.SimpleNamespace(SyncRunRepository=_DummyRepository),
+        "src.core.upsert_engine_mysql": types.SimpleNamespace(UpsertEngineMySQL=_DummyUpsertEngine),
+        "src.core.upsert_engine_sqlserver": types.SimpleNamespace(UpsertEngineSqlServer=_DummyUpsertEngine),
+        "src.core.write_outcome": types.SimpleNamespace(WriteOutcome=object),
+        "src.core.writers_registry": types.SimpleNamespace(WriterRegistry=_DummyRepository),
+    }
+    module_path = Path(__file__).resolve().parents[1] / "src" / "core" / "mysql_manager.py"
+    module_name = "src.core.mysql_manager"
+
+    with _temporary_modules(stubs):
+        spec = importlib.util.spec_from_file_location(module_name, module_path)
+        if spec is None or spec.loader is None:
+            raise RuntimeError("Unable to load src.core.mysql_manager for tests")
+        module = importlib.util.module_from_spec(spec)
+        sys.modules[module_name] = module
+        try:
+            spec.loader.exec_module(module)
+        finally:
+            sys.modules.pop(module_name, None)
+
+    return module.MySQLManager
+
+
+MySQLManager = _load_mysql_manager_class()
 
 
 class ApPayableFieldMappingTests(unittest.TestCase):
@@ -177,11 +237,12 @@ class ApPayableFieldMappingTests(unittest.TestCase):
         )
 
         self.assertIsNotNone(prepared)
-        manager.field_mapping_resolver.resolve_field.assert_any_call(
-            "ap_payable",
-            "FNOTAXAMOUNTFOR",
-            unittest.mock.ANY,
-        )
+        resolve_call = manager.field_mapping_resolver.resolve_field.call_args
+        self.assertIsNotNone(resolve_call)
+        self.assertEqual(resolve_call.args[0], "ap_payable")
+        self.assertEqual(resolve_call.args[1], "FNOTAXAMOUNTFOR")
+        self.assertIn("FNOTAXAMOUNTFOR_D", resolve_call.args[2])
+        self.assertIn("FNoTaxAmountFor_D", resolve_call.args[2])
         self.assertEqual(prepared[15], 321.45)
 
 

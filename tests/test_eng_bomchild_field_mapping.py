@@ -1,10 +1,125 @@
 from __future__ import annotations
 
+import importlib.util
+import sys
+import types
 import unittest
+from contextlib import contextmanager
+from pathlib import Path
 from unittest.mock import Mock
 
-from src.core.masterdata_writer import insert_eng_bom_child
-from src.core.mysql_manager import MySQLManager
+_STUBBED_MODULES: list[str] = []
+
+
+class _DummyUpsertEngine:
+    def __init__(self, *args, **kwargs):
+        pass
+
+
+class _DummyRepository:
+    def __init__(self, *args, **kwargs):
+        pass
+
+    def reset(self):
+        return None
+
+    def missing_methods(self, *args, **kwargs):
+        return []
+
+
+class _DummyPool:
+    def __init__(self, *args, **kwargs):
+        pass
+
+
+class _DummyConfigManager:
+    def get_db_config(self):
+        return {
+            "type": "mysql",
+            "mysql": {
+                "host": "localhost",
+                "user": "test",
+                "password": "",
+                "database": "test",
+            },
+        }
+
+    def get_insert_method_map(self):
+        return {}
+
+
+@contextmanager
+def _temporary_modules(stubs: dict[str, object]):
+    sentinel = object()
+    original: dict[str, object] = {}
+    try:
+        for module_name, module in stubs.items():
+            original[module_name] = sys.modules.get(module_name, sentinel)
+            sys.modules[module_name] = module
+        yield
+    finally:
+        for module_name, previous in original.items():
+            if previous is sentinel:
+                sys.modules.pop(module_name, None)
+            else:
+                sys.modules[module_name] = previous
+
+
+def _load_mysql_manager_class():
+    stubs = {
+        "pyodbc": types.SimpleNamespace(),
+        "pymysql": types.SimpleNamespace(cursors=types.SimpleNamespace(DictCursor=object)),
+        "dbutils": types.SimpleNamespace(),
+        "dbutils.pooled_db": types.SimpleNamespace(PooledDB=_DummyPool),
+        "src.config.config_manager": types.SimpleNamespace(config_manager=_DummyConfigManager()),
+        "src.core.performance_logging": types.SimpleNamespace(log_prepare_metrics=lambda *args, **kwargs: None),
+        "src.core.sync_log_repository": types.SimpleNamespace(SyncLogRepository=_DummyRepository),
+        "src.core.sync_run_repository": types.SimpleNamespace(SyncRunRepository=_DummyRepository),
+        "src.core.upsert_engine_mysql": types.SimpleNamespace(UpsertEngineMySQL=_DummyUpsertEngine),
+        "src.core.upsert_engine_sqlserver": types.SimpleNamespace(UpsertEngineSqlServer=_DummyUpsertEngine),
+        "src.core.write_outcome": types.SimpleNamespace(WriteOutcome=object),
+        "src.core.writers_registry": types.SimpleNamespace(WriterRegistry=_DummyRepository),
+    }
+    module_path = Path(__file__).resolve().parents[1] / "src" / "core" / "mysql_manager.py"
+    module_name = "src.core.mysql_manager"
+
+    with _temporary_modules(stubs):
+        spec = importlib.util.spec_from_file_location(module_name, module_path)
+        if spec is None or spec.loader is None:
+            raise RuntimeError("Unable to load src.core.mysql_manager for tests")
+        module = importlib.util.module_from_spec(spec)
+        sys.modules[module_name] = module
+        try:
+            spec.loader.exec_module(module)
+        finally:
+            sys.modules.pop(module_name, None)
+
+    return module.MySQLManager
+
+
+def _load_insert_eng_bom_child():
+    stubs = {
+        "src.core.mysql_manager": types.SimpleNamespace(MySQLManager=object),
+    }
+    module_path = Path(__file__).resolve().parents[1] / "src" / "core" / "masterdata_writer.py"
+    module_name = "_eng_bomchild_masterdata_writer"
+
+    with _temporary_modules(stubs):
+        spec = importlib.util.spec_from_file_location(module_name, module_path)
+        if spec is None or spec.loader is None:
+            raise RuntimeError("Unable to load src.core.masterdata_writer for tests")
+        module = importlib.util.module_from_spec(spec)
+        sys.modules[module_name] = module
+        try:
+            spec.loader.exec_module(module)
+        finally:
+            sys.modules.pop(module_name, None)
+
+    return module.insert_eng_bom_child
+
+
+MySQLManager = _load_mysql_manager_class()
+insert_eng_bom_child = _load_insert_eng_bom_child()
 
 
 class FakeCursor:
@@ -176,18 +291,56 @@ class EngBomChildFieldMappingTests(unittest.TestCase):
         )
 
         self.assertIsNotNone(prepared)
-        manager.field_mapping_resolver.resolve_field.assert_any_call(
-            "eng_bomchild",
-            "FCHILDNUMBER",
-            unittest.mock.ANY,
-        )
-        manager.field_mapping_resolver.resolve_field.assert_any_call(
-            "eng_bomchild",
-            "FCHILDNAME",
-            unittest.mock.ANY,
-        )
+        child_number_call = manager.field_mapping_resolver.resolve_field.call_args_list[0]
+        child_name_call = manager.field_mapping_resolver.resolve_field.call_args_list[1]
+        self.assertEqual(child_number_call.args[0], "eng_bomchild")
+        self.assertEqual(child_number_call.args[1], "FCHILDNUMBER")
+        self.assertIn("FCHILDNUMBER", child_number_call.args[2])
+        self.assertEqual(child_name_call.args[0], "eng_bomchild")
+        self.assertEqual(child_name_call.args[1], "FCHILDNAME")
+        self.assertIn("FCHILDNAME", child_name_call.args[2])
         self.assertEqual(prepared[4], "RESOLVED-CHILD-006")
         self.assertEqual(prepared[5], "RESOLVED-CHILD-NAME-006")
+
+    def test_prepare_eng_bom_child_data_uses_field_mapping_resolver_for_child_fields_on_list_payload(self) -> None:
+        manager = self._build_manager()
+        manager.field_mapping_resolver = Mock()
+        manager.field_mapping_resolver.resolve_field.side_effect = [
+            "RESOLVED-CHILD-007",
+            "RESOLVED-CHILD-NAME-007",
+        ]
+
+        prepared = manager._prepare_eng_bom_child_data(
+            [
+                101,
+                202,
+                3,
+                "MAT-PARENT",
+                "MAT-CHILD-007",
+                "Child Material 007",
+                "2",
+                "1",
+                "1",
+                "2",
+                171190,
+                88,
+                "ROW-7",
+                0,
+                "7.5",
+                "7.0",
+                303,
+                "7",
+                "2026-04-23 10:30:00",
+            ]
+        )
+
+        self.assertIsNotNone(prepared)
+        self.assertEqual(manager.field_mapping_resolver.resolve_field.call_count, 2)
+        self.assertEqual(manager.field_mapping_resolver.resolve_field.call_args_list[0].args[0], "eng_bomchild")
+        self.assertEqual(manager.field_mapping_resolver.resolve_field.call_args_list[0].args[1], "FCHILDNUMBER")
+        self.assertEqual(manager.field_mapping_resolver.resolve_field.call_args_list[1].args[1], "FCHILDNAME")
+        self.assertEqual(prepared[4], "RESOLVED-CHILD-007")
+        self.assertEqual(prepared[5], "RESOLVED-CHILD-NAME-007")
 
     def test_ensure_additional_columns_for_eng_bomchild_adds_child_number_column_on_sqlserver(self) -> None:
         manager = self._build_manager()

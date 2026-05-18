@@ -204,12 +204,46 @@ class PrdMoCancelStatusTests(unittest.TestCase):
         )
 
         self.assertIsNotNone(prepared)
-        self.manager.field_mapping_resolver.resolve_field.assert_any_call(
-            "prd_mo",
-            "FCANCELSTATUS",
-            unittest.mock.ANY,
-        )
+        resolve_call = self.manager.field_mapping_resolver.resolve_field.call_args
+        self.assertIsNotNone(resolve_call)
+        self.assertEqual(resolve_call.args[0], "prd_mo")
+        self.assertEqual(resolve_call.args[1], "FCANCELSTATUS")
+        self.assertIn("FCANCELSTATUS", resolve_call.args[2])
+        self.assertIn("FDocumentStatus", resolve_call.args[2])
         self.assertEqual(prepared[-1], "RESOLVED-CANCEL")
+
+    def test_prepare_production_order_data_uses_field_mapping_resolver_for_cancel_status_on_legacy_field_list(self) -> None:
+        self.manager.field_mapping_resolver = Mock()
+        self.manager.field_mapping_resolver.resolve_field.return_value = "RESOLVED-LEGACY-CANCEL"
+
+        prepared = self.manager._prepare_production_order_data(
+            [
+                1,
+                None,
+                None,
+                "MO20260518006",
+                "生产订单",
+                None,
+                None,
+                None,
+                "2026-05-18 08:00:00",
+                None,
+                None,
+                None,
+                None,
+                None,
+                "2026-05-18 09:00:00",
+                None,
+            ]
+        )
+
+        self.assertIsNotNone(prepared)
+        resolve_call = self.manager.field_mapping_resolver.resolve_field.call_args
+        self.assertIsNotNone(resolve_call)
+        self.assertEqual(resolve_call.args[0], "prd_mo")
+        self.assertEqual(resolve_call.args[1], "FCANCELSTATUS")
+        self.assertIsInstance(resolve_call.args[2], dict)
+        self.assertEqual(prepared[-1], "RESOLVED-LEGACY-CANCEL")
 
 
 if __name__ == "__main__":

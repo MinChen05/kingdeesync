@@ -64,6 +64,33 @@ def load_form_queries_json(config_file: str, logger: logging.Logger) -> dict[str
     return {}
 
 
+def load_field_mappings_json(config_file: str, logger: logging.Logger) -> dict[str, dict[str, Any]]:
+    """Load field_mappings.json with config-dir override support."""
+    config_dir = os.path.dirname(os.path.abspath(config_file))
+    base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    candidates = [
+        os.path.join(config_dir, "field_mappings.json"),
+        os.path.join(config_dir, "src", "config", "field_mappings.json"),
+        os.path.join(base_dir, "config", "field_mappings.json"),
+    ]
+
+    for file_path in candidates:
+        try:
+            if not os.path.exists(file_path):
+                continue
+
+            with open(file_path, encoding="utf-8") as fp:
+                data = json.load(fp)
+
+            if isinstance(data, dict):
+                return data
+        except Exception as err:
+            logger.warning("Failed to load field_mappings.json: %s - %s", file_path, err)
+
+    logger.error("No usable field_mappings.json was found; returning empty config")
+    return {}
+
+
 def _as_bool(value: Any, default: bool) -> bool:
     try:
         return str(value).strip().lower() == "true"
@@ -105,6 +132,9 @@ class ConfigAccessors:
 
     def _load_form_queries_json(self) -> dict[str, dict[str, Any]]:
         return load_form_queries_json(self.config_file, self.logger)
+
+    def _load_field_mappings_json(self) -> dict[str, dict[str, Any]]:
+        return load_field_mappings_json(self.config_file, self.logger)
 
     def get_table_mapping(self) -> dict[str, str]:
         raw = self._load_tables_json()
@@ -317,3 +347,9 @@ class ConfigAccessors:
             self.logger.warning("Failed to read filter overrides: %s", err)
 
         return queries
+
+    def get_field_mappings(self) -> dict[str, dict[str, Any]]:
+        mappings = self._load_field_mappings_json()
+        if not isinstance(mappings, dict):
+            return {}
+        return copy.deepcopy(mappings)

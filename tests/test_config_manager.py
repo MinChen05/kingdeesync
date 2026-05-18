@@ -186,6 +186,41 @@ class ConfigManagerTests(unittest.TestCase):
         self.assertEqual(sync_config["circuit_breaker_threshold"], 3)
         self.assertEqual(sync_config["circuit_breaker_cooldown_secs"], 30)
 
+    def test_get_field_mappings_reads_json_from_config_directory(self) -> None:
+        with _load_config_manager() as config_manager_module:
+            config_cls = config_manager_module.ConfigManager
+            with tempfile.TemporaryDirectory() as tmp_dir:
+                tmp_path = Path(tmp_dir)
+                config_path = tmp_path / "config.ini"
+                mappings_path = tmp_path / "field_mappings.json"
+                config_path.write_text("[SYNC]\nauto_sync = false\nsync_interval = 60\n", encoding="utf-8")
+                mappings_path.write_text(
+                    json.dumps(
+                        {
+                            "prd_mo": {
+                                "FCANCELSTATUS": {
+                                    "sources": ["FCANCELSTATUS", "FCancelStatus"],
+                                    "type": "string",
+                                    "default": "",
+                                }
+                            }
+                        },
+                        ensure_ascii=False,
+                        indent=2,
+                    ),
+                    encoding="utf-8",
+                )
+
+                manager = config_cls(str(config_path))
+
+                mappings = manager.get_field_mappings()
+
+        self.assertIn("prd_mo", mappings)
+        self.assertEqual(
+            mappings["prd_mo"]["FCANCELSTATUS"]["sources"],
+            ["FCANCELSTATUS", "FCancelStatus"],
+        )
+
 
 if __name__ == "__main__":
     unittest.main()

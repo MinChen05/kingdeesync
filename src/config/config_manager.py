@@ -81,5 +81,8 @@ class ConfigManager:
     def get_form_queries(self) -> Dict[str, Dict[str, Any]]:
         return self._accessors.get_form_queries()
 
+    def get_field_mappings(self) -> Dict[str, Dict[str, Any]]:
+        return self._accessors.get_field_mappings()
+
 
 config_manager = ConfigManager()

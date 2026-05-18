@@ -1,0 +1,50 @@
+{
+  "prd_mo": {
+    "FCANCELSTATUS": {
+      "sources": [
+        "FCANCELSTATUS",
+        "FCancelStatus",
+        "FcancelStatus",
+        "F_Cancel_Status"
+      ],
+      "type": "string",
+      "default": ""
+    }
+  },
+  "ap_payable": {
+    "FNOTAXAMOUNTFOR": {
+      "sources": [
+        "FNoTaxAmountFor_D",
+        "FNOTAXAMOUNTFOR_D",
+        "FNoTaxAmountFor",
+        "FNOTAXAMOUNTFOR"
+      ],
+      "type": "decimal",
+      "default": 0.0
+    }
+  },
+  "eng_bomchild": {
+    "FCHILDNUMBER": {
+      "sources": [
+        "FMATERIALIDCHILD.FNUMBER",
+        "FMATERIALIDCHILD.FNumber",
+        "FCHILDNUMBER",
+        "FChildNumber"
+      ],
+      "type": "string",
+      "default": ""
+    },
+    "FCHILDNAME": {
+      "sources": [
+        "FMATERIALIDCHILD.FNAME",
+        "FMATERIALIDCHILD.FName",
+        "FCHILDNAME",
+        "FChildName"
+      ],
+      "type": "string",
+      "default": "",
+      "max_length": 255,
+      "truncate_policy": "trim"
+    }
+  }
+}

@@ -240,6 +240,28 @@ class MetricsCollector:
                 "avg_api_latency_ms": round(sum(m.avg_api_latency for m in form_metrics) / len(form_metrics) * 1000, 2),
             }
 
+    def export_run_snapshot(self, form_names: List[str]) -> Dict[str, Dict[str, Any]]:
+        """导出指定表单最近一次同步的指标快照。"""
+        with self._lock:
+            requested_forms = {str(form_name) for form_name in form_names}
+            snapshots: Dict[str, Dict[str, Any]] = {}
+
+            for metrics in reversed(self._history):
+                if metrics.form_name not in requested_forms or metrics.form_name in snapshots:
+                    continue
+                snapshots[metrics.form_name] = metrics.to_dict()
+                if len(snapshots) == len(requested_forms):
+                    break
+
+            for form_name in requested_forms:
+                if form_name in snapshots:
+                    continue
+                metrics = self._current_metrics.get(form_name)
+                if metrics is not None:
+                    snapshots[form_name] = metrics.to_dict()
+
+            return snapshots
+
     def reset(self):
         """重置所有指标"""
         with self._lock:

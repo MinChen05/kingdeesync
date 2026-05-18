@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from contextlib import contextmanager
+from datetime import datetime
 import importlib
 import logging
 import sys
@@ -107,11 +108,19 @@ from src.core.write_outcome import WriteOutcome
 
 class FormSyncRunnerOutcomeTests(unittest.TestCase):
     def test_package_attr_cleanup_does_not_leave_detached_form_sync_runner(self) -> None:
+        original_core_pkg = sys.modules.get("src.core")
+        had_attr = bool(original_core_pkg and hasattr(original_core_pkg, "form_sync_runner"))
+        original_attr = getattr(original_core_pkg, "form_sync_runner", None) if had_attr else None
+
         with _load_form_sync_runner_module():
             pass
 
         core_pkg = sys.modules.get("src.core")
-        self.assertTrue(core_pkg is None or not hasattr(core_pkg, "form_sync_runner"))
+        if had_attr:
+            self.assertIsNotNone(core_pkg)
+            self.assertIs(getattr(core_pkg, "form_sync_runner", None), original_attr)
+        else:
+            self.assertTrue(core_pkg is None or not hasattr(core_pkg, "form_sync_runner"))
 
     def test_build_write_summary_separates_invalid_deduped_and_failed(self) -> None:
         with _load_form_sync_runner_module() as form_sync_runner:
@@ -316,6 +325,57 @@ class FormSyncRunnerOutcomeTests(unittest.TestCase):
         self.assertEqual(sum(result["failure_categories"].values()), 1)
         self.assertTrue(result["failure_details"])
         self.assertEqual(result["failure_details"][0]["category"], "sql_error")
+
+    @patch("src.core.data_sync.mysql_manager.finish_sync_run")
+    @patch("src.core.data_sync.metrics_collector")
+    @patch("src.core.data_sync.config_manager.get_sync_config", return_value={})
+    def test_finalize_run_writes_metrics_snapshot_into_task_details(
+        self,
+        _mock_sync_config: Mock,
+        mock_metrics_collector: Mock,
+        mock_finish_sync_run: Mock,
+    ) -> None:
+        from src.core.data_sync import DataSyncManager, SyncStatus, SyncType
+
+        manager = DataSyncManager()
+        start_time = datetime(2026, 5, 18, 10, 0, 0)
+        end_time = datetime(2026, 5, 18, 10, 0, 3)
+        results = {
+            "销售订单": {
+                "status": "success",
+                "record_count": 3,
+            }
+        }
+        metrics_snapshot = {
+            "销售订单": {
+                "records_inserted": 3,
+                "records_failed": 0,
+            }
+        }
+        mock_metrics_collector.export_run_snapshot.return_value = metrics_snapshot
+
+        manager._finalize_run(
+            run_id="run-1",
+            sync_type=SyncType.INCREMENTAL,
+            requested_forms=["销售订单"],
+            results=results,
+            total_records=3,
+            failed_tables=[],
+            run_status=SyncStatus.SUCCESS,
+            message="所有表同步成功，共同步 3 条记录",
+            start_time=start_time,
+            end_time=end_time,
+        )
+
+        finish_kwargs = mock_finish_sync_run.call_args.kwargs
+        self.assertEqual(
+            finish_kwargs["details"],
+            {
+                "results": results,
+                "metrics": metrics_snapshot,
+                "failed_forms": [],
+            },
+        )
 
 
 if __name__ == "__main__":

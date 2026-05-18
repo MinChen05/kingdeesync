@@ -21,6 +21,7 @@ from src.core.circuit_breaker import LocalCircuitBreaker
 from src.core.filter_builder import FilterBuilder
 from src.core.form_sync_runner import FormSyncRunner, create_shared_db_manager
 from src.core.kingdee_api import kingdee_client
+from src.core.metrics import metrics_collector
 from src.core.mysql_manager import MySQLManager, mysql_manager
 from src.core.retry_manager import CheckpointManager, SyncCheckpoint
 
@@ -162,6 +163,11 @@ class DataSyncManager:
                 if isinstance(result, dict) and result.get("status") == SyncStatus.SUCCESS.value
             )
             failure_count = max(0, len(requested_forms) - success_count)
+            details = {
+                "results": results,
+                "metrics": metrics_collector.export_run_snapshot(requested_forms),
+                "failed_forms": list(failed_tables),
+            }
             mysql_manager.finish_sync_run(
                 run_id=run_id,
                 sync_type=sync_type.value,
@@ -174,7 +180,7 @@ class DataSyncManager:
                 start_time=start_time,
                 end_time=final_dt,
                 failed_forms=failed_tables,
-                details=results,
+                details=details,
             )
         except Exception as exc:
             logger.debug("记录任务级历史失败: %s", exc)

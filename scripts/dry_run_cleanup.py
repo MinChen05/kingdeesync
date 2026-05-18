@@ -76,49 +76,58 @@ def collect_cleanup_candidates(project_root: Path | str) -> list[CleanupCandidat
         seen.add(resolved)
         candidates.append(_make_candidate(path, level, reason))
 
+    def is_under_aggregated_root(path: Path) -> bool:
+        return any(_is_relative_to(path, aggregated_root) for aggregated_root in aggregated_roots)
+
+    def add_match(path: Path, level: str, reason: str, expected_kind: str) -> None:
+        resolved = path.resolve()
+        if not path.exists() or resolved in seen or is_under_aggregated_root(resolved):
+            return
+        if expected_kind == "directory" and not path.is_dir():
+            return
+        if expected_kind == "file" and not path.is_file():
+            return
+        seen.add(resolved)
+        candidates.append(_make_candidate(path, level, reason))
+        if path.is_dir():
+            aggregated_roots.add(resolved)
+
+    def scan(pattern: str, level: str, reason: str, expected_kind: str) -> None:
+        for path in root.rglob(pattern):
+            add_match(path, level, reason, expected_kind)
+
     fixed_targets = [
         (
             ".worktrees",
             "high",
+            "directory",
             "High-risk Git worktree storage. Prefer `git worktree list`, `git worktree remove`, and `git worktree prune`; do not delete active worktree directories directly.",
         ),
-        (".idea", "medium", "IDE project metadata is local to this workspace and can usually be recreated."),
-        (".claude", "medium", "Local agent or collaboration metadata is workspace-specific and can usually be recreated."),
-        (".install_salt", "medium", "Local machine marker or setup artifact that is usually safe to review before cleanup."),
-        (".venv", "medium", "Local virtual environment can be recreated from dependency files."),
-        ("log", "high", "Runtime logs can grow quickly and are usually disposable after troubleshooting."),
-        ("logs", "high", "Runtime logs can grow quickly and are usually disposable after troubleshooting."),
-        (".mypy_cache", "high", "Static analysis cache is regenerated automatically."),
-        (".pytest_cache", "high", "Pytest cache is regenerated automatically."),
-        (".ruff_cache", "high", "Ruff cache is regenerated automatically."),
-        ("config.local.ini", "medium", "Local configuration should be reviewed before cleanup."),
-        ("config.ini.backup", "medium", "Backup configuration should be reviewed before cleanup."),
-        ("checkpoints", "medium", "Checkpoint artifacts may be restorable from source or reruns."),
+        (".idea", "medium", "directory", "IDE project metadata is local to this workspace and can usually be recreated."),
+        (".claude", "medium", "directory", "Local agent or collaboration metadata is workspace-specific and can usually be recreated."),
+        (".install_salt", "medium", "file", "Local machine marker or setup artifact that is usually safe to review before cleanup."),
+        (".venv", "medium", "directory", "Local virtual environment can be recreated from dependency files."),
+        ("log", "high", "directory", "Runtime logs can grow quickly and are usually disposable after troubleshooting."),
+        ("logs", "high", "directory", "Runtime logs can grow quickly and are usually disposable after troubleshooting."),
+        (".mypy_cache", "high", "directory", "Static analysis cache is regenerated automatically."),
+        (".pytest_cache", "high", "directory", "Pytest cache is regenerated automatically."),
+        (".ruff_cache", "high", "directory", "Ruff cache is regenerated automatically."),
+        ("config.local.ini", "medium", "file", "Local configuration should be reviewed before cleanup."),
+        ("config.ini.backup", "medium", "file", "Backup configuration should be reviewed before cleanup."),
+        ("checkpoints", "medium", "directory", "Checkpoint artifacts may be restorable from source or reruns."),
     ]
 
-    for relative_path, level, reason in fixed_targets:
-        target_path = root / relative_path
-        add(target_path, level, reason)
-        if target_path.exists():
-            aggregated_roots.add(target_path.resolve())
-
-    def is_under_aggregated_root(path: Path) -> bool:
-        return any(_is_relative_to(path, aggregated_root) for aggregated_root in aggregated_roots)
+    for relative_path, level, expected_kind, reason in fixed_targets:
+        scan(relative_path, level, reason, expected_kind)
 
     for path in root.rglob("__pycache__"):
-        resolved = path.resolve()
-        if is_under_aggregated_root(resolved):
-            continue
-        add(path, "high", "Python bytecode cache is regenerated automatically.")
+        add_match(path, "high", "Python bytecode cache is regenerated automatically.", "directory")
 
     for path in root.rglob(".DS_Store"):
-        resolved = path.resolve()
-        if is_under_aggregated_root(resolved):
-            continue
-        add(path, "high", "macOS Finder metadata is regenerated automatically.")
+        add_match(path, "high", "macOS Finder metadata is regenerated automatically.", "file")
 
-    for path in root.glob("tmp-*.png"):
-        add(path, "medium", "Temporary image artifact that may be removable after review.")
+    for path in root.rglob("tmp-*.png"):
+        add_match(path, "medium", "Temporary image artifact that may be removable after review.", "file")
 
     return sorted(candidates, key=lambda candidate: str(candidate.path))
 

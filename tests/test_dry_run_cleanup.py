@@ -124,6 +124,48 @@ class DryRunCleanupTests(unittest.TestCase):
 
             self.assertEqual([], list(candidates))
 
+    def test_collect_cleanup_candidates_recursively_matches_nested_targets(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            nested_root = root / "nested" / "deep"
+            nested_root.mkdir(parents=True)
+            nested_png = nested_root / "tmp-nested.png"
+            nested_png.write_bytes(b"png")
+            nested_log = nested_root / "log"
+            nested_log.mkdir()
+            (nested_log / "app.log").write_text("log", encoding="utf-8")
+            nested_logs = nested_root / "logs"
+            nested_logs.mkdir()
+            (nested_logs / "app.log").write_text("logs", encoding="utf-8")
+            (nested_logs / "tmp-ignored.png").write_bytes(b"png")
+            nested_checkpoints = nested_root / "checkpoints"
+            nested_checkpoints.mkdir()
+            (nested_checkpoints / "state.json").write_text("{}", encoding="utf-8")
+            nested_config_local = nested_root / "config.local.ini"
+            nested_config_local.write_text("[local]\n", encoding="utf-8")
+            nested_backup = nested_root / "config.ini.backup"
+            nested_backup.write_text("[backup]\n", encoding="utf-8")
+            nested_install_salt = nested_root / ".install_salt"
+            nested_install_salt.write_text("salt", encoding="utf-8")
+            nested_idea = nested_root / ".idea"
+            nested_idea.mkdir()
+            nested_worktrees = nested_root / ".worktrees"
+            nested_worktrees.mkdir()
+
+            candidates = dry_run_cleanup.collect_cleanup_candidates(root)
+            candidate_paths = {_candidate_path(candidate).resolve() for candidate in candidates}
+
+            self.assertIn(nested_png.resolve(), candidate_paths)
+            self.assertIn(nested_log.resolve(), candidate_paths)
+            self.assertIn(nested_logs.resolve(), candidate_paths)
+            self.assertIn(nested_checkpoints.resolve(), candidate_paths)
+            self.assertIn(nested_config_local.resolve(), candidate_paths)
+            self.assertIn(nested_backup.resolve(), candidate_paths)
+            self.assertIn(nested_install_salt.resolve(), candidate_paths)
+            self.assertIn(nested_idea.resolve(), candidate_paths)
+            self.assertIn(nested_worktrees.resolve(), candidate_paths)
+            self.assertNotIn((nested_logs / "tmp-ignored.png").resolve(), candidate_paths)
+
     def test_render_report_includes_summary_even_when_no_candidates_exist(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             root = Path(tmpdir)

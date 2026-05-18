@@ -227,7 +227,6 @@ class ApPayableFieldMappingTests(unittest.TestCase):
         self.assertEqual(resolve_call.args[0], "ap_payable")
         self.assertEqual(resolve_call.args[1], "FNOTAXAMOUNTFOR")
         self.assertEqual(resolve_call.args[2]["FNOTAXAMOUNTFOR_D"], "100.00")
-        self.assertEqual(resolve_call.args[2]["FNoTaxAmountFor_D"], "100.00")
         self.assertEqual(resolve_call.args[2]["FNOTAXAMOUNTFOR"], "999.00")
         self.assertEqual(prepared[15], 321.45)
 

@@ -105,6 +105,7 @@ def _load_mysql_manager_class():
 def _load_insert_eng_bom_child():
     stubs = {
         "src.core.mysql_manager": types.SimpleNamespace(MySQLManager=object),
+        "src.config.config_manager": types.SimpleNamespace(config_manager=_DummyConfigManager()),
     }
     module_path = Path(__file__).resolve().parents[1] / "src" / "core" / "masterdata_writer.py"
     module_name = "_eng_bomchild_masterdata_writer"

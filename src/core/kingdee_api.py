@@ -7,6 +7,7 @@ import time
 import json
 import logging
 import threading
+from datetime import datetime
 from typing import Dict, List, Any, Optional
 from src.config.config_manager import config_manager
 from src.core.retry_manager import RetryConfig, RetryManager, RetryStrategy
@@ -87,6 +88,7 @@ class KingdeeAPIClient:
         })
         self.is_authenticated = False
         self.session_id = None
+        self.session_started_at = None
         # 保持会话相关
         self._keepalive_thread: Optional[threading.Thread] = None
         self._keepalive_stop = threading.Event()
@@ -172,6 +174,7 @@ class KingdeeAPIClient:
                 if result.get('LoginResultType') == 1:
                     self.is_authenticated = True
                     self.session_id = result.get('SessionId')
+                    self.session_started_at = datetime.now()
                     logger.info("金蝶系统登录成功")
                     try:
                         if self.config.get('keep_session_alive', False):
@@ -203,7 +206,7 @@ class KingdeeAPIClient:
             logger.error(f"登录金蝶系统失败: {str(e)}")
             return False
 
-    def _keep_alive_ping(self):
+    def _keep_alive_ping(self) -> bool:
         """发送轻量心跳请求以保持会话存活"""
         # 选用一个极轻量查询：请求0行或无条件但limit很小
         payload = {
@@ -235,10 +238,44 @@ class KingdeeAPIClient:
                         # 如果心跳失败，仅标记状态，不自动重登，避免干扰主线程
                         logger.warning("心跳检测表明会话已失效")
                         self.is_authenticated = False
+                        return False
+                return True
             else:
                 logger.warning(f"心跳请求状态码: {resp.status_code}")
+                return False
         except Exception as e:
             logger.debug(f"心跳异常: {e}")
+            return False
+
+    @staticmethod
+    def _is_overnight_refresh_window(now: datetime) -> bool:
+        return 0 <= now.hour < 6
+
+    def _should_refresh_cross_day_session(self, now: datetime | None = None) -> bool:
+        if not self.is_authenticated or self.session_started_at is None:
+            return False
+        current = now or datetime.now()
+        if not self._is_overnight_refresh_window(current):
+            return False
+        return self.session_started_at.date() < current.date()
+
+    def ensure_session(self, *, now: datetime | None = None) -> bool:
+        """同步前确认会话可用，必要时重登。"""
+        if not self.is_authenticated:
+            logger.info("同步前检测到会话未登录，尝试登录...")
+            return self.login()
+
+        if self._should_refresh_cross_day_session(now=now):
+            logger.info("命中凌晨会话刷新窗口，检测到跨日会话，先重登再继续同步")
+            self.logout(force=True)
+            return self.login()
+
+        if self._keep_alive_ping():
+            return True
+
+        logger.warning("同步前会话预检失败，尝试重新登录...")
+        self.logout(force=True)
+        return self.login()
 
     def _keepalive_loop(self):
         interval = int(self.config.get('keep_alive_interval_secs', 600))
@@ -615,9 +652,7 @@ class KingdeeAPIClient:
     
     def test_connection(self) -> bool:
         """测试连接"""
-        if self.is_authenticated:
-            return True
-        return self.login()
+        return self.ensure_session()
     
     def logout(self, force: bool = False):
         """登出"""
@@ -630,6 +665,7 @@ class KingdeeAPIClient:
         if force or self.config.get('auto_logout_on_exit', False):
             self.is_authenticated = False
             self.session_id = None
+            self.session_started_at = None
             try:
                 self.session.close()
             except Exception:

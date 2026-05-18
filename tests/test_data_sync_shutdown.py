@@ -30,6 +30,25 @@ class DataSyncShutdownTests(unittest.TestCase):
 
         mock_sync_manager.sync_data.assert_not_called()
 
+    def test_check_connections_logs_session_preflight_success(self) -> None:
+        manager = DataSyncManager()
+
+        with (
+            patch("src.core.data_sync.kingdee_client") as mock_kingdee_client,
+            patch("src.core.data_sync.mysql_manager") as mock_mysql_manager,
+            self.assertLogs("src.core.data_sync", level="INFO") as captured,
+        ):
+            mock_kingdee_client.test_connection.return_value = True
+            mock_mysql_manager.test_connection.return_value = True
+
+            connected = manager._check_connections()
+
+        self.assertTrue(connected)
+        joined = "\n".join(captured.output)
+        self.assertIn("开始同步前连接预检", joined)
+        self.assertIn("金蝶会话预检通过", joined)
+        self.assertIn("数据库连接预检通过", joined)
+
 class AutoSyncSchedulerSyncTypeTests(unittest.TestCase):
     @patch("src.core.scheduler.config_manager.update_config")
     @patch("src.core.scheduler.schedule.every")

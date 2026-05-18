@@ -690,15 +690,18 @@ class DataSyncManager:
 
     def _check_connections(self) -> bool:
         """检查金蝶和数据库连接"""
+        logger.info("开始同步前连接预检")
         # 检查金蝶连接
         if not kingdee_client.test_connection():
             logger.error("金蝶API连接失败")
             return False
+        logger.info("金蝶会话预检通过")
 
         # 检查数据库连接
         if not mysql_manager.test_connection():
             logger.error("MySQL数据库连接失败")
             return False
+        logger.info("数据库连接预检通过")
 
         return True
 

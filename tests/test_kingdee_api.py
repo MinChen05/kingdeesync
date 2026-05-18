@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from datetime import datetime
 import unittest
 from unittest.mock import Mock, patch
 
@@ -35,6 +36,41 @@ class KingdeeAPIClientQueryTests(unittest.TestCase):
             client = KingdeeAPIClient()
         client.is_authenticated = True
         return client
+
+    def test_test_connection_uses_session_preflight_for_authenticated_session(self) -> None:
+        client = self._make_client()
+        client._keep_alive_ping = Mock(return_value=True)
+        client.login = Mock(side_effect=AssertionError("should not login"))
+
+        connected = client.test_connection()
+
+        self.assertTrue(connected)
+        client._keep_alive_ping.assert_called_once_with()
+
+    def test_test_connection_relogs_when_preflight_ping_fails(self) -> None:
+        client = self._make_client()
+        client._keep_alive_ping = Mock(return_value=False)
+        client.logout = Mock()
+        client.login = Mock(return_value=True)
+
+        connected = client.test_connection()
+
+        self.assertTrue(connected)
+        client.logout.assert_called_once_with(force=True)
+        client.login.assert_called_once_with()
+
+    def test_ensure_session_refreshes_cross_day_session_in_overnight_window(self) -> None:
+        client = self._make_client()
+        client.session_started_at = datetime(2026, 5, 17, 23, 50, 0)
+        client._keep_alive_ping = Mock(side_effect=AssertionError("should not ping during forced refresh"))
+        client.logout = Mock()
+        client.login = Mock(return_value=True)
+
+        connected = client.ensure_session(now=datetime(2026, 5, 18, 0, 30, 0))
+
+        self.assertTrue(connected)
+        client.logout.assert_called_once_with(force=True)
+        client.login.assert_called_once_with()
 
     def test_query_data_rejects_list_wrapped_session_error_payload(self) -> None:
         client = self._make_client()

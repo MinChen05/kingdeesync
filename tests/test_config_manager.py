@@ -12,8 +12,11 @@ from unittest.mock import patch
 def _load_config_manager():
     original_modules = {
         name: sys.modules.get(name)
-        for name in ("src.config.config_manager", "src.config.config_accessors", "src.config.config_reader", "src.utils.crypto_util")
+        for name in ("src.config", "src.config.config_manager", "src.config.config_accessors", "src.config.config_reader", "src.utils.crypto_util")
     }
+    config_pkg = original_modules["src.config"]
+    config_pkg_attr_present = bool(config_pkg and hasattr(config_pkg, "config_manager"))
+    config_pkg_attr_value = getattr(config_pkg, "config_manager", None) if config_pkg_attr_present else None
     for name in original_modules:
         sys.modules.pop(name, None)
 
@@ -34,6 +37,11 @@ def _load_config_manager():
         with patch.dict(sys.modules, {"src.utils.crypto_util": crypto_util_stub}):
             return importlib.import_module("src.config.config_manager")
     finally:
+        if config_pkg is not None:
+            if config_pkg_attr_present:
+                setattr(config_pkg, "config_manager", config_pkg_attr_value)
+            elif hasattr(config_pkg, "config_manager"):
+                delattr(config_pkg, "config_manager")
         for name in ("src.config.config_manager", "src.config.config_accessors", "src.config.config_reader", "src.utils.crypto_util"):
             sys.modules.pop(name, None)
         for name, module in original_modules.items():

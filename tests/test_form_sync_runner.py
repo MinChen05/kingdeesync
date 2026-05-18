@@ -11,8 +11,11 @@ from unittest.mock import Mock, patch
 def _load_form_sync_runner_module():
     original_modules = {
         name: sys.modules.get(name)
-        for name in ("src.core.form_sync_runner", "requests", "src.core.mysql_manager")
+        for name in ("src.core", "src.core.form_sync_runner", "requests", "src.core.mysql_manager")
     }
+    core_pkg = original_modules["src.core"]
+    core_pkg_attr_present = bool(core_pkg and hasattr(core_pkg, "form_sync_runner"))
+    core_pkg_attr_value = getattr(core_pkg, "form_sync_runner", None) if core_pkg_attr_present else None
     for name in original_modules:
         sys.modules.pop(name, None)
 
@@ -62,6 +65,11 @@ def _load_form_sync_runner_module():
             return importlib.import_module("src.core.form_sync_runner")
     finally:
         sys.modules.pop("src.core.form_sync_runner", None)
+        if core_pkg is not None:
+            if core_pkg_attr_present:
+                setattr(core_pkg, "form_sync_runner", core_pkg_attr_value)
+            elif hasattr(core_pkg, "form_sync_runner"):
+                delattr(core_pkg, "form_sync_runner")
         for name, module in original_modules.items():
             if module is not None:
                 sys.modules[name] = module

@@ -6,6 +6,7 @@ import tempfile
 import unittest
 from contextlib import redirect_stdout
 from pathlib import Path
+from unittest import mock
 
 import scripts.dry_run_cleanup as dry_run_cleanup
 
@@ -79,6 +80,48 @@ class DryRunCleanupTests(unittest.TestCase):
             candidates = dry_run_cleanup.collect_cleanup_candidates(root)
 
             self.assertEqual([], list(candidates))
+
+    def test_collect_cleanup_candidates_skips_nested_pycache_inside_aggregated_roots(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            nested_pycache = root / ".venv" / "Lib" / "__pycache__"
+            nested_pycache.mkdir(parents=True)
+            pkg_pycache = root / "pkg" / "__pycache__"
+            pkg_pycache.mkdir(parents=True)
+
+            candidates = dry_run_cleanup.collect_cleanup_candidates(root)
+            candidate_paths = {_candidate_path(candidate).resolve() for candidate in candidates}
+
+            self.assertIn((root / ".venv").resolve(), candidate_paths)
+            self.assertIn(pkg_pycache.resolve(), candidate_paths)
+            self.assertNotIn(nested_pycache.resolve(), candidate_paths)
+
+    def test_collect_cleanup_candidates_tolerates_unreadable_or_missing_files_during_size_scan(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            logs_dir = root / "logs"
+            logs_dir.mkdir()
+            stable_file = logs_dir / "stable.log"
+            stable_file.write_text("ok", encoding="utf-8")
+            flaky_file = logs_dir / "flaky.log"
+            flaky_file.write_text("gone", encoding="utf-8")
+
+            path_type = type(flaky_file)
+            original_stat = path_type.stat
+
+            def flaky_stat(path_self: Path, *args: object, **kwargs: object) -> object:
+                if path_self == flaky_file:
+                    raise FileNotFoundError("simulated concurrent deletion")
+                return original_stat(path_self, *args, **kwargs)
+
+            with mock.patch.object(path_type, "stat", autospec=True, side_effect=flaky_stat):
+                candidates = dry_run_cleanup.collect_cleanup_candidates(root)
+
+            candidate_by_path = {
+                _candidate_path(candidate).resolve(): candidate for candidate in candidates
+            }
+            self.assertIn(logs_dir.resolve(), candidate_by_path)
+            self.assertEqual(2, _candidate_size(candidate_by_path[logs_dir.resolve()]))
 
     def test_main_is_read_only_and_reports_candidate_details(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:

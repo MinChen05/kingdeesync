@@ -15,19 +15,41 @@ class CleanupCandidate:
     reason: str
 
 
+def _is_relative_to(path: Path, other: Path) -> bool:
+    try:
+        path.relative_to(other)
+        return True
+    except ValueError:
+        return False
+
+
+def _safe_is_file(path: Path) -> bool:
+    try:
+        return path.is_file()
+    except OSError:
+        return False
+
+
+def _safe_file_size(path: Path) -> int:
+    try:
+        return path.stat().st_size
+    except OSError:
+        return 0
+
+
 def _directory_size(path: Path) -> int:
     total = 0
     for child in path.rglob("*"):
-        if child.is_file():
-            total += child.stat().st_size
+        if _safe_is_file(child):
+            total += _safe_file_size(child)
     return total
 
 
 def _path_size(path: Path) -> int:
     if path.is_dir():
         return _directory_size(path)
-    if path.is_file():
-        return path.stat().st_size
+    if _safe_is_file(path):
+        return _safe_file_size(path)
     return 0
 
 
@@ -45,6 +67,7 @@ def collect_cleanup_candidates(project_root: Path | str) -> list[CleanupCandidat
     root = Path(project_root)
     candidates: list[CleanupCandidate] = []
     seen: set[Path] = set()
+    aggregated_roots: set[Path] = set()
 
     def add(path: Path, level: str, reason: str) -> None:
         resolved = path.resolve()
@@ -64,9 +87,15 @@ def collect_cleanup_candidates(project_root: Path | str) -> list[CleanupCandidat
     ]
 
     for relative_path, level, reason in fixed_targets:
-        add(root / relative_path, level, reason)
+        target_path = root / relative_path
+        add(target_path, level, reason)
+        if target_path.exists():
+            aggregated_roots.add(target_path.resolve())
 
     for path in root.rglob("__pycache__"):
+        resolved = path.resolve()
+        if any(_is_relative_to(resolved, aggregated_root) for aggregated_root in aggregated_roots):
+            continue
         add(path, "high", "Python bytecode cache is regenerated automatically.")
 
     for path in root.glob("tmp-*.png"):

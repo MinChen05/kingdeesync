@@ -11,8 +11,6 @@ from dataclasses import asdict
 from datetime import datetime
 from typing import TYPE_CHECKING, Any, Dict, List, Optional
 
-import requests  # type: ignore[import-untyped]
-
 from src.config.config_manager import config_manager
 from src.core.audit_logging import emit_audit_log
 from src.core.filter_builder import FilterBuilder
@@ -246,6 +244,26 @@ class FormSyncRunner:
                     and outcome.failed == 0
                 )
 
+            def save_pending_checkpoint(error_category: str) -> None:
+                if not self._is_incremental(sync_type):
+                    return
+                last_error_category_ref[0] = error_category
+                self.owner._checkpoint_manager.save_checkpoint(
+                    SyncCheckpoint(
+                        form_name=form_name,
+                        table_name=table_name,
+                        sync_type=self._sync_type_value(sync_type),
+                        start_row=durable_next_start_row_ref[0],
+                        next_start_row=durable_next_start_row_ref[0],
+                        total_inserted=total_inserted_ref[0],
+                        total_fetched=total_fetched_ref[0],
+                        filter_string=filter_string or "",
+                        status="pending",
+                        last_written_record_keys=last_written_record_keys_ref[0],
+                        last_error_category=last_error_category_ref[0],
+                    )
+                )
+
             def insert_worker() -> None:
                 while True:
                     queue_item = data_queue.get()
@@ -329,70 +347,13 @@ class FormSyncRunner:
 
                     retry_count += 1
                     if retry_count < max_retries:
-                        last_error_category_ref[0] = "query_error"
-                        self.owner._checkpoint_manager.save_checkpoint(
-                            SyncCheckpoint(
-                                form_name=form_name,
-                                table_name=table_name,
-                                sync_type=self._sync_type_value(sync_type),
-                                start_row=durable_next_start_row_ref[0],
-                                next_start_row=durable_next_start_row_ref[0],
-                                total_inserted=total_inserted_ref[0],
-                                total_fetched=total_fetched_ref[0],
-                                filter_string=filter_string or "",
-                                status="pending",
-                                last_written_record_keys=last_written_record_keys_ref[0],
-                                last_error_category=last_error_category_ref[0],
-                            )
-                        )
+                        save_pending_checkpoint("query_error")
                         self.logger.warning("[%s] 查询失败，%s/%s 次重试...", form_name, retry_count, max_retries)
                         self.owner._notify_progress(
                             f"[{form_name}] 查询失败，正在重试 ({retry_count}/{max_retries})...",
                             35,
                         )
                         time.sleep(2)
-                except (requests.exceptions.Timeout, requests.exceptions.ConnectionError) as query_error:
-                    if insert_errors:
-                        self.logger.error("[%s] 发生数据库插入致命错误，停止重试: %s", form_name, insert_errors[0])
-                        if worker_thread is not None:
-                            data_queue.put(None)
-                            worker_thread.join()
-                        raise insert_errors[0] from query_error
-
-                    retry_count += 1
-                    self.logger.error("[%s] 网络请求异常 (%s): %s", form_name, type(query_error).__name__, query_error)
-                    if retry_count < max_retries:
-                        if isinstance(query_error, requests.exceptions.Timeout):
-                            last_error_category_ref[0] = "timeout"
-                        elif isinstance(query_error, requests.exceptions.ConnectionError):
-                            last_error_category_ref[0] = "connection_error"
-                        else:
-                            last_error_category_ref[0] = "query_error"
-                        self.owner._checkpoint_manager.save_checkpoint(
-                            SyncCheckpoint(
-                                form_name=form_name,
-                                table_name=table_name,
-                                sync_type=self._sync_type_value(sync_type),
-                                start_row=durable_next_start_row_ref[0],
-                                next_start_row=durable_next_start_row_ref[0],
-                                total_inserted=total_inserted_ref[0],
-                                total_fetched=total_fetched_ref[0],
-                                filter_string=filter_string or "",
-                                status="pending",
-                                last_written_record_keys=last_written_record_keys_ref[0],
-                                last_error_category=last_error_category_ref[0],
-                            )
-                        )
-                        self.owner._notify_progress(
-                            f"[{form_name}] 查询异常，正在重试 ({retry_count}/{max_retries})...",
-                            35,
-                        )
-                        time.sleep(2)
-                    else:
-                        if worker_thread is not None:
-                            data_queue.put(None)
-                            worker_thread.join()
-                        raise
                 except Exception as query_error:
                     if insert_errors:
                         self.logger.error("[%s] 发生数据库插入致命错误，停止重试: %s", form_name, insert_errors[0])

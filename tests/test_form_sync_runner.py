@@ -536,6 +536,39 @@ class FormSyncRunnerOutcomeTests(unittest.TestCase):
         self.assertEqual(saved_checkpoint.last_error_category, "query_error")
         self.assertEqual(saved_checkpoint.total_fetched, 4)
 
+    def test_sync_single_form_full_query_retry_does_not_save_pending_checkpoint(self) -> None:
+        with _load_form_sync_runner_module() as form_sync_runner:
+            runner_cls = form_sync_runner.FormSyncRunner
+            checkpoint_manager = SimpleNamespace(
+                load_checkpoint=Mock(return_value=None),
+                clear_checkpoint=Mock(),
+                save_checkpoint=Mock(),
+            )
+            owner = SimpleNamespace(
+                DEDUPLICATION_FORMS=set(),
+                INSERT_METHOD_MAP={"销售订单": "insert_sales_orders"},
+                table_mapping={"销售订单": "saleorder"},
+                _notify_progress=Mock(),
+                _checkpoint_manager=checkpoint_manager,
+            )
+            filter_builder = SimpleNamespace(build_filter_string=Mock(return_value=""))
+            fake_db = SimpleNamespace(disconnect=Mock(), log_sync_operation=Mock())
+            runner = runner_cls(owner, filter_builder, logger_=logging.getLogger("test.form_sync_runner"))
+
+            with (
+                patch.object(form_sync_runner, "create_shared_db_manager", return_value=fake_db),
+                patch.object(form_sync_runner, "emit_audit_log"),
+                patch.object(form_sync_runner, "config_manager") as mock_config_manager,
+                patch.object(form_sync_runner.time, "sleep", return_value=None),
+            ):
+                mock_config_manager.get_form_queries.return_value = {"销售订单": {"FieldKeys": "FID,FBillNo"}}
+                runner.query_kingdee_data = Mock(return_value=None)
+
+                result = runner.sync_single_form("销售订单", "full")
+
+        self.assertEqual(result["status"], "failed")
+        checkpoint_manager.save_checkpoint.assert_not_called()
+
     def test_sync_single_form_resume_success_checkpoint_preserves_total_fetched_progress(self) -> None:
         with _load_form_sync_runner_module() as form_sync_runner:
             runner_cls = form_sync_runner.FormSyncRunner

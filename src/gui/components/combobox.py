@@ -3,17 +3,17 @@
 包含可搜索下拉框等组件
 """
 
+from PySide6.QtCore import QPoint, Qt, QTimer, Signal
+from PySide6.QtGui import QColor, QIcon
 from PySide6.QtWidgets import (
-    QWidget,
-    QVBoxLayout,
-    QPushButton,
+    QGraphicsDropShadowEffect,
     QLineEdit,
     QListWidget,
     QListWidgetItem,
-    QGraphicsDropShadowEffect,
+    QPushButton,
+    QVBoxLayout,
+    QWidget,
 )
-from PySide6.QtCore import Signal, Qt, QPoint, QTimer
-from PySide6.QtGui import QColor, QIcon
 
 
 class ComboPopup(QWidget):

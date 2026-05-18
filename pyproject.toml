@@ -11,14 +11,22 @@ extend-exclude = [
     "docs",
     "assets",
     "checkpoints",
-    "dotnet",
     "tdesign-vue-next-starter",
     "_ui_ref",
 ]
 
 [tool.ruff.lint]
-select = ["F"]
-ignore = ["F401"]
+select = ["E", "F", "W", "I", "N", "UP", "B", "C4", "PIE", "RET"]
+ignore = ["E501", "F401", "W291", "N802", "N803", "N806", "UP035", "RET504"]
+
+[tool.ruff.lint.per-file-ignores]
+"__init__.py" = ["F401"]
+"tests/*" = ["F401"]
+"scripts/*" = ["E402", "F401"]
+"check_*.py" = ["E402", "F401", "W291", "W293"]
+"get_*.py" = ["E402", "F401", "W291", "W293"]
+"src/gui/kingdee_sync_gui.py" = ["E402"]
+"src/utils/crypto_util.py" = ["E741"]
 
 [tool.mypy]
 python_version = "3.11"

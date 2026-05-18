@@ -5,10 +5,13 @@
 用于获取销售订单、销售出库单、预测订单、生产订单表的字段信息
 """
 
-import pymysql
 import json
-from typing import Dict, List, Any
+from typing import Any, Dict, List
+
+import pymysql
+
 from src.config.config_manager import config_manager
+
 
 class TableFieldsAnalyzer:
     """数据库表字段分析器"""

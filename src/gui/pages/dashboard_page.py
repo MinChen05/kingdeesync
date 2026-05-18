@@ -5,11 +5,12 @@ from __future__ import annotations
 import logging
 from datetime import datetime, timedelta
 
-from PySide6.QtCore import QRectF, QTimer, Qt
+from PySide6.QtCore import QRectF, Qt, QTimer
 from PySide6.QtGui import QColor, QPainter, QPen
 from PySide6.QtWidgets import (
     QFrame,
     QHBoxLayout,
+    QHeaderView,
     QLabel,
     QPushButton,
     QScrollArea,
@@ -19,7 +20,6 @@ from PySide6.QtWidgets import (
     QTableWidgetItem,
     QVBoxLayout,
     QWidget,
-    QHeaderView,
 )
 
 from src.core.history_manager import history_manager
@@ -205,6 +205,107 @@ class DashboardPage(Win11PageScaffold):
         self.card_rate = DashboardSummaryCard("今日成功率", "--", "今日同步任务的整体完成率。")
         self.card_status = DashboardSummaryCard("当前状态", "--", "当前整体运行与就绪情况。")
 
+    def _build_reliability_content(self) -> None:
+        """构建可靠性面板：成功率进度条 + MySQL 表写入排行表格"""
+        import os
+        import sqlite3
+
+        db_path = os.path.join("logs", "sync_stats.db")
+
+        # ── 成功率进度条 ──
+        rate_layout = QHBoxLayout()
+        rate_layout.setSpacing(12)
+
+        stats = {"success": 0, "partial": 0, "failed": 0}
+        total = 0
+        form_rows: list[tuple[str, int]] = []
+        try:
+            conn = sqlite3.connect(db_path, timeout=2)
+            rows = conn.execute(
+                "SELECT status, COUNT(*) FROM run_stats "
+                "WHERE finished_at >= datetime('now','localtime','-7 days') "
+                "GROUP BY status"
+            ).fetchall()
+            for status, count in rows:
+                stats[str(status)] = count
+                total += count
+
+            form_rows = conn.execute(
+                "SELECT form_name, SUM(inserted) AS total_ins "
+                "FROM form_stats "
+                "WHERE finished_at >= datetime('now','localtime','-7 days') "
+                "GROUP BY form_name "
+                "ORDER BY total_ins DESC LIMIT 10"
+            ).fetchall()
+            conn.close()
+        except Exception:
+            pass
+
+        success_rate = (stats["success"] / total * 100) if total else 0.0
+
+        # 数字行
+        num_layout = QHBoxLayout()
+        num_layout.setSpacing(16)
+        for key, emoji, color_cls in [
+            ("success", "✅", "success"),
+            ("partial", "⚠️", "warning"),
+            ("failed", "❌", "danger"),
+        ]:
+            pair = QHBoxLayout()
+            pair.setSpacing(4)
+            lbl = QLabel(f"{emoji} {key}")
+            lbl.setProperty("ui", "win11-helper-text")
+            val = QLabel(str(stats.get(key, 0)))
+            val.setProperty("ui", f"win11-inline-value-{color_cls}")
+            pair.addWidget(lbl)
+            pair.addWidget(val)
+            num_layout.addLayout(pair)
+        num_layout.addStretch()
+        self.reliability_card.content_layout.addLayout(num_layout)
+
+        # 进度条
+        from PySide6.QtWidgets import QProgressBar
+
+        bar = QProgressBar()
+        bar.setRange(0, 100)
+        bar.setValue(int(success_rate))
+        bar.setFormat(f"成功率 {success_rate:.1f}%")
+        bar.setFixedHeight(24)
+        if success_rate < 80:
+            bar.setStyleSheet("QProgressBar::chunk { background: #e74c3c; }")
+        elif success_rate < 95:
+            bar.setStyleSheet("QProgressBar::chunk { background: #f39c12; }")
+        else:
+            bar.setStyleSheet("QProgressBar::chunk { background: #27ae60; }")
+        self.reliability_card.content_layout.addWidget(bar)
+
+        # ── MySQL 表写入排行 ──
+        if form_rows:
+            from PySide6.QtWidgets import QTableWidget, QTableWidgetItem
+
+            spacer = QLabel()
+            spacer.setFixedHeight(8)
+            self.reliability_card.content_layout.addWidget(spacer)
+
+            title = QLabel("🗄 MySQL 表写入量 Top 10")
+            title.setProperty("ui", "win11-inline-title")
+            self.reliability_card.content_layout.addWidget(title)
+
+            table = QTableWidget(len(form_rows), 2)
+            table.setHorizontalHeaderLabels(["表单", "写入条数"])
+            table.horizontalHeader().setStretchLastSection(True)
+            table.setEditTriggers(QTableWidget.NoEditTriggers)
+            table.verticalHeader().setVisible(False)
+            table.setFixedHeight(min(24 + len(form_rows) * 28, 320))
+            for i, (name, ins) in enumerate(form_rows):
+                n = QTableWidgetItem(str(name))
+                v = QTableWidgetItem(f"{ins:,}")
+                v.setTextAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+                table.setItem(i, 0, n)
+                table.setItem(i, 1, v)
+            table.resizeColumnsToContents()
+            self.reliability_card.content_layout.addWidget(table)
+
         for card in (self.card_count, self.card_records, self.card_rate, self.card_status):
             self.add_summary_card(card)
 
@@ -227,6 +328,13 @@ class DashboardPage(Win11PageScaffold):
         self.overview_text.setProperty("ui", "win11-helper-text")
         self.overview_card.content_layout.addWidget(self.overview_text)
         page_layout.addWidget(self.overview_card)
+
+        self.reliability_card = Win11SectionCard(
+            "📈 同步可靠性",
+            "近 7 天同步成功率与 MySQL 表写入排行。",
+        )
+        self._build_reliability_content()
+        page_layout.addWidget(self.reliability_card)
 
         self.middle_splitter = self._register_splitter(
             self._create_middle_row(),

@@ -1,12 +1,14 @@
-import pyodbc
-import sys
 import os
+import sys
+
+import pyodbc
 
 # 添加项目根目录到 sys.path
 sys.path.append(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 
-from src.config.config_manager import config_manager
 import logging
+
+from src.config.config_manager import config_manager
 
 # 配置日志
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -18,7 +20,7 @@ def create_table():
         config = db_config['sqlserver']
         trust_cert = 'yes' if str(config.get('trust_server_certificate', 'true')).lower() == 'true' else 'no'
         encrypt = 'yes' if str(config.get('encrypt', 'auto')).lower() == 'true' else 'no'
-        
+
         # 使用更稳健的连接字符串构建方式
         conn_str = (
             f"DRIVER={{{config['driver']}}};"
@@ -32,15 +34,15 @@ def create_table():
         try:
             conn = pyodbc.connect(conn_str)
             cursor = conn.cursor()
-            
+
             # 科目余额表 (GL_RPT_AccountBalance)
             # 根据 FieldKeys 推断字段类型
             # FBALANCEID (String?), FBALANCENAME (String), FDETAILNUMBER (String), FDETAILNAME (String)
             # 其余为金额字段 (Decimal)
-            
+
             table_name = "GL_RPT_AccountBalance"
             drop_sql = f"IF OBJECT_ID('dbo.{table_name}', 'U') IS NOT NULL DROP TABLE dbo.{table_name};"
-            
+
             create_sql = f"""
             CREATE TABLE dbo.{table_name} (
                 FBALANCEID NVARCHAR(255),
@@ -70,13 +72,13 @@ def create_table():
                 SYNC_TIME DATETIME DEFAULT GETDATE()
             );
             """
-            
+
             logger.info(f"正在创建表 {table_name}...")
             cursor.execute(drop_sql)
             cursor.execute(create_sql)
             conn.commit()
             logger.info(f"表 {table_name} 创建成功。")
-            
+
         except Exception as e:
             logger.error(f"创建表失败: {e}")
         finally:

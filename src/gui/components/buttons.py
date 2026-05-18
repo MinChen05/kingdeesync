@@ -3,9 +3,9 @@
 包含各种自定义按钮组件
 """
 
-from PySide6.QtWidgets import QLabel, QWidget, QPushButton, QGraphicsDropShadowEffect
-from PySide6.QtCore import Qt, Signal, QPropertyAnimation, QEasingCurve, QTimer, Property
+from PySide6.QtCore import Property, QEasingCurve, QPropertyAnimation, Qt, QTimer, Signal
 from PySide6.QtGui import QColor, QPainter, QPainterPath, QPen
+from PySide6.QtWidgets import QGraphicsDropShadowEffect, QLabel, QPushButton, QWidget
 
 from src.gui.design_tokens import ColorTokens, qcolor
 from src.gui.ui_text import LoadingText

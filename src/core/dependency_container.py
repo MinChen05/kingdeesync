@@ -4,8 +4,8 @@
 """
 
 import logging
-from typing import Dict, Any, Callable
 from threading import Lock
+from typing import Any, Callable, Dict
 
 logger = logging.getLogger(__name__)
 

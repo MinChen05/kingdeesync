@@ -1,7 +1,7 @@
 """Shared GUI component primitives used across the app."""
 
-from src.gui.components.buttons import ClickableLabel, SwitchButton, LoadingButton, ScaleButton
-from src.gui.components.charts import SimpleLineChart, HorizontalBarChart, SuccessRateBar
+from src.gui.components.buttons import ClickableLabel, LoadingButton, ScaleButton, SwitchButton
+from src.gui.components.charts import HorizontalBarChart, SimpleLineChart, SuccessRateBar
 from src.gui.components.combobox import SearchableComboBox
 from src.gui.components.page_shell import Win11PageScaffold, Win11SummaryCard
 from src.gui.components.states import StateWidget

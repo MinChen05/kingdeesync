@@ -53,6 +53,26 @@ class KingdeeAPIClient:
         joined = " ".join(messages)
         return any(keyword in joined for keyword in self.SESSION_ERROR_KEYWORDS)
 
+    def _extract_embedded_row_errors(self, rows: list[Any]) -> list[str]:
+        for row in rows:
+            row_errors = self._extract_response_errors(row)
+            if row_errors:
+                return row_errors
+
+            if isinstance(row, dict):
+                values = row.values()
+            elif isinstance(row, list):
+                values = row
+            else:
+                values = ()
+
+            for value in values:
+                cell_errors = self._extract_response_errors(value)
+                if cell_errors:
+                    return cell_errors
+
+        return []
+
     def _extract_business_rows(self, payload: Any) -> tuple[list[Any], list[str]]:
         errors = self._extract_response_errors(payload)
         if errors:
@@ -88,7 +108,7 @@ class KingdeeAPIClient:
         })
         self.is_authenticated = False
         self.session_id = None
-        self.session_started_at = None
+        self.session_started_at: Optional[datetime] = None
         # 保持会话相关
         self._keepalive_thread: Optional[threading.Thread] = None
         self._keepalive_stop = threading.Event()
@@ -486,6 +506,18 @@ class KingdeeAPIClient:
                             continue
                     return None
 
+                embedded_errors = self._extract_embedded_row_errors(page_rows)
+                if embedded_errors:
+                    logger.error("查询结果包含错误响应: %s", embedded_errors)
+                    if self._is_session_error(embedded_errors) and not session_retry_used:
+                        logger.warning("[%s] 当前页检测到会话异常，尝试重登后重试...", form_id)
+                        self.logout(force=True)
+                        if self.login():
+                            session_retry_used = True
+                            page_index -= 1
+                            continue
+                    return None
+
                 session_retry_used = False
 
                 # 统一尝试映射：如果数据是列表且配置了 FieldKeys，则转换为字典
@@ -621,50 +653,41 @@ class KingdeeAPIClient:
     def query_multiple_forms(self, form_names: List[str], custom_filters: Dict[str, str] = None) -> Dict[str, List[Dict]]:
         """查询多个表单数据"""
         results = {}
-        
+
+        form_query_handlers = {
+            "销售订单": self.query_sales_order,
+            "销售出库单": self.query_sales_outstock,
+            "预测订单": self.query_forecast_order,
+            "生产订单": self.query_production_order,
+        }
+
         for form_name in form_names:
             try:
-                if form_name == "销售订单":
-                    filter_string = None
-                    if custom_filters and form_name in custom_filters:
-                        filter_string = custom_filters[form_name]
-                    data = self.query_sales_order(filter_string)
-                elif form_name == "销售出库单":
-                    filter_string = None
-                    if custom_filters and form_name in custom_filters:
-                        filter_string = custom_filters[form_name]
-                    data = self.query_sales_outstock(filter_string)
-                elif form_name == "预测订单":
-                    filter_string = None
-                    if custom_filters and form_name in custom_filters:
-                        filter_string = custom_filters[form_name]
-                    data = self.query_forecast_order(filter_string)
-                elif form_name == "生产订单":
-                    filter_string = None
-                    if custom_filters and form_name in custom_filters:
-                        filter_string = custom_filters[form_name]
-                    data = self.query_production_order(filter_string)
-                # 已移除“生产用料清单”分支
-                else:
+                handler = form_query_handlers.get(form_name)
+                if handler is None:
                     logger.warning(f"未知的表单类型: {form_name}")
-                    data = []
-                
+                    results[form_name] = []
+                    continue
+
+                filter_string = custom_filters.get(form_name) if custom_filters else None
+                data = handler(filter_string)
+
                 if data is not None:
                     results[form_name] = data
                 else:
                     results[form_name] = []
                     logger.warning(f"表单 {form_name} 查询失败或无数据")
-                    
-            except Exception as e:
+
+            except (requests.exceptions.RequestException, ValueError) as e:
                 logger.error(f"查询表单 {form_name} 时发生错误: {str(e)}")
                 results[form_name] = []
-        
+
         return results
-    
+
     def test_connection(self) -> bool:
         """测试连接"""
         return self.ensure_session()
-    
+
     def logout(self, force: bool = False):
         """登出"""
         # 若配置为不自动登出，仅停止心跳并保留会话（进程结束仍会释放资源）
@@ -672,7 +695,7 @@ class KingdeeAPIClient:
             self.stop_keepalive()
         except Exception:
             pass
-        
+
         if force or self.config.get('auto_logout_on_exit', False):
             self.is_authenticated = False
             self.session_id = None

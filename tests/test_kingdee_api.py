@@ -218,6 +218,56 @@ class KingdeeAPIClientQueryTests(unittest.TestCase):
         client.logout.assert_called_once_with(force=True)
         client.login.assert_called_once()
 
+    def test_query_data_retries_when_session_error_is_embedded_in_row_payload(self) -> None:
+        client = self._make_client()
+        client.logout = Mock()
+        client.login = Mock(return_value=True)
+        client.session.post = Mock(
+            side_effect=[
+                FakeResponse(
+                    {
+                        "Result": {
+                            "ResponseStatus": {"IsSuccess": True},
+                            "Result": [
+                                [
+                                    {
+                                        "Result": {
+                                            "ResponseStatus": {
+                                                "IsSuccess": False,
+                                                "Errors": [{"Message": "会话信息已丢失，请重新登录"}],
+                                            }
+                                        }
+                                    }
+                                ]
+                            ],
+                        }
+                    }
+                ),
+                FakeResponse(
+                    {
+                        "Result": {
+                            "ResponseStatus": {"IsSuccess": True},
+                            "Result": [[1, "SO001"]],
+                        }
+                    }
+                ),
+            ]
+        )
+
+        rows = client.query_data(
+            "销售订单",
+            {
+                "FormId": "SAL_SaleOrder",
+                "FieldKeys": "FID,FBillNo",
+                "StartRow": 0,
+                "Limit": 0,
+            },
+        )
+
+        self.assertEqual(rows, [{"FID": 1, "FBillNo": "SO001"}])
+        client.logout.assert_called_once_with(force=True)
+        client.login.assert_called_once()
+
 
 if __name__ == "__main__":
     unittest.main()

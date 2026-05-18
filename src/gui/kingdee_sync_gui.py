@@ -1,9 +1,9 @@
 ﻿"""Desktop GUI shell for the Kingdee sync tool."""
 
+import ctypes
 import logging
 import os
 import sys
-import ctypes
 from datetime import datetime
 from typing import Any
 

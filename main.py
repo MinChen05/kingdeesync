@@ -18,7 +18,6 @@ import os
 import subprocess
 import sys
 
-
 if getattr(sys, "frozen", False):
     project_root = os.path.dirname(sys.executable)
 else:
@@ -78,7 +77,7 @@ def run_sync(args: argparse.Namespace) -> None:
         mode_map = {
             "incremental": SyncType.INCREMENTAL,
             "full": SyncType.FULL,
-            "reset": SyncType.RESET,
+            "reset": SyncType.COMPLETE,
         }
         sync_type = mode_map.get(args.mode, SyncType.INCREMENTAL)
         repaired = sync_service.repair_stale_sync_runs()

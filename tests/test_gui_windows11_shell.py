@@ -1,9 +1,9 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
+import logging
 import os
 import re
 import unittest
-import logging
 from types import SimpleNamespace
 from unittest.mock import patch
 

@@ -5,7 +5,7 @@
 - Python 版本仍是当前主线，日常开发和发布以本仓库 Python 实现为准。
 - 默认数据库是 SQLServer，和 [config.ini](/d:/Kingdee/config.ini) 中 `[DATABASE] type = sqlserver` 保持一致。
 - MySQL 仍保留兼容能力，但不再作为默认主路径。
-- `.NET` 目录处于迁移进行中状态，用于分层迁移、CLI 验证和 Python/.NET 对账，不是当前生产主线。
+- 当前仅允许 Python 同步链路；已移除 C# / .NET 迁移工程。
 - 本地真实连接信息建议放在未纳入版本控制的 `config.local.ini`，仓库中的 `config.ini` 只保留脱敏模板。
 
 ## 项目瘦身
@@ -101,16 +101,6 @@ python -m mypy
 python -m unittest tests.test_config_manager tests.test_filter_builder tests.test_sync_run_repository -v
 ```
 
-## Python / .NET 对账
-
-仓库保留 Python 与 .NET 的同批次对账脚本：
-
-```bash
-python src/tools/compare_python_dotnet_batch.py --mode full --tables 表单A,表单B
-```
-
-该脚本用于迁移阶段的结果对比，不表示 `.NET` 版本已替代 Python 主线。
-
 ## 目录说明
 
 - [main.py](/d:/Kingdee/main.py)：统一 CLI / GUI 入口。
@@ -118,11 +108,9 @@ python src/tools/compare_python_dotnet_batch.py --mode full --tables 表单A,表
 - [src/core](/d:/Kingdee/src/core)：同步编排、数据库写入、日志仓储、writer、upsert engine。
 - [src/gui](/d:/Kingdee/src/gui)：GUI 页面、worker 和组件。
 - [src/services](/d:/Kingdee/src/services)：面向 GUI 或报表的服务层。
-- [dotnet](/d:/Kingdee/dotnet)：`.NET` 迁移工程。
 
-## 迁移口径
+## 技术口径
 
-- Python：当前主线。
+- Python：唯一允许的同步链路。
 - SQLServer：当前默认数据库。
 - MySQL：兼容路径。
-- .NET：迁移中，持续做 parity 与模块替换，不直接替代当前 Python 交付链路。

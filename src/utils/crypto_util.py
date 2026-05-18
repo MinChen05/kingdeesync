@@ -1,14 +1,16 @@
-"""
+﻿"""
 加密工具模块
 用于处理敏感信息的加密和解密
 """
+import base64
 import os
 import sys
-import base64
 import uuid
+
 from cryptography.fernet import Fernet
 from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
+
 try:
     import winreg  # Windows 注册表
 except Exception:
@@ -58,13 +60,13 @@ class CryptoUtil:
             pass
         CryptoUtil._CACHED_SALT = salt
         return salt
-    
+
     @staticmethod
     def generate_key(password: str, salt: bytes = None) -> bytes:
         """根据密码和盐值生成密钥"""
         if salt is None:
             salt = CryptoUtil.DEFAULT_SALT
-            
+
         password_bytes = password.encode('utf-8')
         kdf = PBKDF2HMAC(
             algorithm=hashes.SHA256(),
@@ -74,13 +76,13 @@ class CryptoUtil:
         )
         key = base64.urlsafe_b64encode(kdf.derive(password_bytes))
         return key
-    
+
     @staticmethod
     def encrypt(text: str, key: bytes = None) -> str:
         """加密文本"""
         if not text:
             return ""
-            
+
         if key is None:
             # 使用机器标识 + 随机安装盐值生成密钥
             machine_id = CryptoUtil._get_machine_id()
@@ -90,13 +92,13 @@ class CryptoUtil:
         f = Fernet(key)
         encrypted_data = f.encrypt(text.encode('utf-8'))
         return base64.urlsafe_b64encode(encrypted_data).decode('utf-8')
-    
+
     @staticmethod
     def decrypt(encrypted_text: str, key: bytes = None) -> str:
         """解密文本"""
         if not encrypted_text:
             return ""
-            
+
         # 主密钥：机器标识 + 随机安装盐值
         if key is None:
             machine_id = CryptoUtil._get_machine_id()
@@ -134,8 +136,8 @@ class CryptoUtil:
                     creationflags=CREATE_NO_WINDOW,
                     stderr=subprocess.STDOUT
                 ).decode(errors="ignore")
-                lines = [l.strip() for l in result.splitlines() if l.strip()]
-                uuid_vals = [l for l in lines if l.lower() != "uuid"]
+                lines = [ln.strip() for ln in result.splitlines() if ln.strip()]
+                uuid_vals = [ln for ln in lines if ln.lower() != "uuid"]
                 if uuid_vals:
                     legacy_key = CryptoUtil.generate_key(uuid_vals[0])
                     f2 = Fernet(legacy_key)
@@ -145,7 +147,7 @@ class CryptoUtil:
                 pass
         # 解密失败则返回空字符串
         return ""
-    
+
     @staticmethod
     def _get_machine_id() -> str:
         """获取机器唯一标识，用于生成密钥（Windows 优先使用注册表，避免命令窗口弹出）"""

@@ -4,11 +4,11 @@
 """
 
 import logging
-import threading
 import os
-from typing import List, Optional
+import threading
 from collections import deque
 from datetime import datetime
+from typing import List, Optional
 
 
 class BufferedLogHandler(logging.Handler):

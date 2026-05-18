@@ -4,8 +4,8 @@
 """
 
 from abc import ABC, abstractmethod
-from typing import Dict, List, Any, Optional, Tuple, Callable
 from enum import Enum
+from typing import Any, Callable, Dict, List, Optional, Tuple
 
 
 class SyncStatus(Enum):

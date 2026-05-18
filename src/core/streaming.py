@@ -4,12 +4,12 @@
 """
 
 import logging
-import threading
 import queue
+import threading
 import time
-from typing import List, Any, Callable, Optional, Generator
-from dataclasses import dataclass
 from contextlib import contextmanager
+from dataclasses import dataclass
+from typing import Any, Callable, Generator, List, Optional
 
 logger = logging.getLogger(__name__)
 

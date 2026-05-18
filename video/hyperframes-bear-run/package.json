@@ -1,0 +1,8 @@
+{
+  "name": "hyperframes-bear-run",
+  "private": true,
+  "dependencies": {
+    "gsap": "3.14.2",
+    "hyperframes": "0.5.4"
+  }
+}

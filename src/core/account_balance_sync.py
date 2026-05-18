@@ -24,6 +24,20 @@ class AccountBalanceSyncManager:
     def __init__(self):
         self._is_cancelled = False
 
+    @staticmethod
+    def _parse_amount(value: Any) -> float:
+        """Parse Kingdee report amount strings, including values with thousands separators."""
+        if value is None or value == "":
+            return 0
+        if isinstance(value, str):
+            value = value.replace(",", "").strip()
+            if not value:
+                return 0
+        try:
+            return float(value)
+        except (ValueError, TypeError):
+            return 0
+
     def sync_by_month(
         self,
         start_year: int,
@@ -282,11 +296,8 @@ class AccountBalanceSyncManager:
                         "FDETAILNUMBER",
                         "FDETAILNAME",
                     ]:
-                        # 金额字段
-                        try:
-                            values.append(float(val) if val else 0)
-                        except (ValueError, TypeError):
-                            values.append(0)
+                        # 金蝶报表金额可能带千分位逗号，例如 "1,208.85"。
+                        values.append(self._parse_amount(val))
                     else:
                         values.append(str(val) if val else "")
                 values_list.append(tuple(values))

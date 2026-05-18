@@ -4,11 +4,11 @@
 """
 
 import logging
-import time
 import threading
-from typing import Dict, Any, Optional, Callable
+import time
 from dataclasses import dataclass
 from enum import Enum
+from typing import Any, Callable, Dict, Optional
 
 logger = logging.getLogger(__name__)
 

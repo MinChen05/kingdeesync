@@ -354,7 +354,9 @@ class FormSyncRunner:
                             f"[{form_name}] 查询失败，正在重试 ({retry_count}/{max_retries})...",
                             35,
                         )
-                        time.sleep(2)
+                        delay = min(1.0 * (2 ** (retry_count - 1)), 60.0)
+                        self.logger.info("[%s] 将在 %.1f秒 后重试...", form_name, delay)
+                        time.sleep(delay)
                 except Exception as query_error:
                     if insert_errors:
                         self.logger.error("[%s] 发生数据库插入致命错误，停止重试: %s", form_name, insert_errors[0])

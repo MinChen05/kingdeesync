@@ -456,7 +456,7 @@ def insert_ap_payable(manager, data: List[Dict]) -> int:
         FPRICEUNITID.FNAME -> FPRICEUNITNAME
         FPRICEQTY -> FPRICEQTY
         FALLAMOUNTFOR_D -> FALLAMOUNTFOR_D
-        FNOTAXAMOUNTFOR -> FNOTAXAMOUNTFOR
+        FNoTaxAmountFor_D/FNOTAXAMOUNTFOR_D -> FNOTAXAMOUNTFOR
         FDISCOUNTAMOUNTFOR -> FDISCOUNTAMOUNTFOR
         FModifyDate -> FModifyDate
         """

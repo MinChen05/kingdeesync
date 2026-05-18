@@ -5,6 +5,7 @@
 
 import logging
 from typing import Callable, Optional
+
 from PySide6.QtCore import QThread, Signal
 
 logger = logging.getLogger(__name__)

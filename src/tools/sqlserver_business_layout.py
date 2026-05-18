@@ -2,7 +2,6 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-
 EXCLUDED_TABLES = {"GL_RPT_AccountBalance", "stk_inventory"}
 
 

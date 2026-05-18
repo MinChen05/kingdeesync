@@ -57,12 +57,29 @@ class DataSyncManager:
     """数据同步管理器"""
 
     PRIORITY_MAP = {
-        "生产订单主表": 1,
-        "生产订单明细": 2,
-        "生产用料清单主表": 1,
+        # Group 0 (priority 0): 小表 — 极快完成，为后续组释放 API 带宽
+        "仓库": 0,
+        "物料": 0,
+        "客户资料": 0,
+        "即时库存": 0,
+        "物料清单": 0,
+        "物料清单子项": 0,
+        "预测订单": 0,
+        # Group 1 (priority 1): 中表 — 正常数据量
+        "销售订单": 1,
+        "采购订单": 1,
+        "应付单": 1,
+        "销售出库单": 1,
+        "销售退货单": 1,
+        "发货通知单": 1,
+        "委外订单": 1,
+        "科目余额表": 1,
+        "生产订单明细": 1,
+        "生产入库单": 1,
+        # Group 2 (priority 2): 大表 — 独占所有 worker 和 API 带宽
+        "生产订单主表": 2,
+        "生产用料清单主表": 2,
         "生产用料清单明细表": 2,
-        "物料清单": 1,
-        "物料清单子项": 2,
     }
 
     DEDUPLICATION_FORMS = {"物料", "生产订单主表", "生产用料清单主表", "生产订单明细", "生产用料清单", "即时库存"}
@@ -184,6 +201,106 @@ class DataSyncManager:
             )
         except Exception as exc:
             logger.debug("记录任务级历史失败: %s", exc)
+
+        try:
+            duration_seconds = (final_dt - start_time).total_seconds()
+        except Exception:
+            duration_seconds = 0.0
+        self._record_run_stats(
+            run_id=run_id,
+            sync_type=sync_type,
+            run_status=run_status,
+            total_records=total_records,
+            duration_seconds=duration_seconds,
+            failed_forms=failed_tables,
+            results=results,
+        )
+
+    def _record_run_stats(
+        self,
+        run_id: str,
+        sync_type: SyncType,
+        run_status: SyncStatus,
+        total_records: int,
+        duration_seconds: float,
+        failed_forms: list[str],
+        results: dict[str, dict[str, Any]],
+    ) -> None:
+        """将每轮同步结果（轮次级 + 表单级）记录到本地 SQLite"""
+        import os
+        import sqlite3
+        from datetime import datetime
+
+        db_path = os.path.join("logs", "sync_stats.db")
+        try:
+            conn = sqlite3.connect(db_path, timeout=2)
+
+            conn.execute("""
+                CREATE TABLE IF NOT EXISTS run_stats (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    run_id TEXT,
+                    sync_type TEXT,
+                    status TEXT,
+                    total_records INTEGER,
+                    duration_seconds REAL,
+                    failed_forms TEXT,
+                    finished_at TEXT
+                )
+            """)
+            conn.execute(
+                "INSERT INTO run_stats VALUES (NULL,?,?,?,?,?,?,datetime('now','localtime'))",
+                (
+                    run_id,
+                    sync_type.value,
+                    run_status.value,
+                    total_records or 0,
+                    duration_seconds,
+                    ",".join(failed_forms or []),
+                ),
+            )
+
+            conn.execute("""
+                CREATE TABLE IF NOT EXISTS form_stats (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    run_id TEXT,
+                    form_name TEXT,
+                    table_name TEXT,
+                    fetched INTEGER,
+                    inserted INTEGER,
+                    status TEXT,
+                    duration_seconds REAL,
+                    finished_at TEXT
+                )
+            """)
+            now_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            for form_name, res in results.items():
+                if not isinstance(res, dict):
+                    continue
+                conn.execute(
+                    "INSERT INTO form_stats "
+                    "(run_id, form_name, table_name, fetched, inserted, "
+                    " status, duration_seconds, finished_at) "
+                    "VALUES (?,?,?,?,?,?,?,?)",
+                    (
+                        run_id,
+                        str(form_name),
+                        str(res.get("table_name", "")),
+                        int(res.get("fetched", 0)),
+                        int(res.get("inserted", 0)),
+                        str(res.get("status", "unknown")),
+                        float(res.get("duration_seconds", 0)),
+                        now_str,
+                    ),
+                )
+
+            conn.commit()
+        except Exception:
+            pass
+        finally:
+            try:
+                conn.close()
+            except Exception:
+                pass
 
     def _determine_final_status(
         self, failed_tables: list[str], total_tables: int, total_records: int

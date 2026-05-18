@@ -7,7 +7,9 @@ import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import TYPE_CHECKING, Any, List
 
+from src.core.dedup_strategy import DeduplicationStrategy
 from src.core.performance_logging import log_write_metrics
+from src.core.type_converter import TypeConverter
 
 if TYPE_CHECKING:
     from src.core.mysql_manager import MySQLManager
@@ -38,11 +40,13 @@ class UpsertEngineSqlServer:
         "FMODIFYDATE",
     ]
 
-    def __init__(self, manager: "MySQLManager", *, logger: logging.Logger | None = None) -> None:
+    def __init__(self, manager: MySQLManager, *, logger: logging.Logger | None = None) -> None:
         self.manager = manager
         self.logger = logger or logging.getLogger(__name__)
+        self.type_converter = TypeConverter(manager.cursor)
+        self.dedup_strategy = DeduplicationStrategy(manager)
 
-    def _is_driver18(self, manager: "MySQLManager") -> bool:
+    def _is_driver18(self, manager: MySQLManager) -> bool:
         drv = getattr(manager, "config", {}).get("driver", "ODBC Driver 17 for SQL Server")
         return "ODBC Driver 18" in str(drv)
 
@@ -52,7 +56,7 @@ class UpsertEngineSqlServer:
     def execute(
         self,
         sql: str,
-        values: List[List[Any]],
+        values: list[list[Any]],
         batch_size: int,
         commit_every_n_batches: int,
     ) -> int:
@@ -86,7 +90,6 @@ class UpsertEngineSqlServer:
                 logger.warning(f"读取 {table} 列信息失败，可能无法自动忽略缺失列: {e}")
 
             # 双重保险：确保 values 长度与 columns 一致
-            # 防止因 config 配置字段少于代码生成字段（例如 FMODIFYDATE）导致的 "Expected X parameters, supplied Y" 错误
             if values and len(values) > 0:
                 try:
                     row0 = values[0]
@@ -98,41 +101,15 @@ class UpsertEngineSqlServer:
                 except Exception as e:
                     logger.warning(f"[{table}] 数据对齐检查失败: {e}")
 
-            try:
-                required_map = {
-                    "sal_deliverynotice": ["FID", "FENTRYID"],
-                    "prd_instock": ["FID", "FENTRYID"],
-                    "ap_payable": ["FID", "FENTRYID"],
-                }
-                required_cols = required_map.get(str(table).strip().lower())
-                if required_cols:
-                    required_indices = []
-                    for rc in required_cols:
-                        idx = None
-                        for i, c in enumerate(columns):
-                            if str(c).strip().upper() == rc:
-                                idx = i
-                                break
-                        if idx is not None:
-                            required_indices.append(idx)
-                    if required_indices:
-                        original_count = len(values)
-                        filtered = []
-                        invalid_required = 0
-                        for row in values:
-                            try:
-                                if any((row[i] is None) or (str(row[i]).strip() == "") for i in required_indices):
-                                    invalid_required += 1
-                                    continue
-                            except Exception:
-                                invalid_required += 1
-                                continue
-                            filtered.append(row)
-                        values = filtered
-                        if invalid_required > 0:
-                            logger.warning(f"[{table}] 必填字段为空已跳过: {invalid_required} 条")
-            except Exception:
-                pass
+            # 过滤必填字段为空的行
+            required_map = {
+                "sal_deliverynotice": ["FID", "FENTRYID"],
+                "prd_instock": ["FID", "FENTRYID"],
+                "ap_payable": ["FID", "FENTRYID"],
+            }
+            required_cols = required_map.get(base_name)
+            if required_cols:
+                values = self.dedup_strategy.filter_required_fields(values, columns, required_cols, table)
 
             is_inventory_table = str(table).strip().lower() == "stk_inventory"
             # 即时库存：为了提升速度，使用较大批次并由临时表一次性提交
@@ -160,57 +137,9 @@ class UpsertEngineSqlServer:
             # 支持复合主键排除
             pk_col_set = {c.strip().upper() for c in pk.split(",")}
             non_pk_cols = [c for c in columns if c.strip().upper() not in pk_col_set]
+
             # 通用去重：按主键列对源数据进行去重，避免 MERGE 8672（同一目标行被多次匹配）
-            try:
-                pk_raw = manager._get_primary_key(table) or columns[0]
-                pk_cols = (
-                    [c.strip() for c in pk_raw.split(",")]
-                    if (isinstance(pk_raw, str) and "," in pk_raw)
-                    else [pk_raw]
-                )
-                # 找到主键列索引
-                pk_indices = []
-                for pkc in pk_cols:
-                    idx = None
-                    for i, c in enumerate(columns):
-                        if str(c).strip().upper() == str(pkc).strip().upper():
-                            idx = i
-                            break
-                    if idx is not None:
-                        pk_indices.append(idx)
-                if pk_indices and source_dedup_enabled:
-                    original_count = len(values)
-                    dedup_map = {}
-                    duplicate_counter = 0
-                    invalid_pk_counter = 0
-                    for row in values:
-                        try:
-                            key_tuple = (
-                                tuple([manager._hashable_key(row[i]) for i in pk_indices])
-                                if len(pk_indices) > 1
-                                else (manager._hashable_key(row[pk_indices[0]]),)
-                            )
-                        except Exception:
-                            key_tuple = tuple()
-                        invalid_pk = False
-                        try:
-                            if any((kv is None) or (str(kv).strip() == "") for kv in key_tuple):
-                                invalid_pk = True
-                        except Exception:
-                            invalid_pk = True
-                        if invalid_pk:
-                            invalid_pk_counter += 1
-                            continue
-                        if key_tuple in dedup_map:
-                            duplicate_counter += 1
-                        dedup_map[key_tuple] = row
-                    values = list(dedup_map.values())
-                    if len(values) < original_count:
-                        logger.info(
-                            f"[DEDUP] 基于主键 {pk_cols} 去重：{original_count} -> {len(values)} （表 {table}），重复 {duplicate_counter}，无效主键 {invalid_pk_counter}"
-                        )
-            except Exception as e:
-                logger.warning(f"[DEDUP] 基于主键去重过程异常（表 {table}）：{e}")
+            values = self.dedup_strategy.deduplicate_by_primary_key(values, columns, table, source_dedup_enabled)
             # 如目标表包含 SYNC_TIME，则在 UPDATE/INSERT 中写入当前时间
             has_sync_time = manager._table_has_column(table, "SYNC_TIME")
             # 标识列(IDENTITY)不可更新/插入：在普通 MERGE 路径也进行过滤
@@ -251,59 +180,8 @@ class UpsertEngineSqlServer:
             on_clause = " AND ".join([f"t.{c} = s.{c}" for c in pk_cols])
             source_sql = f"USING (VALUES ({', '.join(['?' for _ in columns])})) AS s({', '.join(columns)}) "
             # 对所有表启用类型安全转换：将非数值字符串（如 'C'）安全转换为数值，避免 8114 错误
-            col_type_map = {}
-            try:
-                manager.cursor.execute(
-                    """
-                    SELECT COLUMN_NAME, DATA_TYPE, CHARACTER_MAXIMUM_LENGTH
-                    FROM INFORMATION_SCHEMA.COLUMNS
-                    WHERE TABLE_NAME = ?
-                    """,
-                    (base_name,),
-                )
-                rows = manager.cursor.fetchall() or []
-                for r in rows:
-                    if isinstance(r, dict):
-                        name = r.get("COLUMN_NAME")
-                        dtype = r.get("DATA_TYPE")
-                        max_len = r.get("CHARACTER_MAXIMUM_LENGTH")
-                    else:
-                        name = r[0] if len(r) > 0 else None
-                        dtype = r[1] if len(r) > 1 else None
-                        max_len = r[2] if len(r) > 2 else None
-                    if name:
-                        col_type_map[str(name).upper()] = (
-                            str(dtype).lower() if dtype is not None else "",
-                            max_len,
-                        )
-            except Exception:
-                col_type_map = {}
-            int_types = {"int", "bigint", "smallint", "tinyint"}
-            dec_types = {"numeric", "decimal", "float", "real", "money", "smallmoney"}
-            dt_types = {"datetime", "datetime2", "smalldatetime", "date", "time"}
-            text_types = {"nvarchar", "varchar", "nchar", "char"}
-            source_parts = []
-            for c in columns:
-                c_up = str(c).strip().upper()
-                dtype, max_len = col_type_map.get(c_up, ("", None))
-                if dtype in int_types:
-                    source_parts.append(f"COALESCE(TRY_CONVERT(BIGINT, CONVERT(NVARCHAR(64), ?)), 0) AS {c}")
-                elif dtype in dec_types:
-                    source_parts.append(
-                        f"COALESCE(TRY_CONVERT(DECIMAL(23,10), CONVERT(NVARCHAR(64), ?)), 0) AS {c}"
-                    )
-                elif dtype in dt_types:
-                    source_parts.append(f"TRY_CONVERT(DATETIME, ?) AS {c}")
-                elif dtype in text_types:
-                    if max_len == -1:
-                        cast_type = f"{dtype.upper()}(MAX)"
-                    elif max_len is not None and int(max_len) > 0:
-                        cast_type = f"{dtype.upper()}({int(max_len)})"
-                    else:
-                        cast_type = f"{dtype.upper()}(255)"
-                    source_parts.append(f"TRY_CONVERT({cast_type}, ?) AS {c}")
-                else:
-                    source_parts.append(f"TRY_CONVERT(NVARCHAR(255), ?) AS {c}")
+            col_type_map = self.type_converter.get_column_type_map(base_name)
+            source_parts = self.type_converter.build_source_conversion_parts(columns, col_type_map)
             source_sql = f"USING (SELECT {', '.join(source_parts)}) AS s({', '.join(columns)}) "
             merge_sql = (
                 f"MERGE INTO {table} AS t "
@@ -313,32 +191,8 @@ class UpsertEngineSqlServer:
                 + f" WHEN NOT MATCHED THEN INSERT ({', '.join(insert_cols)}) VALUES ({', '.join(insert_vals)});"
             )
             # 对 bd_material 的 FMATERIALID 去重，避免重复记录导致 MERGE/INSERT 冲突
-            try:
-                if str(table).strip().lower() == "bd_material" and source_dedup_enabled:
-                    fmid_idx = None
-                    for idx, col in enumerate(columns):
-                        if str(col).strip().upper() == "FMATERIALID":
-                            fmid_idx = idx
-                            break
-                    if fmid_idx is not None:
-                        original_count = len(values)
-                        material_dedup_map: dict[str, List[Any]] = {}
-                        for row in values:
-                            key = row[fmid_idx]
-                            key_str = None if key is None else str(key).strip()
-                            # 将空/缺失 FMATERIALID 视为同一键，避免空值重复
-                            if not key_str:
-                                key_str = ""
-                            # 后出现的记录覆盖先前，确保以最新数据为准
-                            material_dedup_map[key_str] = row
-                        # 合并去重结果
-                        values = list(material_dedup_map.values())
-                        if len(values) < original_count:
-                            logger.info(
-                                f"[DEDUP] bd_material 的 FMATERIALID 去重：{original_count} -> {len(values)}"
-                            )
-            except Exception as e:
-                logger.warning(f"[DEDUP] bd_material 去重过程异常：{e}")
+            if str(table).strip().lower() == "bd_material" and source_dedup_enabled:
+                values = self.dedup_strategy.deduplicate_by_column(values, columns, "FMATERIALID", table)
             values_len = len(values) if isinstance(values, list) else 0
             insert_threads = 1
             try:
@@ -580,32 +434,7 @@ class UpsertEngineSqlServer:
                             stage_insert_cols = columns[:]
                         else:
                             # 针对部分表（如 prd_ppbomentry）显式进行 TRY_CAST，避免 varchar→numeric 报错
-                            if base_name.strip().lower() == "prd_ppbomentry":
-                                col_type_map = manager._get_table_columns_info(base_name)
-                                int_types = {"int", "bigint", "smallint", "tinyint"}
-                                dec_types = {"numeric", "decimal", "float", "real", "money", "smallmoney"}
-                                dt_types = {"datetime", "datetime2", "smalldatetime", "date", "time"}
-                                select_parts = []
-                                for c in columns:
-                                    c_up = str(c).strip().upper()
-                                    dtype = col_type_map.get(c_up, "")
-                                    if dtype in int_types:
-                                        select_parts.append(
-                                            "COALESCE(TRY_CONVERT(BIGINT, CONVERT(NVARCHAR(64), ?)), 0)"
-                                        )
-                                    elif dtype in dec_types:
-                                        select_parts.append(
-                                            "COALESCE(TRY_CONVERT(DECIMAL(23,10), CONVERT(NVARCHAR(64), ?)), 0)"
-                                        )
-                                    elif dtype in dt_types:
-                                        select_parts.append("TRY_CONVERT(DATETIME, ?)")
-                                    else:
-                                        select_parts.append("TRY_CONVERT(NVARCHAR(255), ?)")
-                                insert_stage_sql = (
-                                    f"INSERT INTO {stage_ref} ({', '.join(columns)}) "
-                                    f"SELECT {', '.join(select_parts)}"
-                                )
-                            elif base_name.strip().lower() == "sub_subreqorder":
+                            if base_name.strip().lower() == "prd_ppbomentry" or base_name.strip().lower() == "sub_subreqorder":
                                 col_type_map = manager._get_table_columns_info(base_name)
                                 int_types = {"int", "bigint", "smallint", "tinyint"}
                                 dec_types = {"numeric", "decimal", "float", "real", "money", "smallmoney"}
@@ -930,7 +759,7 @@ class UpsertEngineSqlServer:
                             update_only_merge_sql = (
                                 f"MERGE INTO {table} AS t "
                                 + source_sql
-                                + f"ON t.FNUMBER = s.FNUMBER "
+                                + "ON t.FNUMBER = s.FNUMBER "
                                 + (
                                     "WHEN MATCHED THEN UPDATE SET "
                                     + ", ".join([f"t.{c} = COALESCE(s.{c}, t.{c})" for c in non_pk_cols])
@@ -1061,9 +890,9 @@ class UpsertEngineSqlServer:
                         raise
                 else:
                     # 多线程路径：分片并发，每线程独立连接与提交
-                    def worker(shard_vals: List[List[Any]], shard_idx: int) -> int:
-                        import time
+                    def worker(shard_vals: list[list[Any]], shard_idx: int) -> int:
                         import random
+                        import time
 
                         local_total = 0
                         local_conn = None
@@ -1121,8 +950,7 @@ class UpsertEngineSqlServer:
                                         )
                                         time.sleep(sleep_time)
                                         continue
-                                    else:
-                                        logger.error(f"线程#{shard_idx} 死锁重试耗尽: {e}")
+                                    logger.error(f"线程#{shard_idx} 死锁重试耗尽: {e}")
                                 else:
                                     logger.error(f"线程#{shard_idx} 批量插入失败: {e}")
 

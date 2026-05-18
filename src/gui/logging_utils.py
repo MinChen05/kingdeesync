@@ -1,5 +1,7 @@
 import logging
+
 from PySide6.QtCore import QObject, Signal
+
 
 class LogSignal(QObject):
     text_written = Signal(str, str)

@@ -1,4 +1,4 @@
-"""Sync execution page built on the shared Windows 11 page scaffold."""
+﻿"""Sync execution page built on the shared Windows 11 page scaffold."""
 
 from __future__ import annotations
 
@@ -21,10 +21,10 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from src.config.config_manager import config_manager
 from src.gui.components.buttons import LoadingButton
 from src.gui.components.combobox import SearchableComboBox
 from src.gui.components.page_shell import Win11PageScaffold, Win11SectionCard, Win11SummaryCard
-from src.config.config_manager import config_manager
 from src.gui.design_tokens import ColorTokens
 from src.gui.feedback import UiFeedback
 from src.gui.ui_text import ButtonText, LoadingText
@@ -54,40 +54,6 @@ class SyncOverviewCard(Win11SummaryCard):
         self.set_value(value)
         if subtitle is not None:
             self.set_subtitle(subtitle)
-
-
-class SyncExecutionMetricCard(QFrame):
-    """Compact metric card for the execution-state panel."""
-
-    def __init__(self, title: str, value: str = "--", note: str = "", parent=None):
-        super().__init__(parent)
-        self.setProperty("ui", "win11-execution-metric-card")
-        self.setMinimumHeight(84)
-
-        layout = QVBoxLayout(self)
-        layout.setContentsMargins(16, 12, 16, 12)
-        layout.setSpacing(4)
-
-        self.title_label = QLabel(title)
-        self.title_label.setProperty("ui", "win11-inline-title")
-
-        self.value_label = QLabel(value)
-        self.value_label.setProperty("ui", "win11-inline-value")
-
-        self.note_label = QLabel(note)
-        self.note_label.setProperty("ui", "win11-helper-text")
-        self.note_label.setWordWrap(True)
-        self.note_label.setVisible(bool(note))
-
-        layout.addWidget(self.title_label)
-        layout.addWidget(self.value_label)
-        layout.addWidget(self.note_label)
-
-    def set_data(self, value: str, note: str | None = None) -> None:
-        self.value_label.setText(value)
-        if note is not None:
-            self.note_label.setText(note)
-            self.note_label.setVisible(bool(note))
 
 
 class SyncExecutionMetricCard(QFrame):

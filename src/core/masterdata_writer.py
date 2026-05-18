@@ -2,17 +2,10 @@
 
 from __future__ import annotations
 
-
-
 import logging
-
 from typing import Dict, List
 
-
-
 from src.config.config_manager import config_manager
-
-
 
 logger = logging.getLogger(__name__)
 

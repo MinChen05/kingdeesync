@@ -4,7 +4,8 @@
 """
 
 import logging
-from typing import List, Tuple, Optional
+from typing import List, Optional, Tuple
+
 from src.core.mysql_manager import mysql_manager
 
 logger = logging.getLogger(__name__)

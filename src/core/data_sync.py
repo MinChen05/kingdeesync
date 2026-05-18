@@ -9,19 +9,19 @@ import time
 import uuid
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime, timedelta
-from typing import Dict, List, Any, Optional
 from enum import Enum
+from typing import Any, Dict, List, Optional
 
 import requests
 
+from src.config.config_manager import config_manager
 from src.core.account_balance_sync import account_balance_sync_manager
+from src.core.audit_logging import emit_audit_log
+from src.core.circuit_breaker import LocalCircuitBreaker
 from src.core.filter_builder import FilterBuilder
 from src.core.form_sync_runner import FormSyncRunner, create_shared_db_manager
 from src.core.kingdee_api import kingdee_client
-from src.core.mysql_manager import mysql_manager, MySQLManager
-from src.core.audit_logging import emit_audit_log
-from src.core.circuit_breaker import LocalCircuitBreaker
-from src.config.config_manager import config_manager
+from src.core.mysql_manager import MySQLManager, mysql_manager
 from src.core.retry_manager import CheckpointManager, SyncCheckpoint
 
 # 配置日志
@@ -34,7 +34,13 @@ class SyncType(Enum):
     INCREMENTAL = "incremental"  # 增量同步
     FULL = "full"  # 全量同步
     COMPLETE = "complete"  # 完全同步
-    RESET = "complete"  # 重置（完全同步的别名）
+
+    @classmethod
+    def from_string(cls, value: str) -> "SyncType":
+        """从字符串转换，支持 'reset' 作为 'complete' 的别名"""
+        if value == "reset":
+            return cls.COMPLETE
+        return cls(value)
 
 
 class SyncStatus(Enum):
@@ -75,12 +81,12 @@ class DataSyncManager:
         self._active_run_message = ""
         self._shutdown_requested = threading.Event()
         self._shutdown_reason = ""
-        sync_config = config_manager.get_sync_config()
         self.circuit_breaker = LocalCircuitBreaker(
-            enabled=bool(sync_config.get("circuit_breaker_enabled", True)),
-            threshold=int(sync_config.get("circuit_breaker_threshold", 3) or 3),
-            cooldown_seconds=int(sync_config.get("circuit_breaker_cooldown_secs", 30) or 30),
+            enabled=True,
+            threshold=3,
+            cooldown_seconds=30,
         )
+        self._refresh_circuit_breaker_config()
 
     def add_sync_callback(self, callback):
         """添加同步进度回调函数"""
@@ -115,9 +121,76 @@ class DataSyncManager:
     def is_shutdown_requested(self) -> bool:
         return self._shutdown_requested.is_set()
 
-    def sync_data(self, form_names: List[str], sync_type: SyncType = SyncType.INCREMENTAL) -> Dict[str, Any]:
+    def _refresh_circuit_breaker_config(self) -> None:
+        sync_config = config_manager.get_sync_config()
+        self.circuit_breaker.enabled = bool(sync_config.get("circuit_breaker_enabled", True))
+        self.circuit_breaker.threshold = max(1, int(sync_config.get("circuit_breaker_threshold", 3) or 3))
+        self.circuit_breaker.cooldown_seconds = max(
+            0,
+            int(sync_config.get("circuit_breaker_cooldown_secs", 30) or 30),
+        )
+
+    def _run_heartbeat_loop(self, run_id: str, heartbeat_stop: threading.Event, heartbeat_interval: int) -> None:
+        """心跳线程逻辑"""
+        while not heartbeat_stop.wait(heartbeat_interval):
+            try:
+                mysql_manager.heartbeat_sync_run(run_id, self._active_run_message or "任务运行中", datetime.now())
+            except Exception as exc:
+                logger.debug("更新同步任务心跳失败: %s", exc)
+
+    def _finalize_run(
+        self,
+        run_id: str,
+        sync_type: SyncType,
+        requested_forms: list[str],
+        results: dict[str, dict[str, Any]],
+        total_records: int,
+        failed_tables: list[str],
+        run_status: SyncStatus,
+        message: str,
+        start_time: datetime,
+        end_time: datetime | None = None,
+    ) -> None:
+        """记录同步任务完成状态"""
+        final_dt = end_time or datetime.now()
+        try:
+            success_count = sum(
+                1
+                for result in results.values()
+                if isinstance(result, dict) and result.get("status") == SyncStatus.SUCCESS.value
+            )
+            failure_count = max(0, len(requested_forms) - success_count)
+            mysql_manager.finish_sync_run(
+                run_id=run_id,
+                sync_type=sync_type.value,
+                forms=requested_forms,
+                total_records=total_records,
+                success_count=success_count,
+                failure_count=failure_count,
+                status=run_status.value,
+                message=message,
+                start_time=start_time,
+                end_time=final_dt,
+                failed_forms=failed_tables,
+                details=results,
+            )
+        except Exception as exc:
+            logger.debug("记录任务级历史失败: %s", exc)
+
+    def _determine_final_status(
+        self, failed_tables: list[str], total_tables: int, total_records: int
+    ) -> tuple[SyncStatus, str]:
+        """判定最终同步状态"""
+        if not failed_tables:
+            return SyncStatus.SUCCESS, f"所有表同步成功，共同步 {total_records} 条记录"
+        if len(failed_tables) == total_tables:
+            return SyncStatus.FAILED, "所有表同步失败"
+        return SyncStatus.PARTIAL, f"部分表同步成功，失败的表: {', '.join(failed_tables)}"
+
+    def sync_data(self, form_names: list[str], sync_type: SyncType = SyncType.INCREMENTAL) -> dict[str, Any]:
         """同步数据主方法。"""
         start_time = datetime.now()
+        self._refresh_circuit_breaker_config()
         if self.is_shutdown_requested():
             message = f"同步任务拒绝启动: {self._shutdown_reason or 'shutdown requested'}"
             return self._create_sync_result(SyncStatus.FAILED_ABNORMAL_EXIT, message, start_time)
@@ -128,13 +201,13 @@ class DataSyncManager:
 
         requested_forms = list(form_names)
         run_id = uuid.uuid4().hex
-        results: Dict[str, Dict[str, Any]] = {}
+        results: dict[str, dict[str, Any]] = {}
         total_records = 0
-        failed_tables: List[str] = []
+        failed_tables: list[str] = []
         final_status = SyncStatus.FAILED
         final_message = "同步任务未正常完成"
         final_end_time = start_time
-        final_result: Dict[str, Any] | None = None
+        final_result: dict[str, Any] | None = None
         run_started = False
         sync_config = config_manager.get_sync_config()
         heartbeat_interval = int(sync_config.get("run_heartbeat_interval_secs", 15) or 15)
@@ -158,39 +231,6 @@ class DataSyncManager:
             start_time=start_time,
         )
 
-        def finalize_run(run_status: SyncStatus, message: str, end_time: Optional[datetime] = None):
-            final_dt = end_time or datetime.now()
-            try:
-                success_count = sum(
-                    1
-                    for result in results.values()
-                    if isinstance(result, dict) and result.get("status") == SyncStatus.SUCCESS.value
-                )
-                failure_count = max(0, len(requested_forms) - success_count)
-                mysql_manager.finish_sync_run(
-                    run_id=run_id,
-                    sync_type=sync_type.value,
-                    forms=requested_forms,
-                    total_records=total_records,
-                    success_count=success_count,
-                    failure_count=failure_count,
-                    status=run_status.value,
-                    message=message,
-                    start_time=start_time,
-                    end_time=final_dt,
-                    failed_forms=failed_tables,
-                    details=results,
-                )
-            except Exception as exc:
-                logger.debug("记录任务级历史失败: %s", exc)
-
-        def heartbeat_loop() -> None:
-            while not heartbeat_stop.wait(heartbeat_interval):
-                try:
-                    mysql_manager.heartbeat_sync_run(run_id, self._active_run_message or "任务运行中", datetime.now())
-                except Exception as exc:
-                    logger.debug("更新同步任务心跳失败: %s", exc)
-
         total_tables = len(requested_forms)
         completed_tables = 0
 
@@ -199,7 +239,7 @@ class DataSyncManager:
                 return 80
             return 20 + (completed_tables * 60 // total_tables)
 
-        def collect_result(form_name: str, result: Dict[str, Any]):
+        def collect_result(form_name: str, result: dict[str, Any]):
             nonlocal total_records, completed_tables
             results[form_name] = result
             if result["status"] in (SyncStatus.SUCCESS.value, SyncStatus.PARTIAL.value):
@@ -241,13 +281,13 @@ class DataSyncManager:
             if run_started:
                 mysql_manager.heartbeat_sync_run(run_id, "连接检查完成，准备执行同步", start_time)
                 heartbeat_thread = threading.Thread(
-                    target=heartbeat_loop,
+                    target=lambda: self._run_heartbeat_loop(run_id, heartbeat_stop, heartbeat_interval),
                     name=f"SyncHeartbeat-{run_id[:8]}",
                     daemon=True,
                 )
                 heartbeat_thread.start()
 
-            isolated_complete_forms: List[str] = []
+            isolated_complete_forms: list[str] = []
             if sync_type == SyncType.COMPLETE:
                 isolated_complete_forms = [
                     form_name for form_name in requested_forms if form_name in self.ISOLATED_COMPLETE_FORMS
@@ -271,7 +311,7 @@ class DataSyncManager:
                 table_concurrency = min(8, max(table_concurrency, 8))
 
             priority_map = self.PRIORITY_MAP
-            grouped_forms: Dict[int, List[str]] = {}
+            grouped_forms: dict[int, list[str]] = {}
             for form_name in form_names:
                 priority = priority_map.get(form_name, 1)
                 grouped_forms.setdefault(priority, []).append(form_name)
@@ -317,17 +357,13 @@ class DataSyncManager:
             final_end_time = datetime.now()
             config_manager.update_config("SYNC", "last_sync_time", final_end_time.strftime("%Y-%m-%d %H:%M:%S"))
 
-            if not failed_tables:
-                final_status = SyncStatus.SUCCESS
-                final_message = f"所有表同步成功，共同步 {total_records} 条记录"
+            final_status, final_message = self._determine_final_status(failed_tables, total_tables, total_records)
+
+            if final_status == SyncStatus.SUCCESS:
                 self._notify_progress("数据同步完成", 100)
-            elif len(failed_tables) == total_tables:
-                final_status = SyncStatus.FAILED
-                final_message = "所有表同步失败"
+            elif final_status == SyncStatus.FAILED:
                 self._notify_progress("数据同步失败", 100)
             else:
-                final_status = SyncStatus.PARTIAL
-                final_message = f"部分表同步成功，失败的表: {', '.join(failed_tables)}"
                 self._notify_progress("数据同步部分完成", 100)
 
             final_result = {
@@ -383,7 +419,18 @@ class DataSyncManager:
             except Exception:
                 pass
 
-            finalize_run(final_status, final_message, final_end_time)
+            self._finalize_run(
+                run_id,
+                sync_type,
+                requested_forms,
+                results,
+                total_records,
+                failed_tables,
+                final_status,
+                final_message,
+                start_time,
+                final_end_time,
+            )
             emit_audit_log(
                 logger,
                 "sync_run",
@@ -406,8 +453,9 @@ class DataSyncManager:
             self._active_run_id = None
             self._active_run_message = ""
 
-    def _sync_single_form(self, form_name: str, sync_type: SyncType) -> Dict[str, Any]:
+    def _sync_single_form(self, form_name: str, sync_type: SyncType) -> dict[str, Any]:
         """Delegate single-form execution to the dedicated form sync runner."""
+        self._refresh_circuit_breaker_config()
         if not self.circuit_breaker.allow(form_name):
             return self._create_circuit_open_result(form_name)
 
@@ -420,7 +468,7 @@ class DataSyncManager:
         self._record_circuit_breaker_result(form_name, result)
         return result
 
-    def _create_circuit_open_result(self, form_name: str) -> Dict[str, Any]:
+    def _create_circuit_open_result(self, form_name: str) -> dict[str, Any]:
         return {
             "status": "circuit_open",
             "message": f"[{form_name}] 熔断器开启，暂时跳过同步",
@@ -433,7 +481,7 @@ class DataSyncManager:
             "duration": 0.0,
         }
 
-    def _record_circuit_breaker_result(self, form_name: str, result: Dict[str, Any]) -> None:
+    def _record_circuit_breaker_result(self, form_name: str, result: dict[str, Any]) -> None:
         status = str(result.get("status", "")).lower()
         if status == SyncStatus.SUCCESS.value:
             self.circuit_breaker.record_success(form_name)
@@ -442,23 +490,28 @@ class DataSyncManager:
         if status not in (SyncStatus.FAILED.value, SyncStatus.PARTIAL.value):
             return
 
+        category = self._select_circuit_breaker_failure_category(result)
+        if category:
+            self.circuit_breaker.record_failure(form_name, category)
+
+    def _select_circuit_breaker_failure_category(self, result: dict[str, Any]) -> str:
         failure_categories = result.get("failure_categories")
-        if isinstance(failure_categories, dict):
-            recorded = False
+        if isinstance(failure_categories, dict) and failure_categories:
+            valid_categories: list[tuple[str, int]] = []
             for category, count in failure_categories.items():
                 try:
-                    if int(count or 0) <= 0:
-                        continue
+                    normalized_count = int(count or 0)
                 except Exception:
-                    continue
-                self.circuit_breaker.record_failure(form_name, str(category))
-                recorded = True
-            if recorded:
-                return
+                    normalized_count = 0
+                valid_categories.append((str(category), normalized_count))
 
-        error_type = str(result.get("error_type", "")).strip()
-        if error_type:
-            self.circuit_breaker.record_failure(form_name, error_type)
+            positive_categories = [item for item in valid_categories if item[1] > 0]
+            ranked_categories = positive_categories or valid_categories
+            if ranked_categories:
+                ranked_categories.sort(key=lambda item: item[1], reverse=True)
+                return ranked_categories[0][0]
+
+        return str(result.get("error_type", "")).strip()
 
     def _truncate_table_for_complete(self, table_name: str, manager: MySQLManager) -> bool:
         """Delegate pre-complete truncation to FormSyncRunner."""
@@ -501,7 +554,7 @@ class DataSyncManager:
 
         return start_year, start_month, end_year, end_month
 
-    def _sync_account_balance_form(self, form_name: str, sync_type: SyncType) -> Dict[str, Any]:
+    def _sync_account_balance_form(self, form_name: str, sync_type: SyncType) -> dict[str, Any]:
         """使用专用按月同步器同步科目余额表。"""
         effective_sync_type = SyncType.COMPLETE
         if sync_type != SyncType.COMPLETE:
@@ -597,7 +650,7 @@ class DataSyncManager:
 
     def _build_filter_string(
         self, form_name: str, sync_type: SyncType, table_name: str, db_manager=None
-    ) -> Optional[str]:
+    ) -> str | None:
         """Delegate filter construction to FilterBuilder."""
         return self.filter_builder.build_filter_string(
             form_name,
@@ -612,8 +665,8 @@ class DataSyncManager:
         filter_string: str = None,
         page_callback=None,
         start_row: int = 0,
-        sync_type: Optional[SyncType] = None,
-    ) -> Optional[List[Dict]]:
+        sync_type: SyncType | None = None,
+    ) -> list[dict] | None:
         """Delegate Kingdee querying to FormSyncRunner."""
         return self.form_sync_runner.query_kingdee_data(
             form_name,
@@ -623,7 +676,7 @@ class DataSyncManager:
             sync_type=sync_type,
         )
 
-    def _insert_database_data(self, form_name: str, data: List[Dict], db_manager=None) -> int:
+    def _insert_database_data(self, form_name: str, data: list[dict], db_manager=None) -> int:
         """Delegate database writes to FormSyncRunner."""
         return self.form_sync_runner.insert_database_data(form_name, data, db_manager=db_manager)
 
@@ -641,7 +694,7 @@ class DataSyncManager:
 
         return True
 
-    def _create_sync_result(self, status: SyncStatus, message: str, start_time: datetime) -> Dict[str, Any]:
+    def _create_sync_result(self, status: SyncStatus, message: str, start_time: datetime) -> dict[str, Any]:
         """创建同步结果"""
         end_time = datetime.now()
         return {
@@ -654,7 +707,7 @@ class DataSyncManager:
             "details": {},
         }
 
-    def get_sync_history(self, limit: int = 50) -> List[Dict]:
+    def get_sync_history(self, limit: int = 50) -> list[dict]:
         """获取同步历史记录"""
         try:
             # 连接健壮性：确保有可用的连接与游标
@@ -708,7 +761,7 @@ class DataSyncManager:
             logger.error(f"获取同步历史失败: {str(e)}")
             return []
 
-    def validate_data_integrity(self, form_names: List[str]) -> Dict[str, Any]:
+    def validate_data_integrity(self, form_names: list[str]) -> dict[str, Any]:
         """验证数据完整性（用于完全同步后的验证）"""
         results = {}
 
@@ -721,7 +774,7 @@ class DataSyncManager:
                 # 查询金蝶数据总数
                 count_ref = [0]
 
-                def _count_cb(page):
+                def _count_cb(page, count_ref=count_ref):
                     count_ref[0] += len(page)
 
                 self._query_kingdee_data(form_name, page_callback=_count_cb)

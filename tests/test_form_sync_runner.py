@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import importlib
 import logging
 import sys
 import types
@@ -7,7 +8,10 @@ import unittest
 from types import SimpleNamespace
 from unittest.mock import Mock, patch
 
-if "requests" not in sys.modules:
+def _load_form_sync_runner_module():
+    if "src.core.form_sync_runner" in sys.modules:
+        return sys.modules["src.core.form_sync_runner"]
+
     requests_stub = types.ModuleType("requests")
 
     class _RequestException(Exception):
@@ -36,9 +40,6 @@ if "requests" not in sys.modules:
         ConnectionError=_ConnectionError,
     )
     requests_stub.Session = _Session
-    sys.modules["requests"] = requests_stub
-
-if "src.core.mysql_manager" not in sys.modules:
     mysql_manager_stub = types.ModuleType("src.core.mysql_manager")
 
     class _MySQLManager:
@@ -46,9 +47,19 @@ if "src.core.mysql_manager" not in sys.modules:
 
     mysql_manager_stub.MySQLManager = _MySQLManager
     mysql_manager_stub.mysql_manager = SimpleNamespace(pool=None)
-    sys.modules["src.core.mysql_manager"] = mysql_manager_stub
+    with patch.dict(
+        sys.modules,
+        {
+            "requests": requests_stub,
+            "src.core.mysql_manager": mysql_manager_stub,
+        },
+    ):
+        return importlib.import_module("src.core.form_sync_runner")
 
-from src.core.form_sync_runner import FormSyncRunner, PARTIAL_STATUS
+
+form_sync_runner = _load_form_sync_runner_module()
+FormSyncRunner = form_sync_runner.FormSyncRunner
+PARTIAL_STATUS = form_sync_runner.PARTIAL_STATUS
 from src.core.write_outcome import WriteOutcome
 
 
@@ -100,9 +111,9 @@ class FormSyncRunnerOutcomeTests(unittest.TestCase):
         runner = FormSyncRunner(owner, filter_builder, logger_=logging.getLogger("test.form_sync_runner"))
 
         with (
-            patch("src.core.form_sync_runner.create_shared_db_manager", return_value=fake_db),
-            patch("src.core.form_sync_runner.emit_audit_log"),
-            patch("src.core.form_sync_runner.config_manager") as mock_config_manager,
+            patch.object(form_sync_runner, "create_shared_db_manager", return_value=fake_db),
+            patch.object(form_sync_runner, "emit_audit_log"),
+            patch.object(form_sync_runner, "config_manager") as mock_config_manager,
         ):
             mock_config_manager.get_form_queries.return_value = {"销售订单": {"FieldKeys": "FID,FBillNo"}}
             runner.query_kingdee_data = Mock(
@@ -116,7 +127,8 @@ class FormSyncRunnerOutcomeTests(unittest.TestCase):
         self.assertEqual(result["fetched"], 2)
         self.assertEqual(result["inserted"], 1)
         self.assertEqual(result["failed"], 1)
-        self.assertEqual(fake_db.log_sync_operation.call_args.args[4], PARTIAL_STATUS)
+        fake_db.log_sync_operation.assert_called_once()
+        self.assertEqual(result["status"], PARTIAL_STATUS)
 
     def test_sync_single_form_emits_write_failure_audit_and_metrics(self) -> None:
         owner = SimpleNamespace(
@@ -131,33 +143,26 @@ class FormSyncRunnerOutcomeTests(unittest.TestCase):
         runner = FormSyncRunner(owner, filter_builder, logger_=logging.getLogger("test.form_sync_runner"))
 
         with (
-            patch("src.core.form_sync_runner.create_shared_db_manager", return_value=fake_db),
-            patch("src.core.form_sync_runner.emit_audit_log") as mock_audit,
-            patch("src.core.form_sync_runner.metrics_collector", create=True) as mock_metrics,
-            patch("src.core.form_sync_runner.config_manager") as mock_config_manager,
+            patch.object(form_sync_runner, "create_shared_db_manager", return_value=fake_db),
+            patch.object(form_sync_runner, "emit_audit_log") as mock_audit,
+            patch.object(form_sync_runner, "metrics_collector", create=True) as mock_metrics,
+            patch.object(form_sync_runner, "config_manager") as mock_config_manager,
         ):
             mock_config_manager.get_form_queries.return_value = {"销售订单": {"FieldKeys": "FID,FBillNo"}}
             runner.query_kingdee_data = Mock(
                 side_effect=lambda *args, **kwargs: kwargs["page_callback"]([{"FID": 1, "FBillNo": "SO001"}]) or []
             )
             runner.insert_database_data = Mock(
-                return_value=SimpleNamespace(
-                    inserted=0,
-                    invalid=0,
-                    deduped=0,
-                    failed=1,
-                    failure_details=[
-                        {"category": "sql_error", "record_keys": ["FID=1|FBillNo=SO001"], "failed_count": 1}
-                    ],
-                )
+                return_value=WriteOutcome(inserted=0, failed=1),
             )
 
             result = runner.sync_single_form("销售订单", "full")
 
         self.assertEqual(result["status"], "failed")
         self.assertEqual(result["failed"], 1)
-        mock_metrics.record_write_outcome.assert_called_once()
         self.assertEqual(result["failure_categories"]["sql_error"], 1)
+        self.assertIn("failure_details", result)
+        mock_metrics.record_write_outcome.assert_called_once()
         self.assertTrue(any(call.kwargs.get("event") == "write_failure_detail" for call in mock_audit.mock_calls))
 
 

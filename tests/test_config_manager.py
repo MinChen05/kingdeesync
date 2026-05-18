@@ -1,11 +1,36 @@
 from __future__ import annotations
 
+import importlib
 import json
+import sys
+import types
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
-from src.config.config_manager import ConfigManager
+def _load_config_manager():
+    if "src.config.config_manager" in sys.modules:
+        return sys.modules["src.config.config_manager"]
+
+    crypto_util_stub = types.ModuleType("src.utils.crypto_util")
+
+    class _CryptoUtil:
+        @staticmethod
+        def encrypt(value: str) -> str:
+            return value
+
+        @staticmethod
+        def decrypt(value: str) -> str:
+            return value
+
+    crypto_util_stub.CryptoUtil = _CryptoUtil
+
+    with patch.dict(sys.modules, {"src.utils.crypto_util": crypto_util_stub}):
+        return importlib.import_module("src.config.config_manager")
+
+
+ConfigManager = _load_config_manager().ConfigManager
 
 
 class ConfigManagerTests(unittest.TestCase):
@@ -97,6 +122,16 @@ class ConfigManagerTests(unittest.TestCase):
     def test_sync_config_exposes_circuit_breaker_defaults(self) -> None:
         with tempfile.TemporaryDirectory() as tmp_dir:
             config_path = Path(tmp_dir) / "config.ini"
+            config_path.write_text(
+                "\n".join(
+                    [
+                        "[SYNC]",
+                        "auto_sync = false",
+                        "sync_interval = 60",
+                    ]
+                ),
+                encoding="utf-8",
+            )
             manager = ConfigManager(str(config_path))
 
             sync_config = manager.get_sync_config()

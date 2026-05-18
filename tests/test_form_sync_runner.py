@@ -362,10 +362,17 @@ class FormSyncRunnerOutcomeTests(unittest.TestCase):
     def test_sync_single_form_saves_richer_checkpoint_after_successful_page_write(self) -> None:
         with _load_form_sync_runner_module() as form_sync_runner:
             runner_cls = form_sync_runner.FormSyncRunner
+            call_order: list[str] = []
+            insert_completed = {"value": False}
+
+            def save_checkpoint_side_effect(checkpoint) -> None:
+                self.assertTrue(insert_completed["value"], "save_checkpoint must happen after insert_database_data succeeds")
+                call_order.append("save_checkpoint")
+
             checkpoint_manager = SimpleNamespace(
                 load_checkpoint=Mock(return_value=None),
                 clear_checkpoint=Mock(),
-                save_checkpoint=Mock(),
+                save_checkpoint=Mock(side_effect=save_checkpoint_side_effect),
             )
             owner = SimpleNamespace(
                 DEDUPLICATION_FORMS=set(),
@@ -391,12 +398,21 @@ class FormSyncRunnerOutcomeTests(unittest.TestCase):
                 runner.query_kingdee_data = Mock(
                     side_effect=lambda *args, **kwargs: kwargs["page_callback"](page_rows) or []
                 )
-                runner.insert_database_data = Mock(return_value=WriteOutcome(inserted=2))
+
+                def insert_database_data_side_effect(*args, **kwargs) -> WriteOutcome:
+                    call_order.append("insert_database_data")
+                    insert_completed["value"] = True
+                    return WriteOutcome(inserted=2)
+
+                runner.insert_database_data = Mock(side_effect=insert_database_data_side_effect)
 
                 result = runner.sync_single_form("销售订单", "incremental")
 
         self.assertEqual(result["status"], "success")
         checkpoint_manager.save_checkpoint.assert_called()
+        self.assertIn("insert_database_data", call_order)
+        self.assertIn("save_checkpoint", call_order)
+        self.assertLess(call_order.index("insert_database_data"), call_order.index("save_checkpoint"))
         saved_checkpoint = checkpoint_manager.save_checkpoint.call_args.args[0]
         self.assertEqual(saved_checkpoint.next_start_row, 2)
         self.assertTrue(saved_checkpoint.last_written_record_keys)

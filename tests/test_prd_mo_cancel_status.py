@@ -6,6 +6,7 @@ import types
 import unittest
 from contextlib import contextmanager
 from pathlib import Path
+from unittest.mock import Mock
 
 
 class _DummyUpsertEngine:
@@ -182,6 +183,32 @@ class PrdMoCancelStatusTests(unittest.TestCase):
 
         self.assertIsNotNone(prepared)
         self.assertEqual(prepared[-1], "")
+
+    def test_prepare_production_order_data_uses_field_mapping_resolver_for_cancel_status(self) -> None:
+        self.manager.field_mapping_resolver = Mock()
+        self.manager.field_mapping_resolver.resolve_field.return_value = "B"
+
+        prepared = self.manager._prepare_production_order_data(
+            {
+                "FID": 3,
+                "FBILLNO": "MO20260518005",
+                "FBILLTYPE.FNAME": "生产订单",
+                "FDATE": "2026-05-18 08:00:00",
+                "FPRDORGID": 100,
+                "FWORKSHOPID": 200,
+                "FDocumentStatus": "A",
+                "FCREATEDATE": "2026-05-18 08:00:00",
+                "FMODIFYDATE": "2026-05-18 09:00:00",
+                "FCANCELSTATUS": "B",
+            }
+        )
+
+        self.assertIsNotNone(prepared)
+        self.manager.field_mapping_resolver.resolve_field.assert_any_call(
+            "prd_mo",
+            "FCANCELSTATUS",
+            unittest.mock.ANY,
+        )
 
 
 if __name__ == "__main__":

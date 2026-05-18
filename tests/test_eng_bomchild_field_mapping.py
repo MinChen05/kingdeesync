@@ -1,9 +1,10 @@
 from __future__ import annotations
 
 import unittest
+from unittest.mock import Mock
 
-from src.core.mysql_manager import MySQLManager
 from src.core.masterdata_writer import insert_eng_bom_child
+from src.core.mysql_manager import MySQLManager
 
 
 class FakeCursor:
@@ -151,6 +152,40 @@ class EngBomChildFieldMappingTests(unittest.TestCase):
 
         self.assertEqual(prepared[4], "MAT-CHILD-004")
         self.assertEqual(prepared[17], "4")
+
+    def test_prepare_eng_bom_child_data_uses_field_mapping_resolver_for_child_fields(self) -> None:
+        manager = self._build_manager()
+        manager.field_mapping_resolver = Mock()
+        manager.field_mapping_resolver.resolve_field.side_effect = [
+            "MAT-CHILD-006",
+            "Child Material 006",
+        ]
+
+        prepared = manager._prepare_eng_bom_child_data(
+            {
+                "FID": 101,
+                "FTreeEntity_FENTRYID": 202,
+                "FTreeEntity_FSEQ": 3,
+                "FMATERIALID": "MAT-PARENT",
+                "FCHILDNUMBER": "MAT-CHILD-006",
+                "FCHILDNAME": "Child Material 006",
+                "FNUMERATOR": "2",
+                "FDENOMINATOR": "1",
+                "FMATERIALTYPE": "6",
+            }
+        )
+
+        self.assertIsNotNone(prepared)
+        manager.field_mapping_resolver.resolve_field.assert_any_call(
+            "eng_bomchild",
+            "FCHILDNUMBER",
+            unittest.mock.ANY,
+        )
+        manager.field_mapping_resolver.resolve_field.assert_any_call(
+            "eng_bomchild",
+            "FCHILDNAME",
+            unittest.mock.ANY,
+        )
 
     def test_ensure_additional_columns_for_eng_bomchild_adds_child_number_column_on_sqlserver(self) -> None:
         manager = self._build_manager()

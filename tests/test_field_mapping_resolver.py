@@ -11,7 +11,12 @@ class FieldMappingResolverTests(unittest.TestCase):
             {
                 "prd_mo": {
                     "FCANCELSTATUS": {
-                        "sources": ["FCANCELSTATUS", "FCancelStatus"],
+                        "sources": [
+                            "FCANCELSTATUS",
+                            "FCancelStatus",
+                            "FcancelStatus",
+                            "F_Cancel_Status",
+                        ],
                         "type": "string",
                         "default": "",
                     }
@@ -22,7 +27,7 @@ class FieldMappingResolverTests(unittest.TestCase):
         result = resolver.resolve_field(
             "prd_mo",
             "FCANCELSTATUS",
-            {"FCANCELSTATUS": "A", "FCancelStatus": "B"},
+            {"FCANCELSTATUS": "A", "FCancelStatus": "B", "FcancelStatus": "C"},
         )
 
         self.assertEqual(result, "A")
@@ -34,7 +39,12 @@ class FieldMappingResolverTests(unittest.TestCase):
             {
                 "ap_payable": {
                     "FNOTAXAMOUNTFOR": {
-                        "sources": ["FNoTaxAmountFor_D", "FNOTAXAMOUNTFOR_D"],
+                        "sources": [
+                            "FNoTaxAmountFor_D",
+                            "FNOTAXAMOUNTFOR_D",
+                            "FNoTaxAmountFor",
+                            "FNOTAXAMOUNTFOR",
+                        ],
                         "type": "decimal",
                         "default": 0.0,
                     }
@@ -57,7 +67,12 @@ class FieldMappingResolverTests(unittest.TestCase):
             {
                 "prd_mo": {
                     "FCANCELSTATUS": {
-                        "sources": ["FCANCELSTATUS", "FCancelStatus"],
+                        "sources": [
+                            "FCANCELSTATUS",
+                            "FCancelStatus",
+                            "FcancelStatus",
+                            "F_Cancel_Status",
+                        ],
                         "type": "string",
                         "default": "",
                     }
@@ -76,7 +91,12 @@ class FieldMappingResolverTests(unittest.TestCase):
             {
                 "eng_bomchild": {
                     "FCHILDNAME": {
-                        "sources": ["FMATERIALIDCHILD.FNAME", "FCHILDNAME"],
+                        "sources": [
+                            "FMATERIALIDCHILD.FNAME",
+                            "FMATERIALIDCHILD.FName",
+                            "FCHILDNAME",
+                            "FChildName",
+                        ],
                         "type": "string",
                         "default": "",
                         "max_length": 5,
@@ -89,10 +109,10 @@ class FieldMappingResolverTests(unittest.TestCase):
         result = resolver.resolve_field(
             "eng_bomchild",
             "FCHILDNAME",
-            {"FMATERIALIDCHILD.FNAME": "Child Material 001"},
+            {"FMATERIALIDCHILD.FNAME": "ABCDEFG"},
         )
 
-        self.assertEqual(result, "Child")
+        self.assertEqual(result, "ABCDE")
 
 
 if __name__ == "__main__":

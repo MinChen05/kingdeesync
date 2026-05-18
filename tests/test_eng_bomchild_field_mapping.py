@@ -157,8 +157,8 @@ class EngBomChildFieldMappingTests(unittest.TestCase):
         manager = self._build_manager()
         manager.field_mapping_resolver = Mock()
         manager.field_mapping_resolver.resolve_field.side_effect = [
-            "MAT-CHILD-006",
-            "Child Material 006",
+            "RESOLVED-CHILD-006",
+            "RESOLVED-CHILD-NAME-006",
         ]
 
         prepared = manager._prepare_eng_bom_child_data(
@@ -186,8 +186,8 @@ class EngBomChildFieldMappingTests(unittest.TestCase):
             "FCHILDNAME",
             unittest.mock.ANY,
         )
-        self.assertEqual(prepared[4], "MAT-CHILD-006")
-        self.assertEqual(prepared[5], "Child Material 006")
+        self.assertEqual(prepared[4], "RESOLVED-CHILD-006")
+        self.assertEqual(prepared[5], "RESOLVED-CHILD-NAME-006")
 
     def test_ensure_additional_columns_for_eng_bomchild_adds_child_number_column_on_sqlserver(self) -> None:
         manager = self._build_manager()

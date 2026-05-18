@@ -186,7 +186,7 @@ class PrdMoCancelStatusTests(unittest.TestCase):
 
     def test_prepare_production_order_data_uses_field_mapping_resolver_for_cancel_status(self) -> None:
         self.manager.field_mapping_resolver = Mock()
-        self.manager.field_mapping_resolver.resolve_field.return_value = "B"
+        self.manager.field_mapping_resolver.resolve_field.return_value = "RESOLVED-CANCEL"
 
         prepared = self.manager._prepare_production_order_data(
             {
@@ -209,7 +209,7 @@ class PrdMoCancelStatusTests(unittest.TestCase):
             "FCANCELSTATUS",
             unittest.mock.ANY,
         )
-        self.assertEqual(prepared[-1], "B")
+        self.assertEqual(prepared[-1], "RESOLVED-CANCEL")
 
 
 if __name__ == "__main__":

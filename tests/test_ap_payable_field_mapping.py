@@ -150,7 +150,7 @@ class ApPayableFieldMappingTests(unittest.TestCase):
     def test_prepare_ap_payable_data_uses_field_mapping_resolver_for_no_tax_amount(self) -> None:
         manager = MySQLManager.__new__(MySQLManager)
         manager.field_mapping_resolver = Mock()
-        manager.field_mapping_resolver.resolve_field.return_value = 100.0
+        manager.field_mapping_resolver.resolve_field.return_value = 321.45
 
         prepared = manager._prepare_ap_payable_data(
             {
@@ -182,7 +182,7 @@ class ApPayableFieldMappingTests(unittest.TestCase):
             "FNOTAXAMOUNTFOR",
             unittest.mock.ANY,
         )
-        self.assertEqual(prepared[15], 100.0)
+        self.assertEqual(prepared[15], 321.45)
 
 
 if __name__ == "__main__":

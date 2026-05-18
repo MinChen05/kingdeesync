@@ -336,9 +336,16 @@ class EngBomChildFieldMappingTests(unittest.TestCase):
 
         self.assertIsNotNone(prepared)
         self.assertEqual(manager.field_mapping_resolver.resolve_field.call_count, 2)
-        self.assertEqual(manager.field_mapping_resolver.resolve_field.call_args_list[0].args[0], "eng_bomchild")
-        self.assertEqual(manager.field_mapping_resolver.resolve_field.call_args_list[0].args[1], "FCHILDNUMBER")
-        self.assertEqual(manager.field_mapping_resolver.resolve_field.call_args_list[1].args[1], "FCHILDNAME")
+        child_number_call = manager.field_mapping_resolver.resolve_field.call_args_list[0]
+        child_name_call = manager.field_mapping_resolver.resolve_field.call_args_list[1]
+        self.assertEqual(child_number_call.args[0], "eng_bomchild")
+        self.assertEqual(child_number_call.args[1], "FCHILDNUMBER")
+        self.assertIn("FCHILDNUMBER", child_number_call.args[2])
+        self.assertEqual(child_number_call.args[2]["FCHILDNUMBER"], "MAT-CHILD-007")
+        self.assertEqual(child_name_call.args[0], "eng_bomchild")
+        self.assertEqual(child_name_call.args[1], "FCHILDNAME")
+        self.assertIn("FCHILDNAME", child_name_call.args[2])
+        self.assertEqual(child_name_call.args[2]["FCHILDNAME"], "Child Material 007")
         self.assertEqual(prepared[4], "RESOLVED-CHILD-007")
         self.assertEqual(prepared[5], "RESOLVED-CHILD-NAME-007")
 

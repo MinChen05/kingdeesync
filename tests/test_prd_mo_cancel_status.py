@@ -243,6 +243,10 @@ class PrdMoCancelStatusTests(unittest.TestCase):
         self.assertEqual(resolve_call.args[0], "prd_mo")
         self.assertEqual(resolve_call.args[1], "FCANCELSTATUS")
         self.assertIsInstance(resolve_call.args[2], dict)
+        self.assertIn("FCANCELSTATUS", resolve_call.args[2])
+        self.assertTrue(
+            resolve_call.args[2]["FCANCELSTATUS"] in (None, "", "B"),
+        )
         self.assertEqual(prepared[-1], "RESOLVED-LEGACY-CANCEL")
 
 

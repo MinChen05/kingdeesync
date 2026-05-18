@@ -225,7 +225,8 @@ class FormSyncRunner:
             total_deduped_ref = [0]
             failure_details_ref: list[WriteFailureDetail] = []
             insert_duration_ref = [0.0]
-            next_page_start_row_ref = [resume_start_row]
+            fetched_next_start_row_ref = [resume_start_row]
+            durable_next_start_row_ref = [resume_start_row]
             last_written_record_keys_ref = [list(getattr(checkpoint, "last_written_record_keys", [])) if checkpoint else []]
             last_error_category_ref = [str(getattr(checkpoint, "last_error_category", "")) if checkpoint else ""]
 
@@ -234,6 +235,14 @@ class FormSyncRunner:
             insert_errors: list[Exception] = []
             use_bulk_buffer = self._is_full_or_complete(sync_type)
             all_rows_buffer: list[dict[str, Any]] = []
+
+            def is_durable_page(outcome: WriteOutcome, page_data: list[dict[str, Any]]) -> bool:
+                return (
+                    outcome.inserted == len(page_data)
+                    and outcome.invalid == 0
+                    and outcome.deduped == 0
+                    and outcome.failed == 0
+                )
 
             def insert_worker() -> None:
                 while True:
@@ -254,8 +263,9 @@ class FormSyncRunner:
                         total_deduped_ref[0] += outcome.deduped
                         total_fetched_ref[0] += len(page_data)
                         failure_details_ref.extend(outcome.failure_details)
-                        if self._is_incremental(sync_type):
+                        if self._is_incremental(sync_type) and is_durable_page(outcome, page_data):
                             next_start_row = page_start_row + len(page_data)
+                            durable_next_start_row_ref[0] = next_start_row
                             last_written_record_keys_ref[0] = build_record_keys(page_data)
                             last_error_category_ref[0] = ""
                             self.owner._checkpoint_manager.save_checkpoint(
@@ -298,8 +308,8 @@ class FormSyncRunner:
 
                 if insert_errors:
                     raise Exception(f"插入线程出错: {insert_errors[0]}")
-                page_start_row = next_page_start_row_ref[0]
-                next_page_start_row_ref[0] += len(page_data)
+                page_start_row = fetched_next_start_row_ref[0]
+                fetched_next_start_row_ref[0] += len(page_data)
                 data_queue.put((page_start_row, page_data))
 
             data = None
@@ -309,19 +319,30 @@ class FormSyncRunner:
                         form_name,
                         filter_string,
                         page_callback=handle_page_data,
-                        start_row=resume_start_row,
+                        start_row=durable_next_start_row_ref[0],
                         sync_type=sync_type,
                     )
                     if data is not None:
-                        self.owner._checkpoint_manager.clear_checkpoint(
-                            form_name,
-                            table_name,
-                            self._sync_type_value(sync_type),
-                        )
                         break
 
                     retry_count += 1
                     if retry_count < max_retries:
+                        last_error_category_ref[0] = "query_error"
+                        self.owner._checkpoint_manager.save_checkpoint(
+                            SyncCheckpoint(
+                                form_name=form_name,
+                                table_name=table_name,
+                                sync_type=self._sync_type_value(sync_type),
+                                start_row=durable_next_start_row_ref[0],
+                                next_start_row=durable_next_start_row_ref[0],
+                                total_inserted=total_inserted_ref[0],
+                                total_fetched=total_fetched_ref[0],
+                                filter_string=filter_string or "",
+                                status="pending",
+                                last_written_record_keys=last_written_record_keys_ref[0],
+                                last_error_category=last_error_category_ref[0],
+                            )
+                        )
                         self.logger.warning("[%s] 查询失败，%s/%s 次重试...", form_name, retry_count, max_retries)
                         self.owner._notify_progress(
                             f"[{form_name}] 查询失败，正在重试 ({retry_count}/{max_retries})...",
@@ -350,8 +371,8 @@ class FormSyncRunner:
                                 form_name=form_name,
                                 table_name=table_name,
                                 sync_type=self._sync_type_value(sync_type),
-                                start_row=next_page_start_row_ref[0],
-                                next_start_row=next_page_start_row_ref[0],
+                                start_row=durable_next_start_row_ref[0],
+                                next_start_row=durable_next_start_row_ref[0],
                                 total_inserted=total_inserted_ref[0],
                                 total_fetched=total_fetched_ref[0],
                                 filter_string=filter_string or "",
@@ -502,6 +523,13 @@ class FormSyncRunner:
 
             result_status = self._resolve_result_status(inserted_count, summary["failed"])
             result_message = self._build_result_message(result_status, inserted_count, summary["failed"])
+
+            if data is not None and result_status == SUCCESS_STATUS:
+                self.owner._checkpoint_manager.clear_checkpoint(
+                    form_name,
+                    table_name,
+                    self._sync_type_value(sync_type),
+                )
 
             end_time = datetime.now()
             duration = (end_time - start_time).total_seconds()

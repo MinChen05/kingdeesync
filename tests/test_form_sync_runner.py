@@ -168,7 +168,11 @@ class FormSyncRunnerOutcomeTests(unittest.TestCase):
                 INSERT_METHOD_MAP={"销售订单": "insert_sales_orders"},
                 table_mapping={"销售订单": "saleorder"},
                 _notify_progress=Mock(),
-                _checkpoint_manager=SimpleNamespace(load_checkpoint=Mock(return_value=None), clear_checkpoint=Mock()),
+                _checkpoint_manager=SimpleNamespace(
+                    load_checkpoint=Mock(return_value=None),
+                    clear_checkpoint=Mock(),
+                    save_checkpoint=Mock(),
+                ),
             )
             filter_builder = SimpleNamespace(build_filter_string=Mock(return_value=""))
             fake_db = SimpleNamespace(disconnect=Mock())
@@ -207,7 +211,11 @@ class FormSyncRunnerOutcomeTests(unittest.TestCase):
                 INSERT_METHOD_MAP={"销售订单": "insert_sales_orders"},
                 table_mapping={"销售订单": "saleorder"},
                 _notify_progress=Mock(),
-                _checkpoint_manager=SimpleNamespace(load_checkpoint=Mock(return_value=None), clear_checkpoint=Mock()),
+                _checkpoint_manager=SimpleNamespace(
+                    load_checkpoint=Mock(return_value=None),
+                    clear_checkpoint=Mock(),
+                    save_checkpoint=Mock(),
+                ),
             )
             filter_builder = SimpleNamespace(build_filter_string=Mock(return_value=""))
             fake_db = SimpleNamespace(disconnect=Mock(), log_sync_operation=Mock())
@@ -245,7 +253,11 @@ class FormSyncRunnerOutcomeTests(unittest.TestCase):
                 INSERT_METHOD_MAP={"销售订单": "insert_sales_orders"},
                 table_mapping={"销售订单": "saleorder"},
                 _notify_progress=Mock(),
-                _checkpoint_manager=SimpleNamespace(load_checkpoint=Mock(return_value=None), clear_checkpoint=Mock()),
+                _checkpoint_manager=SimpleNamespace(
+                    load_checkpoint=Mock(return_value=None),
+                    clear_checkpoint=Mock(),
+                    save_checkpoint=Mock(),
+                ),
             )
             filter_builder = SimpleNamespace(build_filter_string=Mock(return_value=""))
             fake_db = SimpleNamespace(disconnect=Mock())
@@ -326,7 +338,11 @@ class FormSyncRunnerOutcomeTests(unittest.TestCase):
                 INSERT_METHOD_MAP={"销售订单": "insert_sales_orders"},
                 table_mapping={"销售订单": "saleorder"},
                 _notify_progress=Mock(),
-                _checkpoint_manager=SimpleNamespace(load_checkpoint=Mock(return_value=None), clear_checkpoint=Mock()),
+                _checkpoint_manager=SimpleNamespace(
+                    load_checkpoint=Mock(return_value=None),
+                    clear_checkpoint=Mock(),
+                    save_checkpoint=Mock(),
+                ),
             )
             filter_builder = SimpleNamespace(build_filter_string=Mock(return_value=""))
             fake_db = SimpleNamespace(disconnect=Mock(), log_sync_operation=Mock())
@@ -420,6 +436,45 @@ class FormSyncRunnerOutcomeTests(unittest.TestCase):
             ["FID=1|FBILLNO=SO001", "FID=2|FBILLNO=SO002"],
         )
 
+    def test_sync_single_form_partial_page_does_not_save_success_checkpoint(self) -> None:
+        with _load_form_sync_runner_module() as form_sync_runner:
+            runner_cls = form_sync_runner.FormSyncRunner
+            checkpoint_manager = SimpleNamespace(
+                load_checkpoint=Mock(return_value=None),
+                clear_checkpoint=Mock(),
+                save_checkpoint=Mock(),
+            )
+            owner = SimpleNamespace(
+                DEDUPLICATION_FORMS=set(),
+                INSERT_METHOD_MAP={"销售订单": "insert_sales_orders"},
+                table_mapping={"销售订单": "saleorder"},
+                _notify_progress=Mock(),
+                _checkpoint_manager=checkpoint_manager,
+            )
+            filter_builder = SimpleNamespace(build_filter_string=Mock(return_value=""))
+            fake_db = SimpleNamespace(disconnect=Mock(), log_sync_operation=Mock())
+            runner = runner_cls(owner, filter_builder, logger_=logging.getLogger("test.form_sync_runner"))
+            page_rows = [
+                {"FID": 1, "FBillNo": "SO001"},
+                {"FID": 2, "FBillNo": "SO002"},
+            ]
+
+            with (
+                patch.object(form_sync_runner, "create_shared_db_manager", return_value=fake_db),
+                patch.object(form_sync_runner, "emit_audit_log"),
+                patch.object(form_sync_runner, "config_manager") as mock_config_manager,
+            ):
+                mock_config_manager.get_form_queries.return_value = {"销售订单": {"FieldKeys": "FID,FBillNo"}}
+                runner.query_kingdee_data = Mock(
+                    side_effect=lambda *args, **kwargs: kwargs["page_callback"](page_rows) or []
+                )
+                runner.insert_database_data = Mock(return_value=WriteOutcome(inserted=1, failed=1))
+
+                result = runner.sync_single_form("销售订单", "incremental")
+
+        self.assertEqual(result["status"], "partial")
+        checkpoint_manager.save_checkpoint.assert_not_called()
+
     def test_sync_single_form_query_retry_checkpoint_preserves_richer_metadata(self) -> None:
         with _load_form_sync_runner_module() as form_sync_runner:
             runner_cls = form_sync_runner.FormSyncRunner
@@ -471,6 +526,66 @@ class FormSyncRunnerOutcomeTests(unittest.TestCase):
             ["FID=1|FBILLNO=SO001", "FID=2|FBILLNO=SO002"],
         )
         self.assertEqual(saved_checkpoint.last_error_category, "timeout")
+
+    def test_sync_single_form_query_none_retry_checkpoint_uses_last_durable_metadata(self) -> None:
+        with _load_form_sync_runner_module() as form_sync_runner:
+            runner_cls = form_sync_runner.FormSyncRunner
+            prior_checkpoint = form_sync_runner.SyncCheckpoint(
+                form_name="销售订单",
+                table_name="saleorder",
+                sync_type="incremental",
+                start_row=2,
+                next_start_row=2,
+                total_inserted=2,
+                total_fetched=2,
+                last_written_record_keys=["FID=1|FBILLNO=SO001", "FID=2|FBILLNO=SO002"],
+                status="pending",
+            )
+            checkpoint_manager = SimpleNamespace(
+                load_checkpoint=Mock(return_value=prior_checkpoint),
+                clear_checkpoint=Mock(),
+                save_checkpoint=Mock(),
+            )
+            owner = SimpleNamespace(
+                DEDUPLICATION_FORMS=set(),
+                INSERT_METHOD_MAP={"销售订单": "insert_sales_orders"},
+                table_mapping={"销售订单": "saleorder"},
+                _notify_progress=Mock(),
+                _checkpoint_manager=checkpoint_manager,
+            )
+            filter_builder = SimpleNamespace(build_filter_string=Mock(return_value=""))
+            fake_db = SimpleNamespace(disconnect=Mock(), log_sync_operation=Mock())
+            runner = runner_cls(owner, filter_builder, logger_=logging.getLogger("test.form_sync_runner"))
+            page_rows = [
+                {"FID": 3, "FBillNo": "SO003"},
+                {"FID": 4, "FBillNo": "SO004"},
+            ]
+
+            def query_side_effect(*args, **kwargs):
+                kwargs["page_callback"](page_rows)
+
+            with (
+                patch.object(form_sync_runner, "create_shared_db_manager", return_value=fake_db),
+                patch.object(form_sync_runner, "emit_audit_log"),
+                patch.object(form_sync_runner, "config_manager") as mock_config_manager,
+                patch.object(form_sync_runner.time, "sleep", return_value=None),
+            ):
+                mock_config_manager.get_form_queries.return_value = {"销售订单": {"FieldKeys": "FID,FBillNo"}}
+                runner.query_kingdee_data = Mock(side_effect=query_side_effect)
+                runner.insert_database_data = Mock(return_value=WriteOutcome(inserted=1, failed=1))
+
+                result = runner.sync_single_form("销售订单", "incremental")
+
+        self.assertEqual(result["status"], "failed")
+        checkpoint_manager.save_checkpoint.assert_called()
+        saved_checkpoint = checkpoint_manager.save_checkpoint.call_args.args[0]
+        self.assertEqual(saved_checkpoint.start_row, 2)
+        self.assertEqual(saved_checkpoint.next_start_row, 2)
+        self.assertEqual(
+            saved_checkpoint.last_written_record_keys,
+            ["FID=1|FBILLNO=SO001", "FID=2|FBILLNO=SO002"],
+        )
+        self.assertEqual(saved_checkpoint.last_error_category, "query_error")
 
     def test_metrics_collector_export_run_snapshot_is_scoped_by_run_id(self) -> None:
         collector = MetricsCollector()

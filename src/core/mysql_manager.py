@@ -2270,7 +2270,14 @@ class MySQLManager:
                 fpriceunitname = self._safe_str(item[12])
                 fpriceqty = self._to_decimal_or_none(item[13]) or 0
                 fallamountfor_d = self._to_decimal_or_none(item[14]) or 0
-                fnotaxamountfor = self._to_decimal_or_none(item[15]) or 0
+                notax_row = {
+                    "FNOTAXAMOUNTFOR_D": item[15],
+                    "FNOTAXAMOUNTFOR": item[20] if len(item) > 20 else None,
+                }
+                fnotaxamountfor = self._resolve_configured_field("ap_payable", "FNOTAXAMOUNTFOR", notax_row)
+                if fnotaxamountfor is None:
+                    fnotaxamountfor = item[15]
+                fnotaxamountfor = self._to_decimal_or_none(fnotaxamountfor) or 0
                 fdiscountamountfor = self._to_decimal_or_none(item[16]) or 0
                 fentrydiscountrate = self._to_decimal_or_none(item[17])
                 fentrytaxrate = self._to_decimal_or_none(item[18])

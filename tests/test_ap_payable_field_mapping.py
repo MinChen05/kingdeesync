@@ -230,6 +230,46 @@ class ApPayableFieldMappingTests(unittest.TestCase):
         self.assertEqual(resolve_call.args[2]["FNOTAXAMOUNTFOR"], "999.00")
         self.assertEqual(prepared[15], 321.45)
 
+    def test_prepare_ap_payable_data_uses_field_mapping_resolver_for_no_tax_amount_on_list_payload(self) -> None:
+        manager = MySQLManager.__new__(MySQLManager)
+        manager.field_mapping_resolver = Mock()
+        manager.field_mapping_resolver.resolve_field.return_value = 654.32
+
+        prepared = manager._prepare_ap_payable_data(
+            [
+                1005,
+                2005,
+                1,
+                "标准应付单",
+                "AP202601005",
+                "2026-01-10",
+                "台州市金宇机电有限公司",
+                "测试客户",
+                "测试供应商",
+                "3",
+                "FEE-TRANS",
+                "交通运输费",
+                "元",
+                "1",
+                "113.00",
+                "100.00",
+                "0",
+                None,
+                None,
+                "2026-01-10 10:00:00",
+                "999.00",
+            ]
+        )
+
+        self.assertIsNotNone(prepared)
+        resolve_call = manager.field_mapping_resolver.resolve_field.call_args
+        self.assertIsNotNone(resolve_call)
+        self.assertEqual(resolve_call.args[0], "ap_payable")
+        self.assertEqual(resolve_call.args[1], "FNOTAXAMOUNTFOR")
+        self.assertEqual(resolve_call.args[2]["FNOTAXAMOUNTFOR_D"], "100.00")
+        self.assertEqual(resolve_call.args[2]["FNOTAXAMOUNTFOR"], "999.00")
+        self.assertEqual(prepared[15], 654.32)
+
 
 if __name__ == "__main__":
     unittest.main()

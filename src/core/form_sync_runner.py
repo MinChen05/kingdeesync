@@ -234,8 +234,8 @@ class FormSyncRunner:
                         break
                     try:
                         insert_start = time.perf_counter()
-                        outcome = self.insert_database_data(form_name, page_data, db_manager=local_db)
-                        outcome.failure_details = self._resolve_failure_details(form_name, table_name, page_data, outcome)
+                        raw_outcome = self.insert_database_data(form_name, page_data, db_manager=local_db)
+                        outcome = self._normalize_write_outcome(form_name, table_name, page_data, raw_outcome)
                         insert_duration = time.perf_counter() - insert_start
                         insert_duration_ref[0] += insert_duration
                         metrics_collector.record_write_outcome(form_name, outcome, insert_duration)
@@ -357,8 +357,8 @@ class FormSyncRunner:
                     raise insert_errors[0]
             elif all_rows_buffer:
                 insert_start = time.perf_counter()
-                outcome = self.insert_database_data(form_name, all_rows_buffer, db_manager=local_db)
-                outcome.failure_details = self._resolve_failure_details(form_name, table_name, all_rows_buffer, outcome)
+                raw_outcome = self.insert_database_data(form_name, all_rows_buffer, db_manager=local_db)
+                outcome = self._normalize_write_outcome(form_name, table_name, all_rows_buffer, raw_outcome)
                 insert_duration_ref[0] = time.perf_counter() - insert_start
                 metrics_collector.record_write_outcome(form_name, outcome, insert_duration_ref[0])
                 total_inserted_ref[0] = outcome.inserted
@@ -370,6 +370,7 @@ class FormSyncRunner:
             perf_after_query = time.perf_counter()
             query_duration = perf_after_query - perf_after_filter
             self.logger.info("[%s] 查询与插入耗时 %.2f 秒", form_name, query_duration)
+            failure_categories = summarize_failure_details(failure_details_ref)
 
             if data is None:
                 error_msg = f"查询金蝶数据失败，已重试{max_retries}次"
@@ -406,8 +407,8 @@ class FormSyncRunner:
                     "inserted": 0,
                     "updated": 0,
                     "error_type": "query_error",
-                    "failure_categories": {},
-                    "failure_details": [],
+                    "failure_categories": failure_categories,
+                    "failure_details": [asdict(detail) for detail in failure_details_ref],
                 }
 
             record_count = total_fetched_ref[0]
@@ -427,7 +428,6 @@ class FormSyncRunner:
                     failure_details=failure_details_ref,
                 ),
             )
-            failure_categories = summarize_failure_details(failure_details_ref)
             if record_count > 0:
                 success_rate = (inserted_count / record_count) * 100 if record_count > 0 else 0
                 self.owner._notify_progress(
@@ -645,6 +645,24 @@ class FormSyncRunner:
         )
         fallback_detail.failed_count = max(1, outcome.failed)
         return [fallback_detail]
+
+    def _normalize_write_outcome(
+        self,
+        form_name: str,
+        table_name: str | None,
+        rows: List[Dict[str, Any]],
+        outcome: WriteOutcome,
+    ) -> WriteOutcome:
+        summary = self._build_write_summary(form_name, fetched=len(rows), outcome=outcome)
+        normalized = WriteOutcome(
+            inserted=summary["inserted"],
+            invalid=summary["invalid"],
+            deduped=summary["deduped"],
+            failed=summary["failed"],
+            failure_details=list(outcome.failure_details or []),
+        )
+        normalized.failure_details = self._resolve_failure_details(form_name, table_name, rows, normalized)
+        return normalized
 
     def insert_database_data(self, form_name: str, data: List[Dict], db_manager=None) -> WriteOutcome:
         """Insert queried form data using writer mappings."""

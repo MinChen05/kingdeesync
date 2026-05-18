@@ -159,6 +159,20 @@ class FormSyncRunnerOutcomeTests(unittest.TestCase):
         self.assertEqual(outcome, WriteOutcome(inserted=3))
         manager.execute_writer_with_outcome.assert_called_once_with("insert_prd_instock", [{"FID": 1}])
 
+    def test_create_shared_db_manager_copies_field_mapping_resolver_from_base_manager(self) -> None:
+        with _load_form_sync_runner_module() as form_sync_runner:
+            resolver = object()
+            base_manager = SimpleNamespace(
+                pool=None,
+                db_type="mysql",
+                config={"database": "kingdee"},
+                field_mapping_resolver=resolver,
+            )
+
+            local_db = form_sync_runner.create_shared_db_manager(base_manager)
+
+        self.assertIs(local_db.field_mapping_resolver, resolver)
+
     def test_sync_single_form_marks_partial_when_rows_fail_to_write(self) -> None:
         with _load_form_sync_runner_module() as form_sync_runner:
             runner_cls = form_sync_runner.FormSyncRunner

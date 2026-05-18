@@ -50,6 +50,7 @@ def create_shared_db_manager(base_manager: MySQLManager) -> MySQLManager:
     local_db._pool_init_failed = False
     local_db.db_type = getattr(base_manager, "db_type", "mysql")
     local_db.config = getattr(base_manager, "config", {})
+    local_db.field_mapping_resolver = getattr(base_manager, "field_mapping_resolver", None)
     local_db.sync_run_repository = SyncRunRepository(local_db, logger=logger)
     local_db.sync_log_repository = SyncLogRepository(local_db, logger=logger)
     local_db.mysql_upsert_engine = UpsertEngineMySQL(local_db, logger=logger)

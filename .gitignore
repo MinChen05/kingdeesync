@@ -2,9 +2,10 @@
 .venv/
 
 # 缓存文件
-__pycache__/
-.mypy_cache/
-.ruff_cache/
+**/__pycache__/
+**/.mypy_cache/
+**/.pytest_cache/
+**/.ruff_cache/
 *.pyc
 
 # 构建和打包目录
@@ -15,7 +16,7 @@ dist/
 *.spec
 
 # 日志文件
-logs/
+**/logs/
 log/
 debug_startup.txt
 debug_reporting.txt
@@ -24,13 +25,16 @@ startup_log_v2.txt
 temp_log.txt
 
 # 运行时断点目录
-checkpoints/
+**/checkpoints/
 
 # 本地协作 / 机器相关文件
+.idea/
 .claude/
 .install_salt
 config.local.ini
+.worktrees/
 .worktrees
 .worktrees/
-.DS_Store
+config.ini.backup
+**/.DS_Store
 tmp-*.png

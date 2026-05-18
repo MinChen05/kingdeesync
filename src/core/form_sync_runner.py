@@ -7,6 +7,7 @@ import queue
 import threading
 import time
 import traceback
+from dataclasses import asdict
 from datetime import datetime
 from typing import TYPE_CHECKING, Any, Dict, List, Optional
 
@@ -16,14 +17,16 @@ from src.config.config_manager import config_manager
 from src.core.audit_logging import emit_audit_log
 from src.core.filter_builder import FilterBuilder
 from src.core.kingdee_api import kingdee_client
+from src.core.metrics import metrics_collector
 from src.core.mysql_manager import MySQLManager, mysql_manager
 from src.core.retry_manager import SyncCheckpoint
+from src.core.sync_failure_telemetry import WriteFailureDetail, classify_failure, summarize_failure_details
 from src.core.sync_log_repository import SyncLogRepository
 from src.core.sync_run_repository import SyncRunRepository
 from src.core.upsert_engine_mysql import UpsertEngineMySQL
 from src.core.upsert_engine_sqlserver import UpsertEngineSqlServer
-from src.core.writers_registry import WriterRegistry
 from src.core.write_outcome import WriteOutcome
+from src.core.writers_registry import WriterRegistry
 
 if TYPE_CHECKING:
     from src.core.data_sync import DataSyncManager
@@ -91,6 +94,8 @@ class FormSyncRunner:
         local_db = create_shared_db_manager(mysql_manager)
         table_name = self.owner.table_mapping.get(form_name)
         sync_type_value = self._sync_type_value(sync_type)
+        metrics_collector.start_sync(form_name)
+        metrics_success = False
 
         emit_audit_log(
             self.logger,
@@ -107,6 +112,7 @@ class FormSyncRunner:
                 error_msg = f"未找到表单 {form_name} 的映射表"
                 self.logger.error(error_msg)
                 self.owner._notify_progress(f"[{form_name}] {error_msg}", 100)
+                metrics_collector.record_error(form_name)
                 emit_audit_log(
                     self.logger,
                     "sync_form",
@@ -125,6 +131,8 @@ class FormSyncRunner:
                     "inserted": 0,
                     "updated": 0,
                     "error_type": "mapping_error",
+                    "failure_categories": {},
+                    "failure_details": [],
                 }
 
             self.logger.info("开始同步 %s 数据 (类型: %s)", form_name, self._sync_type_value(sync_type))
@@ -150,6 +158,8 @@ class FormSyncRunner:
                         "inserted": 0,
                         "updated": 0,
                         "error_type": "truncate_error",
+                        "failure_categories": {},
+                        "failure_details": [],
                     }
 
             self.owner._notify_progress(f"[{form_name}] 正在构建查询条件...", 10)
@@ -207,6 +217,8 @@ class FormSyncRunner:
             total_fetched_ref = [0]
             total_invalid_ref = [0]
             total_deduped_ref = [0]
+            failure_details_ref: List[WriteFailureDetail] = []
+            insert_duration_ref = [0.0]
 
             queue_size = 50 if self._is_full_or_complete(sync_type) else 10
             data_queue: "queue.Queue[Optional[List[Dict[str, Any]]]]" = queue.Queue(maxsize=queue_size)
@@ -221,14 +233,20 @@ class FormSyncRunner:
                         data_queue.task_done()
                         break
                     try:
+                        insert_start = time.perf_counter()
                         outcome = self.insert_database_data(form_name, page_data, db_manager=local_db)
+                        insert_duration = time.perf_counter() - insert_start
+                        insert_duration_ref[0] += insert_duration
+                        metrics_collector.record_write_outcome(form_name, outcome, insert_duration)
                         total_inserted_ref[0] += outcome.inserted
                         total_invalid_ref[0] += outcome.invalid
                         total_deduped_ref[0] += outcome.deduped
                         total_fetched_ref[0] += len(page_data)
+                        failure_details_ref.extend(self._resolve_failure_details(form_name, table_name, page_data, outcome))
                         self.owner._notify_progress(f"[{form_name}] 已同步 {total_inserted_ref[0]} 条数据...", 60)
                     except Exception as exc:
                         self.logger.error("[%s] 异步插入数据库失败: %s", form_name, exc)
+                        metrics_collector.record_error(form_name)
                         insert_errors.append(exc)
                     finally:
                         data_queue.task_done()
@@ -337,10 +355,14 @@ class FormSyncRunner:
                 if insert_errors:
                     raise insert_errors[0]
             elif all_rows_buffer:
+                insert_start = time.perf_counter()
                 outcome = self.insert_database_data(form_name, all_rows_buffer, db_manager=local_db)
+                insert_duration_ref[0] = time.perf_counter() - insert_start
+                metrics_collector.record_write_outcome(form_name, outcome, insert_duration_ref[0])
                 total_inserted_ref[0] = outcome.inserted
                 total_invalid_ref[0] = outcome.invalid
                 total_deduped_ref[0] = outcome.deduped
+                failure_details_ref.extend(self._resolve_failure_details(form_name, table_name, all_rows_buffer, outcome))
                 self.owner._notify_progress(f"[{form_name}] 批量写入完成，共 {outcome.inserted} 条", 75)
 
             perf_after_query = time.perf_counter()
@@ -351,6 +373,7 @@ class FormSyncRunner:
                 error_msg = f"查询金蝶数据失败，已重试{max_retries}次"
                 self.logger.error("[%s] %s", form_name, error_msg)
                 self.owner._notify_progress(f"[{form_name}] {error_msg}", 100)
+                metrics_collector.record_error(form_name)
                 end_time = datetime.now()
                 local_db.log_sync_operation(
                     sync_type_value,
@@ -381,6 +404,8 @@ class FormSyncRunner:
                     "inserted": 0,
                     "updated": 0,
                     "error_type": "query_error",
+                    "failure_categories": {},
+                    "failure_details": [],
                 }
 
             record_count = total_fetched_ref[0]
@@ -388,7 +413,7 @@ class FormSyncRunner:
             self.owner._notify_progress(f"[{form_name}] 最终共获取 {record_count} 条，插入 {inserted_count} 条数据", 80)
             self.logger.info("[%s] 获取 %s 条，插入 %s 条数据", form_name, record_count, inserted_count)
 
-            insert_duration = 0.0
+            insert_duration = insert_duration_ref[0]
             summary = self._build_write_summary(
                 form_name,
                 fetched=record_count,
@@ -396,8 +421,11 @@ class FormSyncRunner:
                     inserted=inserted_count,
                     invalid=total_invalid_ref[0],
                     deduped=total_deduped_ref[0],
+                    failed=max(0, record_count - total_invalid_ref[0] - total_deduped_ref[0] - inserted_count),
+                    failure_details=failure_details_ref,
                 ),
             )
+            failure_categories = summarize_failure_details(failure_details_ref)
             if record_count > 0:
                 success_rate = (inserted_count / record_count) * 100 if record_count > 0 else 0
                 self.owner._notify_progress(
@@ -410,9 +438,28 @@ class FormSyncRunner:
                     self.logger.info("[%s] 去重跳过: %s 条", form_name, summary["deduped"])
                 if summary["failed"] > 0:
                     self.logger.warning("[%s] 写库失败: %s 条", form_name, summary["failed"])
+                    metrics_collector.record_error(form_name)
+                for detail in failure_details_ref:
+                    emit_audit_log(
+                        self.logger,
+                        "sync_form",
+                        "write_failure_detail",
+                        form_name=form_name,
+                        table_name=table_name,
+                        sync_type=sync_type_value,
+                        category=detail.category,
+                        error_type=detail.error_type,
+                        failed_count=detail.failed_count,
+                        retryable=detail.retryable,
+                        record_keys=detail.record_keys,
+                        message=detail.message,
+                    )
             else:
                 self.logger.info("[%s] 没有新数据需要同步", form_name)
                 self.owner._notify_progress(f"[{form_name}] 没有新数据需要同步", 90)
+
+            result_status = self._resolve_result_status(inserted_count, summary["failed"])
+            result_message = self._build_result_message(result_status, inserted_count, summary["failed"])
 
             end_time = datetime.now()
             duration = (end_time - start_time).total_seconds()
@@ -421,14 +468,20 @@ class FormSyncRunner:
                 table_name,
                 "sync",
                 inserted_count,
-                SUCCESS_STATUS,
-                f"成功同步 {inserted_count} 条记录，耗时 {duration:.2f} 秒",
+                result_status,
+                f"{result_message}，耗时 {duration:.2f} 秒",
                 start_time,
                 end_time,
             )
 
             self.logger.info("[%s] 同步完成，耗时 %.2f 秒", form_name, duration)
-            self.owner._notify_progress(f"[{form_name}] 同步完成", 100)
+            metrics_success = result_status != FAILED_STATUS
+            if result_status == SUCCESS_STATUS:
+                self.owner._notify_progress(f"[{form_name}] 同步完成", 100)
+            elif result_status == PARTIAL_STATUS:
+                self.owner._notify_progress(f"[{form_name}] 同步部分完成", 100)
+            else:
+                self.owner._notify_progress(f"[{form_name}] 同步失败", 100)
             emit_audit_log(
                 self.logger,
                 "sync_form",
@@ -436,19 +489,21 @@ class FormSyncRunner:
                 form_name=form_name,
                 table_name=table_name,
                 sync_type=sync_type_value,
-                status=SUCCESS_STATUS,
+                status=result_status,
                 fetched=record_count,
                 inserted=inserted_count,
                 duration_seconds=duration,
             )
             return {
-                "status": SUCCESS_STATUS,
-                "message": f"成功同步 {inserted_count} 条记录",
+                "status": result_status,
+                "message": result_message,
                 "record_count": inserted_count,
                 "fetched": summary["fetched"],
                 "invalid": summary["invalid"],
                 "deduped": summary["deduped"],
                 "failed": summary["failed"],
+                "failure_categories": failure_categories,
+                "failure_details": [asdict(detail) for detail in failure_details_ref],
                 "inserted": inserted_count,
                 "updated": 0,
                 "duration": duration,
@@ -468,6 +523,7 @@ class FormSyncRunner:
             self.logger.error("[%s] %s", form_name, error_msg)
             self.logger.debug("错误详情: %s", error_trace)
             self.owner._notify_progress(f"[{form_name}] {error_msg}", 100)
+            metrics_collector.record_error(form_name)
 
             try:
                 local_db.log_sync_operation(
@@ -505,8 +561,11 @@ class FormSyncRunner:
                 "updated": 0,
                 "error_type": error_type,
                 "duration": duration,
+                "failure_categories": {},
+                "failure_details": [],
             }
         finally:
+            metrics_collector.end_sync(form_name, success=metrics_success)
             try:
                 local_db.disconnect()
             except Exception:
@@ -548,6 +607,42 @@ class FormSyncRunner:
             "deduped": deduped,
             "failed": failed,
         }
+
+    @staticmethod
+    def _resolve_result_status(inserted: int, failed: int) -> str:
+        if failed <= 0:
+            return SUCCESS_STATUS
+        if inserted > 0:
+            return PARTIAL_STATUS
+        return FAILED_STATUS
+
+    @staticmethod
+    def _build_result_message(status: str, inserted: int, failed: int) -> str:
+        if status == SUCCESS_STATUS:
+            return f"成功同步 {inserted} 条记录"
+        if status == PARTIAL_STATUS:
+            return f"部分同步成功，成功 {inserted} 条，写库失败 {failed} 条"
+        return f"同步失败，写库失败 {failed} 条"
+
+    def _resolve_failure_details(
+        self,
+        form_name: str,
+        table_name: str | None,
+        failed_rows: List[Dict[str, Any]],
+        outcome: WriteOutcome,
+    ) -> List[WriteFailureDetail]:
+        details = list(outcome.failure_details or [])
+        if details or outcome.failed <= 0:
+            return details
+        fallback_detail = classify_failure(
+            form_name=form_name,
+            table_name=table_name or "",
+            error_type="WriteFailure",
+            message="write failed without detail",
+            failed_rows=failed_rows[: outcome.failed],
+        )
+        fallback_detail.failed_count = max(1, outcome.failed)
+        return [fallback_detail]
 
     def insert_database_data(self, form_name: str, data: List[Dict], db_manager=None) -> WriteOutcome:
         """Insert queried form data using writer mappings."""

@@ -3,13 +3,13 @@
 收集和分析同步过程中的性能指标
 """
 
-import time
 import logging
-from typing import Dict, Any, Optional, List
+import threading
+import time
+from collections import defaultdict
 from dataclasses import dataclass, field
 from datetime import datetime
-from collections import defaultdict
-import threading
+from typing import Any, Dict, List, Optional
 
 logger = logging.getLogger(__name__)
 
@@ -23,7 +23,10 @@ class SyncMetrics:
     end_time: float = 0.0
     records_fetched: int = 0
     records_inserted: int = 0
+    records_invalid: int = 0
+    records_deduped: int = 0
     records_failed: int = 0
+    failure_categories: Dict[str, int] = field(default_factory=dict)
     api_calls: int = 0
     api_latency_total: float = 0.0
     api_latency_max: float = 0.0
@@ -68,7 +71,10 @@ class SyncMetrics:
             "duration_seconds": round(self.duration, 3),
             "records_fetched": self.records_fetched,
             "records_inserted": self.records_inserted,
+            "records_invalid": self.records_invalid,
+            "records_deduped": self.records_deduped,
             "records_failed": self.records_failed,
+            "failure_categories": dict(self.failure_categories),
             "qps": round(self.qps, 2),
             "success_rate": round(self.success_rate, 2),
             "api_calls": self.api_calls,
@@ -155,6 +161,27 @@ class MetricsCollector:
                 metrics.records_inserted += inserted
                 metrics.records_failed += failed
                 metrics.db_insert_time += duration
+
+    def record_write_outcome(self, form_name: str, outcome, duration: float) -> None:
+        """记录写库结果聚合。"""
+        with self._lock:
+            metrics = self._current_metrics.get(form_name)
+            if not metrics:
+                return
+
+            metrics.records_inserted += int(getattr(outcome, "inserted", 0) or 0)
+            metrics.records_invalid += int(getattr(outcome, "invalid", 0) or 0)
+            metrics.records_deduped += int(getattr(outcome, "deduped", 0) or 0)
+            metrics.records_failed += int(getattr(outcome, "failed", 0) or 0)
+            metrics.db_insert_time += float(duration or 0.0)
+
+            for detail in getattr(outcome, "failure_details", []) or []:
+                category = getattr(detail, "category", "")
+                if not category:
+                    continue
+                metrics.failure_categories[category] = (
+                    metrics.failure_categories.get(category, 0) + int(getattr(detail, "failed_count", 0) or 0)
+                )
 
     def record_retry(self, form_name: str):
         """记录重试"""

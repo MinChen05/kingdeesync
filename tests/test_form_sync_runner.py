@@ -233,7 +233,7 @@ class FormSyncRunnerOutcomeTests(unittest.TestCase):
         self.assertEqual(sum(result["failure_categories"].values()), 1)
         self.assertEqual(captured_sync_log["status"], "failed")
         mock_metrics.record_write_outcome.assert_called_once()
-        self.assertTrue(any(call.kwargs.get("event") == "write_failure_detail" for call in mock_audit.mock_calls))
+        self.assertTrue(any(len(call.args) >= 3 and call.args[2] == "write_failure_detail" for call in mock_audit.mock_calls))
 
 
 if __name__ == "__main__":

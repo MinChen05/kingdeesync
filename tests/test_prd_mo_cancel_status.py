@@ -208,8 +208,8 @@ class PrdMoCancelStatusTests(unittest.TestCase):
         self.assertIsNotNone(resolve_call)
         self.assertEqual(resolve_call.args[0], "prd_mo")
         self.assertEqual(resolve_call.args[1], "FCANCELSTATUS")
-        self.assertIn("FCANCELSTATUS", resolve_call.args[2])
-        self.assertIn("FDocumentStatus", resolve_call.args[2])
+        self.assertEqual(resolve_call.args[2]["FCANCELSTATUS"], "B")
+        self.assertEqual(resolve_call.args[2]["FDocumentStatus"], "A")
         self.assertEqual(prepared[-1], "RESOLVED-CANCEL")
 
     def test_prepare_production_order_data_uses_field_mapping_resolver_for_cancel_status_on_legacy_field_list(self) -> None:
@@ -243,10 +243,7 @@ class PrdMoCancelStatusTests(unittest.TestCase):
         self.assertEqual(resolve_call.args[0], "prd_mo")
         self.assertEqual(resolve_call.args[1], "FCANCELSTATUS")
         self.assertIsInstance(resolve_call.args[2], dict)
-        self.assertIn("FCANCELSTATUS", resolve_call.args[2])
-        self.assertTrue(
-            resolve_call.args[2]["FCANCELSTATUS"] in (None, "", "B"),
-        )
+        self.assertEqual(resolve_call.args[2]["FCANCELSTATUS"], None)
         self.assertEqual(prepared[-1], "RESOLVED-LEGACY-CANCEL")
 
 

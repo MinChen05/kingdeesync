@@ -82,6 +82,8 @@ def _load_mysql_manager_class():
     }
     module_path = Path(__file__).resolve().parents[1] / "src" / "core" / "mysql_manager.py"
     module_name = "src.core.mysql_manager"
+    sentinel = object()
+    previous_module = sys.modules.get(module_name, sentinel)
 
     with _temporary_modules(stubs):
         spec = importlib.util.spec_from_file_location(module_name, module_path)
@@ -92,7 +94,10 @@ def _load_mysql_manager_class():
         try:
             spec.loader.exec_module(module)
         finally:
-            sys.modules.pop(module_name, None)
+            if previous_module is sentinel:
+                sys.modules.pop(module_name, None)
+            else:
+                sys.modules[module_name] = previous_module
 
     return module.MySQLManager
 
@@ -103,6 +108,8 @@ def _load_insert_eng_bom_child():
     }
     module_path = Path(__file__).resolve().parents[1] / "src" / "core" / "masterdata_writer.py"
     module_name = "_eng_bomchild_masterdata_writer"
+    sentinel = object()
+    previous_module = sys.modules.get(module_name, sentinel)
 
     with _temporary_modules(stubs):
         spec = importlib.util.spec_from_file_location(module_name, module_path)
@@ -113,7 +120,10 @@ def _load_insert_eng_bom_child():
         try:
             spec.loader.exec_module(module)
         finally:
-            sys.modules.pop(module_name, None)
+            if previous_module is sentinel:
+                sys.modules.pop(module_name, None)
+            else:
+                sys.modules[module_name] = previous_module
 
     return module.insert_eng_bom_child
 
@@ -295,10 +305,10 @@ class EngBomChildFieldMappingTests(unittest.TestCase):
         child_name_call = manager.field_mapping_resolver.resolve_field.call_args_list[1]
         self.assertEqual(child_number_call.args[0], "eng_bomchild")
         self.assertEqual(child_number_call.args[1], "FCHILDNUMBER")
-        self.assertIn("FCHILDNUMBER", child_number_call.args[2])
+        self.assertEqual(child_number_call.args[2]["FCHILDNUMBER"], "MAT-CHILD-006")
         self.assertEqual(child_name_call.args[0], "eng_bomchild")
         self.assertEqual(child_name_call.args[1], "FCHILDNAME")
-        self.assertIn("FCHILDNAME", child_name_call.args[2])
+        self.assertEqual(child_name_call.args[2]["FCHILDNAME"], "Child Material 006")
         self.assertEqual(prepared[4], "RESOLVED-CHILD-006")
         self.assertEqual(prepared[5], "RESOLVED-CHILD-NAME-006")
 
@@ -340,12 +350,10 @@ class EngBomChildFieldMappingTests(unittest.TestCase):
         child_name_call = manager.field_mapping_resolver.resolve_field.call_args_list[1]
         self.assertEqual(child_number_call.args[0], "eng_bomchild")
         self.assertEqual(child_number_call.args[1], "FCHILDNUMBER")
-        self.assertIn("FCHILDNUMBER", child_number_call.args[2])
-        self.assertEqual(child_number_call.args[2]["FCHILDNUMBER"], "MAT-CHILD-007")
+        self.assertEqual(child_number_call.args[2]["FMATERIALIDCHILD.FNUMBER"], "MAT-CHILD-007")
         self.assertEqual(child_name_call.args[0], "eng_bomchild")
         self.assertEqual(child_name_call.args[1], "FCHILDNAME")
-        self.assertIn("FCHILDNAME", child_name_call.args[2])
-        self.assertEqual(child_name_call.args[2]["FCHILDNAME"], "Child Material 007")
+        self.assertEqual(child_name_call.args[2]["FMATERIALIDCHILD.FNAME"], "Child Material 007")
         self.assertEqual(prepared[4], "RESOLVED-CHILD-007")
         self.assertEqual(prepared[5], "RESOLVED-CHILD-NAME-007")
 

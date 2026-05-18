@@ -8,8 +8,6 @@ from contextlib import contextmanager
 from pathlib import Path
 from unittest.mock import Mock
 
-_STUBBED_MODULES: list[str] = []
-
 
 class _DummyUpsertEngine:
     def __init__(self, *args, **kwargs):
@@ -65,24 +63,6 @@ def _temporary_modules(stubs: dict[str, object]):
                 sys.modules[module_name] = previous
 
 
-def _install_stub(module_name: str, module: object) -> None:
-    if module_name in sys.modules:
-        return
-
-    sys.modules[module_name] = module
-    _STUBBED_MODULES.append(module_name)
-
-
-_install_stub("pyodbc", types.SimpleNamespace())
-_install_stub("pymysql", types.SimpleNamespace(cursors=types.SimpleNamespace(DictCursor=object)))
-_install_stub("dbutils", types.SimpleNamespace())
-_install_stub("dbutils.pooled_db", types.SimpleNamespace(PooledDB=_DummyPool))
-_install_stub("src.config.config_manager", types.SimpleNamespace(config_manager=_DummyConfigManager()))
-_install_stub("src.core.upsert_engine_mysql", types.SimpleNamespace(UpsertEngineMySQL=_DummyUpsertEngine))
-_install_stub("src.core.upsert_engine_sqlserver", types.SimpleNamespace(UpsertEngineSqlServer=_DummyUpsertEngine))
-_install_stub("src.core.write_outcome", types.SimpleNamespace(WriteOutcome=object))
-
-
 def _load_mysql_manager_class():
     stubs = {
         "pyodbc": types.SimpleNamespace(),
@@ -100,6 +80,8 @@ def _load_mysql_manager_class():
     }
     module_path = Path(__file__).resolve().parents[1] / "src" / "core" / "mysql_manager.py"
     module_name = "src.core.mysql_manager"
+    sentinel = object()
+    previous_module = sys.modules.get(module_name, sentinel)
 
     with _temporary_modules(stubs):
         spec = importlib.util.spec_from_file_location(module_name, module_path)
@@ -110,7 +92,10 @@ def _load_mysql_manager_class():
         try:
             spec.loader.exec_module(module)
         finally:
-            sys.modules.pop(module_name, None)
+            if previous_module is sentinel:
+                sys.modules.pop(module_name, None)
+            else:
+                sys.modules[module_name] = previous_module
 
     return module.MySQLManager
 
@@ -241,8 +226,9 @@ class ApPayableFieldMappingTests(unittest.TestCase):
         self.assertIsNotNone(resolve_call)
         self.assertEqual(resolve_call.args[0], "ap_payable")
         self.assertEqual(resolve_call.args[1], "FNOTAXAMOUNTFOR")
-        self.assertIn("FNOTAXAMOUNTFOR_D", resolve_call.args[2])
-        self.assertIn("FNoTaxAmountFor_D", resolve_call.args[2])
+        self.assertEqual(resolve_call.args[2]["FNOTAXAMOUNTFOR_D"], "100.00")
+        self.assertEqual(resolve_call.args[2]["FNoTaxAmountFor_D"], "100.00")
+        self.assertEqual(resolve_call.args[2]["FNOTAXAMOUNTFOR"], "999.00")
         self.assertEqual(prepared[15], 321.45)
 
 

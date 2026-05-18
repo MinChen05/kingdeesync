@@ -77,12 +77,22 @@ def collect_cleanup_candidates(project_root: Path | str) -> list[CleanupCandidat
         candidates.append(_make_candidate(path, level, reason))
 
     fixed_targets = [
-        (".worktrees", "high", "Workspace cache or nested worktrees that are often safe to review before cleanup."),
+        (
+            ".worktrees",
+            "high",
+            "High-risk Git worktree storage. Prefer `git worktree list`, `git worktree remove`, and `git worktree prune`; do not delete active worktree directories directly.",
+        ),
+        (".idea", "medium", "IDE project metadata is local to this workspace and can usually be recreated."),
+        (".claude", "medium", "Local agent or collaboration metadata is workspace-specific and can usually be recreated."),
+        (".install_salt", "medium", "Local machine marker or setup artifact that is usually safe to review before cleanup."),
         (".venv", "medium", "Local virtual environment can be recreated from dependency files."),
+        ("log", "high", "Runtime logs can grow quickly and are usually disposable after troubleshooting."),
         ("logs", "high", "Runtime logs can grow quickly and are usually disposable after troubleshooting."),
         (".mypy_cache", "high", "Static analysis cache is regenerated automatically."),
         (".pytest_cache", "high", "Pytest cache is regenerated automatically."),
         (".ruff_cache", "high", "Ruff cache is regenerated automatically."),
+        ("config.local.ini", "medium", "Local configuration should be reviewed before cleanup."),
+        ("config.ini.backup", "medium", "Backup configuration should be reviewed before cleanup."),
         ("checkpoints", "medium", "Checkpoint artifacts may be restorable from source or reruns."),
     ]
 
@@ -92,11 +102,20 @@ def collect_cleanup_candidates(project_root: Path | str) -> list[CleanupCandidat
         if target_path.exists():
             aggregated_roots.add(target_path.resolve())
 
+    def is_under_aggregated_root(path: Path) -> bool:
+        return any(_is_relative_to(path, aggregated_root) for aggregated_root in aggregated_roots)
+
     for path in root.rglob("__pycache__"):
         resolved = path.resolve()
-        if any(_is_relative_to(resolved, aggregated_root) for aggregated_root in aggregated_roots):
+        if is_under_aggregated_root(resolved):
             continue
         add(path, "high", "Python bytecode cache is regenerated automatically.")
+
+    for path in root.rglob(".DS_Store"):
+        resolved = path.resolve()
+        if is_under_aggregated_root(resolved):
+            continue
+        add(path, "high", "macOS Finder metadata is regenerated automatically.")
 
     for path in root.glob("tmp-*.png"):
         add(path, "medium", "Temporary image artifact that may be removable after review.")
@@ -143,6 +162,9 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
 
     root = Path(args.root)
+    if not root.exists() or not root.is_dir():
+        parser.error(f"Root path does not exist or is not a directory: {root}")
+
     candidates = collect_cleanup_candidates(root)
     print(_render_report(candidates, root))
     return 0

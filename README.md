@@ -10,13 +10,19 @@
 
 ## 项目瘦身
 
-这些目录和文件都属于本地派生内容，不应提交到仓库：
+这些目录和文件都属于本地派生内容，不应提交到仓库，`scripts/dry_run_cleanup.py` 会把它们列为候选项供人工确认：
 
 - `.idea/`
+- `.claude/`
+- `.install_salt`
+- `config.local.ini`
+- `config.ini.backup`
 - `.venv/`
 - `.worktrees/`
-- `config.ini.backup`
-- 缓存、日志、检查点和临时图片等派生文件
+- `log/`
+- `logs/`
+- 任意层级的 `.DS_Store`
+- 缓存、检查点和临时图片等派生文件
 
 可先用下面的命令做干运行清理评估：
 
@@ -24,7 +30,7 @@
 python scripts/dry_run_cleanup.py --root .
 ```
 
-该脚本只输出候选项和预计空间，不会删除任何文件。`.worktrees` 和 `.venv` 是否清理，需要人工确认后再处理。
+该脚本只输出候选项和预计空间，不会删除任何文件。`.worktrees` 是高风险目录，应先用 `git worktree list` 查看，再根据需要用 `git worktree remove` 或 `git worktree prune` 处理，不要直接删除活动 worktree 目录。`.venv` 是否清理，也需要人工确认后再处理。
 
 ## 功能概览
 

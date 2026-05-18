@@ -30,10 +30,24 @@ def _candidate_size(candidate: object) -> int:
     return int(raw_size)
 
 
+def _candidate_reason(candidate: object) -> str:
+    raw_reason = getattr(candidate, "reason", None)
+    if raw_reason is None:
+        raise AssertionError(f"candidate does not expose reason: {candidate!r}")
+    return str(raw_reason)
+
+
 class DryRunCleanupTests(unittest.TestCase):
     def test_collect_cleanup_candidates_reports_existing_targets(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             root = Path(tmpdir)
+            (root / ".idea").mkdir()
+            (root / ".claude").mkdir()
+            (root / ".install_salt").write_text("salt", encoding="utf-8")
+            (root / "config.local.ini").write_text("[local]\n", encoding="utf-8")
+            (root / "config.ini.backup").write_text("[backup]\n", encoding="utf-8")
+            (root / "log").mkdir()
+            (root / "log" / "app.log").write_text("keep me", encoding="utf-8")
             (root / ".worktrees").mkdir()
             (root / ".venv").mkdir()
             logs_dir = root / "logs"
@@ -44,6 +58,9 @@ class DryRunCleanupTests(unittest.TestCase):
             (root / "checkpoints").mkdir()
             (root / "pkg").mkdir()
             (root / "pkg" / "__pycache__").mkdir()
+            (root / "nested").mkdir()
+            nested_ds_store = root / "nested" / ".DS_Store"
+            nested_ds_store.write_bytes(b"ds")
             app_log = logs_dir / "app.log"
             app_log.write_text("keep me", encoding="utf-8")
             (root / "tmp-dashboard.png").write_bytes(b"png")
@@ -53,6 +70,12 @@ class DryRunCleanupTests(unittest.TestCase):
                 _candidate_path(candidate).resolve(): candidate for candidate in candidates
             }
 
+            self.assertIn((root / ".idea").resolve(), candidate_by_path)
+            self.assertIn((root / ".claude").resolve(), candidate_by_path)
+            self.assertIn((root / ".install_salt").resolve(), candidate_by_path)
+            self.assertIn((root / "config.local.ini").resolve(), candidate_by_path)
+            self.assertIn((root / "config.ini.backup").resolve(), candidate_by_path)
+            self.assertIn((root / "log").resolve(), candidate_by_path)
             self.assertIn((root / ".worktrees").resolve(), candidate_by_path)
             self.assertIn((root / ".venv").resolve(), candidate_by_path)
             self.assertIn((root / "logs").resolve(), candidate_by_path)
@@ -61,8 +84,24 @@ class DryRunCleanupTests(unittest.TestCase):
             self.assertIn((root / ".ruff_cache").resolve(), candidate_by_path)
             self.assertIn((root / "checkpoints").resolve(), candidate_by_path)
             self.assertIn((root / "pkg" / "__pycache__").resolve(), candidate_by_path)
+            self.assertIn(nested_ds_store.resolve(), candidate_by_path)
             self.assertIn((root / "tmp-dashboard.png").resolve(), candidate_by_path)
 
+            self.assertEqual(0, _candidate_size(candidate_by_path[(root / ".idea").resolve()]))
+            self.assertEqual(0, _candidate_size(candidate_by_path[(root / ".claude").resolve()]))
+            self.assertEqual(
+                (root / ".install_salt").stat().st_size,
+                _candidate_size(candidate_by_path[(root / ".install_salt").resolve()]),
+            )
+            self.assertEqual(
+                (root / "config.local.ini").stat().st_size,
+                _candidate_size(candidate_by_path[(root / "config.local.ini").resolve()]),
+            )
+            self.assertEqual(
+                (root / "config.ini.backup").stat().st_size,
+                _candidate_size(candidate_by_path[(root / "config.ini.backup").resolve()]),
+            )
+            self.assertEqual(app_log.stat().st_size, _candidate_size(candidate_by_path[(root / "log").resolve()]))
             self.assertEqual(0, _candidate_size(candidate_by_path[(root / ".worktrees").resolve()]))
             self.assertEqual(0, _candidate_size(candidate_by_path[(root / ".venv").resolve()]))
             self.assertEqual(app_log.stat().st_size, _candidate_size(candidate_by_path[(root / "logs").resolve()]))
@@ -71,7 +110,11 @@ class DryRunCleanupTests(unittest.TestCase):
             self.assertEqual(0, _candidate_size(candidate_by_path[(root / ".ruff_cache").resolve()]))
             self.assertEqual(0, _candidate_size(candidate_by_path[(root / "checkpoints").resolve()]))
             self.assertEqual(0, _candidate_size(candidate_by_path[(root / "pkg" / "__pycache__").resolve()]))
+            self.assertEqual(2, _candidate_size(candidate_by_path[nested_ds_store.resolve()]))
             self.assertEqual(3, _candidate_size(candidate_by_path[(root / "tmp-dashboard.png").resolve()]))
+            self.assertIn("git worktree list", _candidate_reason(candidate_by_path[(root / ".worktrees").resolve()]))
+            self.assertIn("git worktree remove", _candidate_reason(candidate_by_path[(root / ".worktrees").resolve()]))
+            self.assertIn("git worktree prune", _candidate_reason(candidate_by_path[(root / ".worktrees").resolve()]))
 
     def test_collect_cleanup_candidates_returns_empty_list_when_targets_missing(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -136,6 +179,13 @@ class DryRunCleanupTests(unittest.TestCase):
     def test_main_is_read_only_and_reports_candidate_details(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             root = Path(tmpdir)
+            (root / ".idea").mkdir()
+            (root / ".claude").mkdir()
+            (root / ".install_salt").write_text("salt", encoding="utf-8")
+            (root / "config.local.ini").write_text("[local]\n", encoding="utf-8")
+            (root / "config.ini.backup").write_text("[backup]\n", encoding="utf-8")
+            (root / "log").mkdir()
+            (root / "log" / "app.log").write_text("keep me", encoding="utf-8")
             (root / ".worktrees").mkdir()
             (root / ".venv").mkdir()
             logs_dir = root / "logs"
@@ -146,10 +196,15 @@ class DryRunCleanupTests(unittest.TestCase):
             (root / "checkpoints").mkdir()
             (root / "pkg").mkdir()
             (root / "pkg" / "__pycache__").mkdir()
+            (root / "nested").mkdir()
+            (root / "nested" / ".DS_Store").write_bytes(b"ds")
             dashboard_png = root / "tmp-dashboard.png"
             dashboard_png.write_bytes(b"png")
             app_log = logs_dir / "app.log"
             app_log.write_text("keep me", encoding="utf-8")
+            expected_candidates = dry_run_cleanup.collect_cleanup_candidates(root)
+            expected_count = len(expected_candidates)
+            expected_total_size = sum(_candidate_size(candidate) for candidate in expected_candidates)
 
             buffer = io.StringIO()
             with redirect_stdout(buffer):
@@ -159,18 +214,28 @@ class DryRunCleanupTests(unittest.TestCase):
                     exit_code = exc.code
 
             output = buffer.getvalue()
-            expected_total_size = app_log.stat().st_size + dashboard_png.stat().st_size
-            self.assertIn("Summary: 9 candidate(s), total size:", output)
+            self.assertIn(f"Summary: {expected_count} candidate(s), total size:", output)
             self.assertIn(f"total size: {expected_total_size} B", output)
             self.assertIn("No files were deleted.", output)
+            self.assertIn("High-risk Git worktree storage.", output)
+            self.assertIn("git worktree list", output)
+            self.assertIn("git worktree remove", output)
+            self.assertIn("git worktree prune", output)
             self.assertIn(".worktrees", output)
             self.assertIn(".venv", output)
+            self.assertIn(".idea", output)
+            self.assertIn(".claude", output)
+            self.assertIn(".install_salt", output)
+            self.assertIn("config.local.ini", output)
+            self.assertIn("config.ini.backup", output)
+            self.assertIn("log", output)
             self.assertIn("logs", output)
             self.assertIn(".mypy_cache", output)
             self.assertIn(".pytest_cache", output)
             self.assertIn(".ruff_cache", output)
             self.assertIn("checkpoints", output)
             self.assertIn("__pycache__", output)
+            self.assertIn(".DS_Store", output)
             self.assertIn("tmp-dashboard.png", output)
             self.assertRegex(output, r"(目录|directory)")
             self.assertRegex(output, r"(高收益|低风险|建议|high|low|risk)")
@@ -189,10 +254,31 @@ class DryRunCleanupTests(unittest.TestCase):
             self.assertTrue((root / ".ruff_cache").exists())
             self.assertTrue((root / "checkpoints").exists())
             self.assertTrue((root / "pkg" / "__pycache__").exists())
+            self.assertTrue((root / ".idea").exists())
+            self.assertTrue((root / ".claude").exists())
+            self.assertTrue((root / ".install_salt").exists())
+            self.assertTrue((root / "config.local.ini").exists())
+            self.assertTrue((root / "config.ini.backup").exists())
+            self.assertTrue((root / "log").exists())
+            self.assertTrue((root / "nested" / ".DS_Store").exists())
             self.assertTrue(dashboard_png.exists())
             self.assertTrue(app_log.exists())
             self.assertEqual("keep me", app_log.read_text(encoding="utf-8"))
             self.assertIn(exit_code, (None, 0))
+
+    def test_main_returns_error_when_root_is_missing(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir) / "does-not-exist"
+
+            stdout_buffer = io.StringIO()
+            stderr_buffer = io.StringIO()
+            with redirect_stdout(stdout_buffer), mock.patch("sys.stderr", stderr_buffer):
+                with self.assertRaises(SystemExit) as raised:
+                    dry_run_cleanup.main(["--root", str(root)])
+
+            self.assertNotEqual(0, raised.exception.code)
+            self.assertEqual("", stdout_buffer.getvalue())
+            self.assertIn("Root path does not exist or is not a directory", stderr_buffer.getvalue())
 
 
 if __name__ == "__main__":

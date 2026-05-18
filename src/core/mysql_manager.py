@@ -1246,9 +1246,17 @@ class MySQLManager:
             return None
         try:
             return resolver.resolve_field(table, field, row_map)
+        except ValueError as exc:
+            if self._should_reraise_field_mapping_error(exc):
+                raise
+            logger.warning("字段映射解析失败，回退原始字段值: table=%s field=%s error=%s", table, field, exc)
+            return None
         except Exception as exc:
             logger.warning("字段映射解析失败，回退原始字段值: table=%s field=%s error=%s", table, field, exc)
             return None
+
+    def _should_reraise_field_mapping_error(self, exc: Exception) -> bool:
+        return isinstance(exc, ValueError) and "exceeds max_length=" in str(exc)
 
     def _prepare_production_order_data(self, item) -> tuple | None:
         """准备生产订单数据（新增 FCREATEDATE）
@@ -1389,6 +1397,8 @@ class MySQLManager:
             logger.warning(f"不支持的数据类型: {type(item)}")
             return None
         except Exception as e:
+            if self._should_reraise_field_mapping_error(e):
+                raise
             logger.error(f"准备生产订单数据失败: {str(e)}")
             return None
 
@@ -1934,7 +1944,9 @@ class MySQLManager:
                     fapprove,
                 )
             return None
-        except Exception:
+        except Exception as e:
+            if self._should_reraise_field_mapping_error(e):
+                raise
             return None
 
     def insert_sub_subreqorder(self, data: list[dict]) -> int:
@@ -3612,6 +3624,8 @@ class MySQLManager:
             logger.warning(f"不支持的数据类型或列表数据项不足: {type(item)}")
             return None
         except Exception as e:
+            if self._should_reraise_field_mapping_error(e):
+                raise
             logger.error(f"准备物料清单子项数据失败: {str(e)}")
             return None
 

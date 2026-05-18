@@ -358,12 +358,14 @@ class EngBomChildFieldMappingTests(unittest.TestCase):
         self.assertEqual(prepared[4], "RESOLVED-CHILD-007")
         self.assertEqual(prepared[5], "RESOLVED-CHILD-NAME-007")
 
-    def test_prepare_eng_bom_child_data_falls_back_to_original_child_fields_when_resolver_raises(self) -> None:
+    def test_prepare_eng_bom_child_data_falls_back_to_original_child_fields_when_resolver_runtime_error_raises(
+        self,
+    ) -> None:
         manager = self._build_manager()
         manager.field_mapping_resolver = Mock()
         manager.field_mapping_resolver.resolve_field.side_effect = [
-            ValueError("resolver failed"),
-            ValueError("resolver failed"),
+            RuntimeError("resolver failed"),
+            RuntimeError("resolver failed"),
         ]
 
         prepared = manager._prepare_eng_bom_child_data(
@@ -383,6 +385,29 @@ class EngBomChildFieldMappingTests(unittest.TestCase):
         self.assertIsNotNone(prepared)
         self.assertEqual(prepared[4], "MAT-CHILD-008")
         self.assertEqual(prepared[5], "Child Material 008")
+
+    def test_prepare_eng_bom_child_data_reraises_field_mapping_reject_value_error(self) -> None:
+        manager = self._build_manager()
+        manager.field_mapping_resolver = Mock()
+        manager.field_mapping_resolver.resolve_field.side_effect = [
+            "MAT-CHILD-009",
+            ValueError("eng_bomchild.FCHILDNAME exceeds max_length=5"),
+        ]
+
+        with self.assertRaisesRegex(ValueError, r"eng_bomchild\.FCHILDNAME exceeds max_length=5"):
+            manager._prepare_eng_bom_child_data(
+                {
+                    "FID": 101,
+                    "FTreeEntity_FENTRYID": 202,
+                    "FTreeEntity_FSEQ": 3,
+                    "FMATERIALID": "MAT-PARENT",
+                    "FCHILDNUMBER": "MAT-CHILD-009",
+                    "FCHILDNAME": "Child Material 009",
+                    "FNUMERATOR": "2",
+                    "FDENOMINATOR": "1",
+                    "FMATERIALTYPE": "9",
+                }
+            )
 
     def test_ensure_additional_columns_for_eng_bomchild_adds_child_number_column_on_sqlserver(self) -> None:
         manager = self._build_manager()

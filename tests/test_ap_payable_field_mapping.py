@@ -270,10 +270,12 @@ class ApPayableFieldMappingTests(unittest.TestCase):
         self.assertEqual(resolve_call.args[2]["FNOTAXAMOUNTFOR"], "999.00")
         self.assertEqual(prepared[15], 654.32)
 
-    def test_prepare_ap_payable_data_falls_back_to_original_no_tax_amount_when_resolver_raises(self) -> None:
+    def test_prepare_ap_payable_data_falls_back_to_original_no_tax_amount_when_resolver_runtime_error_raises(
+        self,
+    ) -> None:
         manager = MySQLManager.__new__(MySQLManager)
         manager.field_mapping_resolver = Mock()
-        manager.field_mapping_resolver.resolve_field.side_effect = ValueError("resolver failed")
+        manager.field_mapping_resolver.resolve_field.side_effect = RuntimeError("resolver failed")
 
         prepared = manager._prepare_ap_payable_data(
             {

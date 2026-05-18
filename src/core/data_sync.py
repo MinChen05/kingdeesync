@@ -123,11 +123,13 @@ class DataSyncManager:
 
     def _refresh_circuit_breaker_config(self) -> None:
         sync_config = config_manager.get_sync_config()
-        self.circuit_breaker.enabled = bool(sync_config.get("circuit_breaker_enabled", True))
-        self.circuit_breaker.threshold = max(1, int(sync_config.get("circuit_breaker_threshold", 3) or 3))
-        self.circuit_breaker.cooldown_seconds = max(
-            0,
-            int(sync_config.get("circuit_breaker_cooldown_secs", 30) or 30),
+        self.circuit_breaker.reconfigure(
+            enabled=bool(sync_config.get("circuit_breaker_enabled", True)),
+            threshold=max(1, int(sync_config.get("circuit_breaker_threshold", 3) or 3)),
+            cooldown_seconds=max(
+                0,
+                int(sync_config.get("circuit_breaker_cooldown_secs", 30) or 30),
+            ),
         )
 
     def _run_heartbeat_loop(self, run_id: str, heartbeat_stop: threading.Event, heartbeat_interval: int) -> None:

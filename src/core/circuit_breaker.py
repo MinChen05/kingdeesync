@@ -31,6 +31,23 @@ class LocalCircuitBreaker:
         self._states: dict[str, CircuitState] = {}
         self._lock = threading.Lock()
 
+    def reconfigure(self, *, enabled: bool, threshold: int, cooldown_seconds: int) -> None:
+        self.enabled = enabled
+        self.threshold = max(1, int(threshold or 1))
+        self.cooldown_seconds = max(0, int(cooldown_seconds or 0))
+
+        with self._lock:
+            now = self._time_func()
+            for state in self._states.values():
+                if state.opened_until and state.opened_until <= now:
+                    state.consecutive_failures = 0
+                    state.opened_until = 0.0
+
+                if state.consecutive_failures >= self.threshold:
+                    state.opened_until = now + self.cooldown_seconds
+                else:
+                    state.opened_until = 0.0
+
     def allow(self, form_name: str) -> bool:
         if not self.enabled:
             return True

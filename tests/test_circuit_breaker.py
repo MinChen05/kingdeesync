@@ -99,7 +99,6 @@ class LocalCircuitBreakerTests(unittest.TestCase):
                 sync_single_form=Mock(
                     side_effect=[
                         {"status": "failed", "failure_categories": {"sql_error": 1}, "error_type": "WriteFailure"},
-                        {"status": "failed", "failure_categories": {"sql_error": 1}, "error_type": "WriteFailure"},
                         {"status": "success"},
                     ]
                 )
@@ -111,16 +110,14 @@ class LocalCircuitBreakerTests(unittest.TestCase):
             config["circuit_breaker_threshold"] = 1
             config["circuit_breaker_cooldown_secs"] = 10
             second_result = manager._sync_single_form("销售订单", SyncType.INCREMENTAL)
-            third_result = manager._sync_single_form("销售订单", SyncType.INCREMENTAL)
 
-            self.assertEqual(second_result["status"], "failed")
-            self.assertEqual(third_result["status"], "circuit_open")
+            self.assertEqual(second_result["status"], "circuit_open")
 
             config["circuit_breaker_enabled"] = False
-            fourth_result = manager._sync_single_form("销售订单", SyncType.INCREMENTAL)
+            third_result = manager._sync_single_form("销售订单", SyncType.INCREMENTAL)
 
-        self.assertEqual(fourth_result["status"], "success")
-        self.assertEqual(manager.form_sync_runner.sync_single_form.call_count, 3)
+        self.assertEqual(third_result["status"], "success")
+        self.assertEqual(manager.form_sync_runner.sync_single_form.call_count, 2)
 
 
 if __name__ == "__main__":

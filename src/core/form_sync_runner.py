@@ -466,7 +466,24 @@ class FormSyncRunner:
                 if summary["deduped"] > 0:
                     self.logger.info("[%s] 去重跳过: %s 条", form_name, summary["deduped"])
                 if summary["failed"] > 0:
-                    self.logger.warning("[%s] 写库失败: %s 条", form_name, summary["failed"])
+                    deduped = summary.get("deduped", 0)
+                    real_failures = summary["failed"] - deduped
+                    if deduped > 0 and real_failures <= 0:
+                        self.logger.info(
+                            "[%s] 写入完成: 插入 %s 条，去重过滤 %s 条",
+                            form_name,
+                            inserted_count,
+                            deduped,
+                        )
+                    else:
+                        self.logger.warning(
+                            "[%s] 写库失败: %s 条 (去重 %s 条, SQL错误 %s 条)",
+                            form_name,
+                            summary["failed"],
+                            deduped,
+                            real_failures,
+                        )
+                        metrics_collector.record_error(metrics_run_id, form_name)
                     metrics_collector.record_error(metrics_run_id, form_name)
                 for detail in failure_details_ref:
                     emit_audit_log(

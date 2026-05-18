@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import unittest
 
+from src.core.field_mapping_resolver import FieldMappingResolver
+from src.core.mysql_manager import MySQLManager
 from src.core.upsert_engine_sqlserver import UpsertEngineSqlServer
 
 
@@ -86,6 +88,41 @@ class FakeSqlServerManager:
 
 
 class UpsertEngineSqlServerTests(unittest.TestCase):
+    def test_string_truncation_diagnosis_skips_trimmed_fields_but_reports_other_overlong_fields(self) -> None:
+        manager = MySQLManager.__new__(MySQLManager)
+        manager.db_type = "sqlserver"
+        manager.cursor = FakeCursor()
+        manager.cursor._fetchall_queue = [
+            [
+                ("FCHILDNAME", "nvarchar", 10),
+                ("FBILLNO", "nvarchar", 6),
+            ]
+        ]
+        manager.field_mapping_resolver = FieldMappingResolver(
+            {
+                "eng_bomchild": {
+                    "FCHILDNAME": {
+                        "sources": ["FCHILDNAME"],
+                        "type": "string",
+                        "max_length": 5,
+                        "truncate_policy": "trim",
+                    }
+                }
+            }
+        )
+
+        with self.assertLogs("src.core.mysql_manager", level="ERROR") as captured:
+            MySQLManager._diagnose_string_truncation(
+                manager,
+                "eng_bomchild",
+                ["FCHILDNAME", "FBILLNO"],
+                [["ABCDEFG", "TOO-LONG"]],
+            )
+
+        output = "\n".join(captured.output)
+        self.assertNotIn("FCHILDNAME", output)
+        self.assertIn("FBILLNO", output)
+
     def test_bd_material_branch_initializes_batch_exec_seconds(self) -> None:
         manager = FakeSqlServerManager()
         manager.cursor._fetchall_queue = [

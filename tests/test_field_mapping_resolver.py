@@ -203,28 +203,26 @@ class FieldMappingResolverTests(unittest.TestCase):
 
         resolver = FieldMappingResolver(
             {
-                "eng_bomchild": {
-                    "FCHILDNAME": {
+                "prd_mo": {
+                    "FBILLNO": {
                         "sources": [
-                            "FMATERIALIDCHILD.FNAME",
-                            "FMATERIALIDCHILD.FName",
-                            "FCHILDNAME",
-                            "FChildName",
+                            "FBILLNO",
+                            "FBillNo",
                         ],
                         "type": "string",
                         "default": "",
-                        "max_length": 5,
+                        "max_length": 3,
                         "truncate_policy": "reject",
                     }
                 }
             }
         )
 
-        with self.assertRaises(ValueError):
+        with self.assertRaisesRegex(ValueError, r"prd_mo\.FBILLNO exceeds max_length=3"):
             resolver.resolve_field(
-                "eng_bomchild",
-                "FCHILDNAME",
-                {"FMATERIALIDCHILD.FNAME": "ABCDEFG"},
+                "prd_mo",
+                "FBILLNO",
+                {"FBILLNO": "RK01"},
             )
 
     def test_resolve_returns_original_value_when_field_has_no_rule(self) -> None:

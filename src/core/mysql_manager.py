@@ -3407,6 +3407,8 @@ class MySQLManager:
             )
             rows = self.cursor.fetchall() or []
             length_map = {}
+            resolver = getattr(self, "field_mapping_resolver", None)
+            trim_columns = set()
             for row in rows:
                 if isinstance(row, dict):
                     col_name = row.get("COLUMN_NAME")
@@ -3417,7 +3419,13 @@ class MySQLManager:
                     data_type = row[1] if len(row) > 1 else None
                     max_len = row[2] if len(row) > 2 else None
                 if col_name:
-                    length_map[str(col_name).upper()] = (str(data_type or "").lower(), max_len)
+                    normalized_name = str(col_name).upper()
+                    length_map[normalized_name] = (str(data_type or "").lower(), max_len)
+                    if resolver is not None:
+                        rule = resolver.get_rule(base_name, str(col_name).strip())
+                        policy = str((rule or {}).get("truncate_policy", "")).strip().lower()
+                        if policy == "trim":
+                            trim_columns.add(normalized_name)
 
             suspects = []
             check_rows = batch[:20]
@@ -3435,6 +3443,8 @@ class MySQLManager:
                     if data_type not in {"nvarchar", "varchar", "nchar", "char"}:
                         continue
                     if max_len in (None, -1):
+                        continue
+                    if column_name.upper() in trim_columns:
                         continue
                     text_value = str(value)
                     char_len = len(text_value)

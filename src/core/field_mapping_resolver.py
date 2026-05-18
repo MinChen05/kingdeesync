@@ -19,7 +19,7 @@ class FieldMappingResolver:
         if value is None or value == "":
             return rule.get("default")
 
-        return self._coerce_value(value, rule)
+        return self._coerce_value(table, field, value, rule)
 
     def _resolve_source_value(self, rule: dict[str, Any], row: dict[str, Any]) -> Any:
         for source in rule.get("sources", []):
@@ -29,7 +29,7 @@ class FieldMappingResolver:
             return value
         return None
 
-    def _coerce_value(self, value: Any, rule: dict[str, Any]) -> Any:
+    def _coerce_value(self, table: str, field: str, value: Any, rule: dict[str, Any]) -> Any:
         value_type = str(rule.get("type", "string")).strip().lower()
         default = rule.get("default")
 
@@ -46,11 +46,11 @@ class FieldMappingResolver:
                 return default
 
         if value_type == "string":
-            return self._normalize_string(str(value), rule)
+            return self._normalize_string(table, field, str(value), rule)
 
         return value
 
-    def _normalize_string(self, value: str, rule: dict[str, Any]) -> str:
+    def _normalize_string(self, table: str, field: str, value: str, rule: dict[str, Any]) -> str:
         max_length = rule.get("max_length")
         if not isinstance(max_length, int) or len(value) <= max_length:
             return value
@@ -59,5 +59,5 @@ class FieldMappingResolver:
         if policy == "trim":
             return value[:max_length]
         if policy == "reject":
-            raise ValueError(f"Value exceeds max_length for field mapping: {max_length}")
+            raise ValueError(f"{table}.{field} exceeds max_length={max_length}")
         return value

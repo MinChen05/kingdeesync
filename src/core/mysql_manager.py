@@ -1270,6 +1270,8 @@ class MySQLManager:
                 fcreated = self._parse_datetime(item.get("FCREATEDATE") or item.get("FCreateDate"))
                 fmodifydate = self._parse_datetime(item.get("FMODIFYDATE") or item.get("FModifyDate"))
                 fcancel = self._safe_str(item.get("FCANCELSTATUS") or item.get("FCancelStatus"))
+                if fcancel is None:
+                    fcancel = ""
                 return (
                     fid,
                     fbillno,
@@ -1298,6 +1300,8 @@ class MySQLManager:
                     fcreated = self._parse_datetime(item[7])
                     fmodifydate = self._parse_datetime(item[8])
                     fcancel = self._safe_str(item[9])
+                    if fcancel is None:
+                        fcancel = ""
                     return (
                         fid,
                         fbillno,
@@ -1322,6 +1326,8 @@ class MySQLManager:
                     fcreated = None
                     fmodifydate = self._parse_datetime(item[14])
                     fcancel = self._safe_str(item[15])
+                    if fcancel is None:
+                        fcancel = ""
                     return (
                         fid,
                         fbillno,

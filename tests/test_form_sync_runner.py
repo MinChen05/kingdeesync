@@ -104,6 +104,7 @@ def _load_form_sync_runner_module():
             else:
                 sys.modules.pop(name, None)
 from src.core.write_outcome import WriteOutcome
+from src.core.metrics import MetricsCollector
 
 
 class FormSyncRunnerOutcomeTests(unittest.TestCase):
@@ -227,7 +228,7 @@ class FormSyncRunnerOutcomeTests(unittest.TestCase):
 
                 result = runner.sync_single_form("销售订单", "full")
 
-        recorded_outcome = mock_metrics.record_write_outcome.call_args.args[1]
+        recorded_outcome = mock_metrics.record_write_outcome.call_args.args[2]
         self.assertEqual(result["failed"], 1)
         self.assertEqual(sum(result["failure_categories"].values()), 1)
         self.assertEqual(recorded_outcome.failed, 1)
@@ -276,7 +277,7 @@ class FormSyncRunnerOutcomeTests(unittest.TestCase):
         self.assertEqual(sum(result["failure_categories"].values()), 1)
         self.assertEqual(captured_sync_log["status"], "failed")
         mock_metrics.record_write_outcome.assert_called_once()
-        recorded_outcome = mock_metrics.record_write_outcome.call_args.args[1]
+        recorded_outcome = mock_metrics.record_write_outcome.call_args.args[2]
         self.assertTrue(recorded_outcome.failure_details)
         self.assertEqual(recorded_outcome.failure_details[0].category, "sql_error")
         self.assertTrue(any(len(call.args) >= 3 and call.args[2] == "write_failure_detail" for call in mock_audit.mock_calls))
@@ -321,6 +322,36 @@ class FormSyncRunnerOutcomeTests(unittest.TestCase):
         self.assertEqual(sum(result["failure_categories"].values()), 1)
         self.assertTrue(result["failure_details"])
         self.assertEqual(result["failure_details"][0]["category"], "sql_error")
+
+    def test_metrics_collector_export_run_snapshot_is_scoped_by_run_id(self) -> None:
+        collector = MetricsCollector()
+        form_name = "销售订单"
+
+        collector.start_sync("run-a", form_name)
+        collector.record_write_outcome("run-a", form_name, WriteOutcome(inserted=3), 0.1)
+        collector.end_sync("run-a", form_name, success=True)
+
+        collector.start_sync("run-b", form_name)
+        collector.record_write_outcome("run-b", form_name, WriteOutcome(inserted=7), 0.2)
+        collector.end_sync("run-b", form_name, success=True)
+
+        snapshot_a = collector.export_run_snapshot("run-a", [form_name])
+        snapshot_b = collector.export_run_snapshot("run-b", [form_name])
+
+        self.assertEqual(snapshot_a[form_name]["records_inserted"], 3)
+        self.assertEqual(snapshot_b[form_name]["records_inserted"], 7)
+
+    def test_metrics_collector_export_run_snapshot_does_not_leak_other_run_metrics(self) -> None:
+        collector = MetricsCollector()
+        form_name = "销售订单"
+
+        collector.start_sync("run-a", form_name)
+        collector.record_write_outcome("run-a", form_name, WriteOutcome(inserted=5), 0.1)
+        collector.end_sync("run-a", form_name, success=True)
+
+        snapshot = collector.export_run_snapshot("run-empty", [form_name])
+
+        self.assertEqual(snapshot, {})
 
     @patch("src.core.data_sync.mysql_manager.finish_sync_run")
     @patch("src.core.data_sync.metrics_collector")
@@ -372,6 +403,7 @@ class FormSyncRunnerOutcomeTests(unittest.TestCase):
                 "failed_forms": [],
             },
         )
+        mock_metrics_collector.export_run_snapshot.assert_called_once_with("run-1", ["销售订单"])
 
     @patch("src.core.data_sync.mysql_manager.finish_sync_run")
     @patch("src.core.data_sync.metrics_collector")
@@ -388,7 +420,7 @@ class FormSyncRunnerOutcomeTests(unittest.TestCase):
         start_time = datetime(2026, 5, 18, 10, 0, 0)
         end_time = datetime(2026, 5, 18, 10, 0, 1)
         mock_metrics_collector.export_run_snapshot.side_effect = (
-            lambda form_names: {} if not form_names else {"销售订单": {"records_inserted": 99}}
+            lambda run_id, form_names: {} if not form_names else {"销售订单": {"records_inserted": 99}}
         )
 
         manager._finalize_run(
@@ -405,7 +437,7 @@ class FormSyncRunnerOutcomeTests(unittest.TestCase):
         )
 
         finish_kwargs = mock_finish_sync_run.call_args.kwargs
-        mock_metrics_collector.export_run_snapshot.assert_called_once_with([])
+        mock_metrics_collector.export_run_snapshot.assert_called_once_with("run-2", [])
         self.assertEqual(finish_kwargs["details"]["metrics"], {})
 
 

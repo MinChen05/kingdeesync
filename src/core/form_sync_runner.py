@@ -84,6 +84,9 @@ class FormSyncRunner:
     def _is_full_or_complete(self, sync_type) -> bool:
         return self._sync_type_value(sync_type) in {"full", "complete"}
 
+    def _metrics_run_id(self) -> str:
+        return str(getattr(self.owner, "_active_run_id", "") or "")
+
     def sync_single_form(self, form_name: str, sync_type) -> Dict[str, Any]:
         """Run one form end-to-end while DataSyncManager orchestrates scheduling."""
         if form_name == "科目余额表":
@@ -94,7 +97,8 @@ class FormSyncRunner:
         local_db = create_shared_db_manager(mysql_manager)
         table_name = self.owner.table_mapping.get(form_name)
         sync_type_value = self._sync_type_value(sync_type)
-        metrics_collector.start_sync(form_name)
+        metrics_run_id = self._metrics_run_id()
+        metrics_collector.start_sync(metrics_run_id, form_name)
         metrics_success = False
 
         emit_audit_log(
@@ -112,7 +116,7 @@ class FormSyncRunner:
                 error_msg = f"未找到表单 {form_name} 的映射表"
                 self.logger.error(error_msg)
                 self.owner._notify_progress(f"[{form_name}] {error_msg}", 100)
-                metrics_collector.record_error(form_name)
+                metrics_collector.record_error(metrics_run_id, form_name)
                 emit_audit_log(
                     self.logger,
                     "sync_form",
@@ -238,7 +242,7 @@ class FormSyncRunner:
                         outcome = self._normalize_write_outcome(form_name, table_name, page_data, raw_outcome)
                         insert_duration = time.perf_counter() - insert_start
                         insert_duration_ref[0] += insert_duration
-                        metrics_collector.record_write_outcome(form_name, outcome, insert_duration)
+                        metrics_collector.record_write_outcome(metrics_run_id, form_name, outcome, insert_duration)
                         total_inserted_ref[0] += outcome.inserted
                         total_invalid_ref[0] += outcome.invalid
                         total_deduped_ref[0] += outcome.deduped
@@ -247,7 +251,7 @@ class FormSyncRunner:
                         self.owner._notify_progress(f"[{form_name}] 已同步 {total_inserted_ref[0]} 条数据...", 60)
                     except Exception as exc:
                         self.logger.error("[%s] 异步插入数据库失败: %s", form_name, exc)
-                        metrics_collector.record_error(form_name)
+                        metrics_collector.record_error(metrics_run_id, form_name)
                         insert_errors.append(exc)
                     finally:
                         data_queue.task_done()
@@ -360,7 +364,7 @@ class FormSyncRunner:
                 raw_outcome = self.insert_database_data(form_name, all_rows_buffer, db_manager=local_db)
                 outcome = self._normalize_write_outcome(form_name, table_name, all_rows_buffer, raw_outcome)
                 insert_duration_ref[0] = time.perf_counter() - insert_start
-                metrics_collector.record_write_outcome(form_name, outcome, insert_duration_ref[0])
+                metrics_collector.record_write_outcome(metrics_run_id, form_name, outcome, insert_duration_ref[0])
                 total_inserted_ref[0] = outcome.inserted
                 total_invalid_ref[0] = outcome.invalid
                 total_deduped_ref[0] = outcome.deduped
@@ -376,7 +380,7 @@ class FormSyncRunner:
                 error_msg = f"查询金蝶数据失败，已重试{max_retries}次"
                 self.logger.error("[%s] %s", form_name, error_msg)
                 self.owner._notify_progress(f"[{form_name}] {error_msg}", 100)
-                metrics_collector.record_error(form_name)
+                metrics_collector.record_error(metrics_run_id, form_name)
                 end_time = datetime.now()
                 local_db.log_sync_operation(
                     sync_type_value,
@@ -440,7 +444,7 @@ class FormSyncRunner:
                     self.logger.info("[%s] 去重跳过: %s 条", form_name, summary["deduped"])
                 if summary["failed"] > 0:
                     self.logger.warning("[%s] 写库失败: %s 条", form_name, summary["failed"])
-                    metrics_collector.record_error(form_name)
+                    metrics_collector.record_error(metrics_run_id, form_name)
                 for detail in failure_details_ref:
                     emit_audit_log(
                         self.logger,
@@ -525,7 +529,7 @@ class FormSyncRunner:
             self.logger.error("[%s] %s", form_name, error_msg)
             self.logger.debug("错误详情: %s", error_trace)
             self.owner._notify_progress(f"[{form_name}] {error_msg}", 100)
-            metrics_collector.record_error(form_name)
+            metrics_collector.record_error(metrics_run_id, form_name)
 
             try:
                 local_db.log_sync_operation(
@@ -567,7 +571,7 @@ class FormSyncRunner:
                 "failure_details": [],
             }
         finally:
-            metrics_collector.end_sync(form_name, success=metrics_success)
+            metrics_collector.end_sync(metrics_run_id, form_name, success=metrics_success)
             try:
                 local_db.disconnect()
             except Exception:

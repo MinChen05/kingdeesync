@@ -165,7 +165,7 @@ class DataSyncManager:
             failure_count = max(0, len(requested_forms) - success_count)
             details = {
                 "results": results,
-                "metrics": metrics_collector.export_run_snapshot(list(results.keys())),
+                "metrics": metrics_collector.export_run_snapshot(run_id, list(results.keys())),
                 "failed_forms": list(failed_tables),
             }
             mysql_manager.finish_sync_run(

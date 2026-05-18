@@ -19,6 +19,7 @@ class SyncMetrics:
     """单次同步的性能指标"""
 
     form_name: str
+    run_id: str = ""
     start_time: float = 0.0
     end_time: float = 0.0
     records_fetched: int = 0
@@ -92,7 +93,7 @@ class MetricsCollector:
 
     def __init__(self):
         self._lock = threading.Lock()
-        self._current_metrics: Dict[str, SyncMetrics] = {}
+        self._current_metrics: Dict[tuple[str, str], SyncMetrics] = {}
         self._history: List[SyncMetrics] = []
         self._global_stats = {
             "total_syncs": 0,
@@ -103,22 +104,30 @@ class MetricsCollector:
             "total_retries": 0,
         }
 
-    def start_sync(self, form_name: str) -> SyncMetrics:
+    @staticmethod
+    def _normalize_run_id(run_id: str | None) -> str:
+        return str(run_id or "")
+
+    def _build_key(self, run_id: str | None, form_name: str) -> tuple[str, str]:
+        return self._normalize_run_id(run_id), str(form_name)
+
+    def start_sync(self, run_id: str | None, form_name: str) -> SyncMetrics:
         """开始记录同步指标"""
         with self._lock:
-            metrics = SyncMetrics(form_name=form_name, start_time=time.perf_counter())
-            self._current_metrics[form_name] = metrics
+            normalized_run_id = self._normalize_run_id(run_id)
+            metrics = SyncMetrics(run_id=normalized_run_id, form_name=form_name, start_time=time.perf_counter())
+            self._current_metrics[(normalized_run_id, form_name)] = metrics
             return metrics
 
-    def get_metrics(self, form_name: str) -> Optional[SyncMetrics]:
+    def get_metrics(self, run_id: str | None, form_name: str) -> Optional[SyncMetrics]:
         """获取当前同步的指标"""
         with self._lock:
-            return self._current_metrics.get(form_name)
+            return self._current_metrics.get(self._build_key(run_id, form_name))
 
-    def end_sync(self, form_name: str, success: bool = True) -> Optional[SyncMetrics]:
+    def end_sync(self, run_id: str | None, form_name: str, success: bool = True) -> Optional[SyncMetrics]:
         """结束记录同步指标"""
         with self._lock:
-            metrics = self._current_metrics.pop(form_name, None)
+            metrics = self._current_metrics.pop(self._build_key(run_id, form_name), None)
             if metrics:
                 metrics.end_time = time.perf_counter()
                 self._history.append(metrics)
@@ -132,20 +141,20 @@ class MetricsCollector:
                 self._global_stats["total_retries"] += metrics.retry_count
             return metrics
 
-    def record_api_call(self, form_name: str, latency: float):
+    def record_api_call(self, run_id: str | None, form_name: str, latency: float):
         """记录API调用"""
         with self._lock:
-            metrics = self._current_metrics.get(form_name)
+            metrics = self._current_metrics.get(self._build_key(run_id, form_name))
             if metrics:
                 metrics.api_calls += 1
                 metrics.api_latency_total += latency
                 metrics.api_latency_max = max(metrics.api_latency_max, latency)
                 metrics.api_latency_min = min(metrics.api_latency_min, latency)
 
-    def record_page(self, form_name: str, records: int, latency: float):
+    def record_page(self, run_id: str | None, form_name: str, records: int, latency: float):
         """记录分页查询"""
         with self._lock:
-            metrics = self._current_metrics.get(form_name)
+            metrics = self._current_metrics.get(self._build_key(run_id, form_name))
             if metrics:
                 metrics.page_count += 1
                 metrics.records_fetched += records
@@ -153,19 +162,19 @@ class MetricsCollector:
                 metrics.api_latency_total += latency
                 metrics.api_latency_max = max(metrics.api_latency_max, latency)
 
-    def record_insert(self, form_name: str, inserted: int, failed: int, duration: float):
+    def record_insert(self, run_id: str | None, form_name: str, inserted: int, failed: int, duration: float):
         """记录插入操作"""
         with self._lock:
-            metrics = self._current_metrics.get(form_name)
+            metrics = self._current_metrics.get(self._build_key(run_id, form_name))
             if metrics:
                 metrics.records_inserted += inserted
                 metrics.records_failed += failed
                 metrics.db_insert_time += duration
 
-    def record_write_outcome(self, form_name: str, outcome, duration: float) -> None:
+    def record_write_outcome(self, run_id: str | None, form_name: str, outcome, duration: float) -> None:
         """记录写库结果聚合。"""
         with self._lock:
-            metrics = self._current_metrics.get(form_name)
+            metrics = self._current_metrics.get(self._build_key(run_id, form_name))
             if not metrics:
                 return
 
@@ -183,17 +192,17 @@ class MetricsCollector:
                     metrics.failure_categories.get(category, 0) + int(getattr(detail, "failed_count", 0) or 0)
                 )
 
-    def record_retry(self, form_name: str):
+    def record_retry(self, run_id: str | None, form_name: str):
         """记录重试"""
         with self._lock:
-            metrics = self._current_metrics.get(form_name)
+            metrics = self._current_metrics.get(self._build_key(run_id, form_name))
             if metrics:
                 metrics.retry_count += 1
 
-    def record_error(self, form_name: str):
+    def record_error(self, run_id: str | None, form_name: str):
         """记录错误"""
         with self._lock:
-            metrics = self._current_metrics.get(form_name)
+            metrics = self._current_metrics.get(self._build_key(run_id, form_name))
             if metrics:
                 metrics.error_count += 1
 
@@ -240,14 +249,19 @@ class MetricsCollector:
                 "avg_api_latency_ms": round(sum(m.avg_api_latency for m in form_metrics) / len(form_metrics) * 1000, 2),
             }
 
-    def export_run_snapshot(self, form_names: List[str]) -> Dict[str, Dict[str, Any]]:
+    def export_run_snapshot(self, run_id: str | None, form_names: List[str]) -> Dict[str, Dict[str, Any]]:
         """导出指定表单最近一次同步的指标快照。"""
         with self._lock:
+            normalized_run_id = self._normalize_run_id(run_id)
             requested_forms = {str(form_name) for form_name in form_names}
             snapshots: Dict[str, Dict[str, Any]] = {}
 
             for metrics in reversed(self._history):
-                if metrics.form_name not in requested_forms or metrics.form_name in snapshots:
+                if (
+                    metrics.run_id != normalized_run_id
+                    or metrics.form_name not in requested_forms
+                    or metrics.form_name in snapshots
+                ):
                     continue
                 snapshots[metrics.form_name] = metrics.to_dict()
                 if len(snapshots) == len(requested_forms):
@@ -256,7 +270,7 @@ class MetricsCollector:
             for form_name in requested_forms:
                 if form_name in snapshots:
                     continue
-                metrics = self._current_metrics.get(form_name)
+                metrics = self._current_metrics.get((normalized_run_id, form_name))
                 if metrics is not None:
                     snapshots[form_name] = metrics.to_dict()
 

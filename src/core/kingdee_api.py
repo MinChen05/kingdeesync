@@ -268,14 +268,25 @@ class KingdeeAPIClient:
         if self._should_refresh_cross_day_session(now=now):
             logger.info("命中凌晨会话刷新窗口，检测到跨日会话，先重登再继续同步")
             self.logout(force=True)
-            return self.login()
+            refreshed = self.login()
+            if refreshed:
+                logger.info("凌晨窗口会话刷新成功")
+            else:
+                logger.error("凌晨窗口会话刷新失败")
+            return refreshed
 
         if self._keep_alive_ping():
+            logger.info("同步前会话预检通过")
             return True
 
         logger.warning("同步前会话预检失败，尝试重新登录...")
         self.logout(force=True)
-        return self.login()
+        relogged = self.login()
+        if relogged:
+            logger.info("同步前会话重登成功")
+        else:
+            logger.error("同步前会话重登失败")
+        return relogged
 
     def _keepalive_loop(self):
         interval = int(self.config.get('keep_alive_interval_secs', 600))

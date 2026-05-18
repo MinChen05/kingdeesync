@@ -80,13 +80,28 @@ def _load_form_sync_runner_module():
                 sys.modules.pop(name, None)
 
 
+def _scrub_form_sync_runner_package_attr() -> None:
+    core_pkg = sys.modules.get("src.core")
+    if core_pkg is not None and "src.core.form_sync_runner" not in sys.modules and hasattr(core_pkg, "form_sync_runner"):
+        delattr(core_pkg, "form_sync_runner")
+
+
 form_sync_runner = _load_form_sync_runner_module()
+_scrub_form_sync_runner_package_attr()
 FormSyncRunner = form_sync_runner.FormSyncRunner
 PARTIAL_STATUS = form_sync_runner.PARTIAL_STATUS
 from src.core.write_outcome import WriteOutcome
 
 
 class FormSyncRunnerOutcomeTests(unittest.TestCase):
+    def test_package_attr_cleanup_does_not_leave_detached_form_sync_runner(self) -> None:
+        _scrub_form_sync_runner_package_attr()
+        core_pkg = sys.modules.get("src.core")
+        if core_pkg is not None:
+            self.assertFalse(
+                hasattr(core_pkg, "form_sync_runner") and "src.core.form_sync_runner" not in sys.modules
+            )
+
     def test_build_write_summary_separates_invalid_deduped_and_failed(self) -> None:
         owner = SimpleNamespace(DEDUPLICATION_FORMS={"生产入库单"})
         runner = FormSyncRunner(owner, SimpleNamespace(), logger_=logging.getLogger("test.form_sync_runner"))

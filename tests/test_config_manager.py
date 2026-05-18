@@ -57,10 +57,25 @@ def _load_config_manager():
                 sys.modules.pop(name, None)
 
 
+def _scrub_config_manager_package_attr() -> None:
+    config_pkg = sys.modules.get("src.config")
+    if config_pkg is not None and "src.config.config_manager" not in sys.modules and hasattr(config_pkg, "config_manager"):
+        delattr(config_pkg, "config_manager")
+
+
 ConfigManager = _load_config_manager().ConfigManager
+_scrub_config_manager_package_attr()
 
 
 class ConfigManagerTests(unittest.TestCase):
+    def test_package_attr_cleanup_does_not_leave_detached_config_manager(self) -> None:
+        _scrub_config_manager_package_attr()
+        config_pkg = sys.modules.get("src.config")
+        if config_pkg is not None:
+            self.assertFalse(
+                hasattr(config_pkg, "config_manager") and "src.config.config_manager" not in sys.modules
+            )
+
     def test_db_config_and_form_query_overrides(self) -> None:
         sales_order = "\u9500\u552e\u8ba2\u5355"
         outstock = "\u9500\u552e\u51fa\u5e93\u5355"

@@ -120,7 +120,10 @@ class DryRunCleanupTests(unittest.TestCase):
             self.assertRegex(output, r"(高收益|低风险|建议|high|low|risk)")
             self.assertRegex(
                 output,
-                re.compile(r"tmp-dashboard\.png.*(文件|file).*(3|3\s*(B|bytes))", re.S),
+                re.compile(
+                    r"tmp-dashboard\.png.*(文件|file).*(3|3\s*(B|bytes)).*(说明|备注|note|reason|because)",
+                    re.S,
+                ),
             )
             self.assertTrue((root / ".worktrees").exists())
             self.assertTrue((root / ".venv").exists())

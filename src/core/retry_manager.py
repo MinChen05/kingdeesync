@@ -3,16 +3,17 @@
 提供指数退避、断点续传等增强错误恢复机制
 """
 
-import time
-import json
-import os
-import logging
 import hashlib
-import requests
-from typing import Dict, Any, Optional, Callable, Tuple
-from dataclasses import dataclass, asdict
+import json
+import logging
+import os
+import time
+from dataclasses import asdict, dataclass, field
 from datetime import datetime
 from enum import Enum
+from typing import Any, Callable
+
+import requests
 
 logger = logging.getLogger(__name__)
 
@@ -70,6 +71,9 @@ class SyncCheckpoint:
     filter_string: str = ""
     timestamp: str = ""
     status: str = "pending"
+    next_start_row: int = 0
+    last_written_record_keys: list[str] = field(default_factory=list)
+    last_error_category: str = ""
 
     def __post_init__(self):
         if not self.timestamp:
@@ -81,11 +85,11 @@ class SyncCheckpoint:
         key = f"{self.form_name}_{self.table_name}_{self.sync_type}"
         return hashlib.md5(key.encode()).hexdigest()[:16]
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         return asdict(self)
 
     @classmethod
-    def from_dict(cls, data: Dict[str, Any]) -> "SyncCheckpoint":
+    def from_dict(cls, data: dict[str, Any]) -> "SyncCheckpoint":
         return cls(**data)
 
 
@@ -117,7 +121,7 @@ class CheckpointManager:
         except Exception as e:
             logger.warning(f"保存断点失败: {e}")
 
-    def load_checkpoint(self, form_name: str, table_name: str, sync_type: str) -> Optional[SyncCheckpoint]:
+    def load_checkpoint(self, form_name: str, table_name: str, sync_type: str) -> SyncCheckpoint | None:
         """加载断点"""
         try:
             key = f"{form_name}_{table_name}_{sync_type}"
@@ -125,7 +129,7 @@ class CheckpointManager:
             path = self._get_checkpoint_path(checkpoint_id)
 
             if os.path.exists(path):
-                with open(path, "r", encoding="utf-8") as f:
+                with open(path, encoding="utf-8") as f:
                     data = json.load(f)
                 checkpoint = SyncCheckpoint.from_dict(data)
                 logger.info(f"加载断点: {form_name} (行{checkpoint.start_row}, 已插入{checkpoint.total_inserted})")
@@ -164,7 +168,7 @@ class CheckpointManager:
             for filename in os.listdir(self.checkpoint_dir):
                 if filename.endswith(".json"):
                     path = os.path.join(self.checkpoint_dir, filename)
-                    with open(path, "r", encoding="utf-8") as f:
+                    with open(path, encoding="utf-8") as f:
                         data = json.load(f)
                     checkpoints.append(data)
         except Exception as e:
@@ -175,7 +179,7 @@ class CheckpointManager:
 class RetryManager:
     """重试管理器"""
 
-    def __init__(self, config: Optional[RetryConfig] = None):
+    def __init__(self, config: RetryConfig | None = None):
         self.config = config or RetryConfig()
         self.checkpoint_manager = CheckpointManager()
 
@@ -184,9 +188,9 @@ class RetryManager:
         operation: Callable,
         operation_name: str,
         form_name: str = "",
-        on_retry: Optional[Callable] = None,
-        on_checkpoint: Optional[Callable] = None,
-    ) -> Tuple[Any, int]:
+        on_retry: Callable | None = None,
+        on_checkpoint: Callable | None = None,
+    ) -> tuple[Any, int]:
         """
         执行操作并自动重试
 

@@ -20,7 +20,12 @@ from src.core.kingdee_api import kingdee_client
 from src.core.metrics import metrics_collector
 from src.core.mysql_manager import MySQLManager, mysql_manager
 from src.core.retry_manager import SyncCheckpoint
-from src.core.sync_failure_telemetry import WriteFailureDetail, classify_failure, summarize_failure_details
+from src.core.sync_failure_telemetry import (
+    WriteFailureDetail,
+    build_record_keys,
+    classify_failure,
+    summarize_failure_details,
+)
 from src.core.sync_log_repository import SyncLogRepository
 from src.core.sync_run_repository import SyncRunRepository
 from src.core.upsert_engine_mysql import UpsertEngineMySQL
@@ -206,7 +211,7 @@ class FormSyncRunner:
             checkpoint = self.owner._checkpoint_manager.load_checkpoint(form_name, table_name, self._sync_type_value(sync_type))
             resume_start_row = 0
             if checkpoint and checkpoint.status == "pending" and self._is_incremental(sync_type):
-                resume_start_row = checkpoint.start_row
+                resume_start_row = checkpoint.next_start_row or checkpoint.start_row
                 total_inserted_ref_init = checkpoint.total_inserted
                 self.logger.info("[%s] 检测到断点，从 StartRow=%s 继续同步", form_name, resume_start_row)
             else:
@@ -220,19 +225,23 @@ class FormSyncRunner:
             total_deduped_ref = [0]
             failure_details_ref: list[WriteFailureDetail] = []
             insert_duration_ref = [0.0]
+            next_page_start_row_ref = [resume_start_row]
+            last_written_record_keys_ref = [list(getattr(checkpoint, "last_written_record_keys", [])) if checkpoint else []]
+            last_error_category_ref = [str(getattr(checkpoint, "last_error_category", "")) if checkpoint else ""]
 
             queue_size = 50 if self._is_full_or_complete(sync_type) else 10
-            data_queue: queue.Queue[list[dict[str, Any]] | None] = queue.Queue(maxsize=queue_size)
+            data_queue: queue.Queue[tuple[int, list[dict[str, Any]]] | None] = queue.Queue(maxsize=queue_size)
             insert_errors: list[Exception] = []
             use_bulk_buffer = self._is_full_or_complete(sync_type)
             all_rows_buffer: list[dict[str, Any]] = []
 
             def insert_worker() -> None:
                 while True:
-                    page_data = data_queue.get()
-                    if page_data is None:
+                    queue_item = data_queue.get()
+                    if queue_item is None:
                         data_queue.task_done()
                         break
+                    page_start_row, page_data = queue_item
                     try:
                         insert_start = time.perf_counter()
                         raw_outcome = self.insert_database_data(form_name, page_data, db_manager=local_db)
@@ -245,6 +254,25 @@ class FormSyncRunner:
                         total_deduped_ref[0] += outcome.deduped
                         total_fetched_ref[0] += len(page_data)
                         failure_details_ref.extend(outcome.failure_details)
+                        if self._is_incremental(sync_type):
+                            next_start_row = page_start_row + len(page_data)
+                            last_written_record_keys_ref[0] = build_record_keys(page_data)
+                            last_error_category_ref[0] = ""
+                            self.owner._checkpoint_manager.save_checkpoint(
+                                SyncCheckpoint(
+                                    form_name=form_name,
+                                    table_name=table_name,
+                                    sync_type=self._sync_type_value(sync_type),
+                                    start_row=next_start_row,
+                                    next_start_row=next_start_row,
+                                    total_inserted=total_inserted_ref[0],
+                                    total_fetched=total_fetched_ref[0],
+                                    filter_string=filter_string or "",
+                                    status="pending",
+                                    last_written_record_keys=last_written_record_keys_ref[0],
+                                    last_error_category=last_error_category_ref[0],
+                                )
+                            )
                         self.owner._notify_progress(f"[{form_name}] 已同步 {total_inserted_ref[0]} 条数据...", 60)
                     except Exception as exc:
                         self.logger.error("[%s] 异步插入数据库失败: %s", form_name, exc)
@@ -270,7 +298,9 @@ class FormSyncRunner:
 
                 if insert_errors:
                     raise Exception(f"插入线程出错: {insert_errors[0]}")
-                data_queue.put(page_data)
+                page_start_row = next_page_start_row_ref[0]
+                next_page_start_row_ref[0] += len(page_data)
+                data_queue.put((page_start_row, page_data))
 
             data = None
             while retry_count < max_retries:
@@ -309,16 +339,25 @@ class FormSyncRunner:
                     retry_count += 1
                     self.logger.error("[%s] 网络请求异常 (%s): %s", form_name, type(query_error).__name__, query_error)
                     if retry_count < max_retries:
+                        if isinstance(query_error, requests.exceptions.Timeout):
+                            last_error_category_ref[0] = "timeout"
+                        elif isinstance(query_error, requests.exceptions.ConnectionError):
+                            last_error_category_ref[0] = "connection_error"
+                        else:
+                            last_error_category_ref[0] = "query_error"
                         self.owner._checkpoint_manager.save_checkpoint(
                             SyncCheckpoint(
                                 form_name=form_name,
                                 table_name=table_name,
                                 sync_type=self._sync_type_value(sync_type),
-                                start_row=resume_start_row,
+                                start_row=next_page_start_row_ref[0],
+                                next_start_row=next_page_start_row_ref[0],
                                 total_inserted=total_inserted_ref[0],
                                 total_fetched=total_fetched_ref[0],
                                 filter_string=filter_string or "",
                                 status="pending",
+                                last_written_record_keys=last_written_record_keys_ref[0],
+                                last_error_category=last_error_category_ref[0],
                             )
                         )
                         self.owner._notify_progress(

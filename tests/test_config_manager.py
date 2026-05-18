@@ -94,6 +94,17 @@ class ConfigManagerTests(unittest.TestCase):
             self.assertEqual(queries[sales_order]["FormId"], "SAL_SaleOrder")
             self.assertEqual(queries[sales_order]["FilterString"], "FBillNo = 'OVERRIDE'")
 
+    def test_sync_config_exposes_circuit_breaker_defaults(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            config_path = Path(tmp_dir) / "config.ini"
+            manager = ConfigManager(str(config_path))
+
+            sync_config = manager.get_sync_config()
+
+            self.assertTrue(sync_config["circuit_breaker_enabled"])
+            self.assertEqual(sync_config["circuit_breaker_threshold"], 3)
+            self.assertEqual(sync_config["circuit_breaker_cooldown_secs"], 30)
+
 
 if __name__ == "__main__":
     unittest.main()

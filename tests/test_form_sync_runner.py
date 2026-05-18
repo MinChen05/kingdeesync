@@ -282,6 +282,40 @@ class FormSyncRunnerOutcomeTests(unittest.TestCase):
         self.assertEqual(recorded_outcome.failure_details[0].category, "sql_error")
         self.assertTrue(any(len(call.args) >= 3 and call.args[2] == "write_failure_detail" for call in mock_audit.mock_calls))
 
+    def test_sync_single_form_passes_explicit_run_id_to_metrics_calls(self) -> None:
+        with _load_form_sync_runner_module() as form_sync_runner:
+            runner_cls = form_sync_runner.FormSyncRunner
+            owner = SimpleNamespace(
+                _active_run_id="shared-run",
+                DEDUPLICATION_FORMS=set(),
+                INSERT_METHOD_MAP={"销售订单": "insert_sales_orders"},
+                table_mapping={"销售订单": "saleorder"},
+                _notify_progress=Mock(),
+                _checkpoint_manager=SimpleNamespace(load_checkpoint=Mock(return_value=None), clear_checkpoint=Mock()),
+            )
+            filter_builder = SimpleNamespace(build_filter_string=Mock(return_value=""))
+            fake_db = SimpleNamespace(disconnect=Mock(), log_sync_operation=Mock())
+            runner = runner_cls(owner, filter_builder, logger_=logging.getLogger("test.form_sync_runner"))
+
+            with (
+                patch.object(form_sync_runner, "create_shared_db_manager", return_value=fake_db),
+                patch.object(form_sync_runner, "emit_audit_log"),
+                patch.object(form_sync_runner, "metrics_collector", create=True) as mock_metrics,
+                patch.object(form_sync_runner, "config_manager") as mock_config_manager,
+            ):
+                mock_config_manager.get_form_queries.return_value = {"销售订单": {"FieldKeys": "FID,FBillNo"}}
+                runner.query_kingdee_data = Mock(
+                    side_effect=lambda *args, **kwargs: kwargs["page_callback"]([{"FID": 1, "FBillNo": "SO001"}]) or []
+                )
+                runner.insert_database_data = Mock(return_value=WriteOutcome(inserted=1))
+
+                runner.sync_single_form("销售订单", "full", run_id="run-a")
+
+        mock_metrics.start_sync.assert_called_once_with("run-a", "销售订单")
+        mock_metrics.record_write_outcome.assert_called_once()
+        self.assertEqual(mock_metrics.record_write_outcome.call_args.args[0], "run-a")
+        mock_metrics.end_sync.assert_called_once_with("run-a", "销售订单", success=True)
+
     def test_sync_single_form_query_failure_preserves_accumulated_failure_telemetry(self) -> None:
         with _load_form_sync_runner_module() as form_sync_runner:
             runner_cls = form_sync_runner.FormSyncRunner

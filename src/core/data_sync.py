@@ -334,13 +334,13 @@ class DataSyncManager:
                 if table_concurrency <= 1 or len(group) <= 1:
                     for form_name in group:
                         self._notify_progress(f"正在同步 {form_name}...", calc_progress())
-                        result = self._sync_single_form(form_name, sync_type)
+                        result = self._sync_single_form(form_name, sync_type, run_id=run_id)
                         collect_result(form_name, result)
                 else:
                     self._notify_progress(f"开始并发同步 {len(group)} 个表...", calc_progress())
                     with ThreadPoolExecutor(max_workers=table_concurrency) as executor:
                         future_map = {
-                            executor.submit(self._sync_single_form, form_name, sync_type): form_name
+                            executor.submit(self._sync_single_form, form_name, sync_type, run_id): form_name
                             for form_name in group
                         }
                         for future in as_completed(future_map):
@@ -359,7 +359,7 @@ class DataSyncManager:
 
             for form_name in isolated_complete_forms:
                 self._notify_progress(f"正在单独完全同步 {form_name}...", calc_progress())
-                result = self._sync_single_form(form_name, SyncType.COMPLETE)
+                result = self._sync_single_form(form_name, SyncType.COMPLETE, run_id=run_id)
                 collect_result(form_name, result)
 
             final_end_time = datetime.now()
@@ -461,14 +461,14 @@ class DataSyncManager:
             self._active_run_id = None
             self._active_run_message = ""
 
-    def _sync_single_form(self, form_name: str, sync_type: SyncType) -> dict[str, Any]:
+    def _sync_single_form(self, form_name: str, sync_type: SyncType, run_id: str | None = None) -> dict[str, Any]:
         """Delegate single-form execution to the dedicated form sync runner."""
         self._refresh_circuit_breaker_config()
         if not self.circuit_breaker.allow(form_name):
             return self._create_circuit_open_result(form_name)
 
         try:
-            result = self.form_sync_runner.sync_single_form(form_name, sync_type)
+            result = self.form_sync_runner.sync_single_form(form_name, sync_type, run_id=run_id)
         except Exception as exc:
             self.circuit_breaker.record_failure(form_name, type(exc).__name__)
             raise

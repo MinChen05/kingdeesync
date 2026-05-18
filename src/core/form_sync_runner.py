@@ -84,10 +84,7 @@ class FormSyncRunner:
     def _is_full_or_complete(self, sync_type) -> bool:
         return self._sync_type_value(sync_type) in {"full", "complete"}
 
-    def _metrics_run_id(self) -> str:
-        return str(getattr(self.owner, "_active_run_id", "") or "")
-
-    def sync_single_form(self, form_name: str, sync_type) -> Dict[str, Any]:
+    def sync_single_form(self, form_name: str, sync_type, run_id: str | None = None) -> Dict[str, Any]:
         """Run one form end-to-end while DataSyncManager orchestrates scheduling."""
         if form_name == "科目余额表":
             return self.owner._sync_account_balance_form(form_name, sync_type)
@@ -97,7 +94,7 @@ class FormSyncRunner:
         local_db = create_shared_db_manager(mysql_manager)
         table_name = self.owner.table_mapping.get(form_name)
         sync_type_value = self._sync_type_value(sync_type)
-        metrics_run_id = self._metrics_run_id()
+        metrics_run_id = str(run_id or "")
         metrics_collector.start_sync(metrics_run_id, form_name)
         metrics_success = False
 

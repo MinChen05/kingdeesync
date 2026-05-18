@@ -65,7 +65,7 @@ class FormSyncRunner:
 
     def __init__(
         self,
-        owner: "DataSyncManager",
+        owner: DataSyncManager,
         filter_builder: FilterBuilder,
         *,
         logger_: logging.Logger | None = None,
@@ -84,7 +84,7 @@ class FormSyncRunner:
     def _is_full_or_complete(self, sync_type) -> bool:
         return self._sync_type_value(sync_type) in {"full", "complete"}
 
-    def sync_single_form(self, form_name: str, sync_type, run_id: str | None = None) -> Dict[str, Any]:
+    def sync_single_form(self, form_name: str, sync_type, run_id: str | None = None) -> dict[str, Any]:
         """Run one form end-to-end while DataSyncManager orchestrates scheduling."""
         if form_name == "科目余额表":
             return self.owner._sync_account_balance_form(form_name, sync_type)
@@ -218,14 +218,14 @@ class FormSyncRunner:
             total_fetched_ref = [0]
             total_invalid_ref = [0]
             total_deduped_ref = [0]
-            failure_details_ref: List[WriteFailureDetail] = []
+            failure_details_ref: list[WriteFailureDetail] = []
             insert_duration_ref = [0.0]
 
             queue_size = 50 if self._is_full_or_complete(sync_type) else 10
-            data_queue: "queue.Queue[Optional[List[Dict[str, Any]]]]" = queue.Queue(maxsize=queue_size)
-            insert_errors: List[Exception] = []
+            data_queue: queue.Queue[list[dict[str, Any]] | None] = queue.Queue(maxsize=queue_size)
+            insert_errors: list[Exception] = []
             use_bulk_buffer = self._is_full_or_complete(sync_type)
-            all_rows_buffer: List[Dict[str, Any]] = []
+            all_rows_buffer: list[dict[str, Any]] = []
 
             def insert_worker() -> None:
                 while True:
@@ -259,7 +259,7 @@ class FormSyncRunner:
             else:
                 worker_thread = None
 
-            def handle_page_data(page_data: List[Dict[str, Any]]) -> None:
+            def handle_page_data(page_data: list[dict[str, Any]]) -> None:
                 if not page_data:
                     return
                 if use_bulk_buffer:
@@ -304,7 +304,7 @@ class FormSyncRunner:
                         if worker_thread is not None:
                             data_queue.put(None)
                             worker_thread.join()
-                        raise insert_errors[0]
+                        raise insert_errors[0] from query_error
 
                     retry_count += 1
                     self.logger.error("[%s] 网络请求异常 (%s): %s", form_name, type(query_error).__name__, query_error)
@@ -337,7 +337,7 @@ class FormSyncRunner:
                         if worker_thread is not None:
                             data_queue.put(None)
                             worker_thread.join()
-                        raise insert_errors[0]
+                        raise insert_errors[0] from query_error
 
                     self.logger.error(
                         "[%s] 查询发生非网络异常 (%s)，不重试: %s",
@@ -581,7 +581,7 @@ class FormSyncRunner:
         page_callback=None,
         start_row: int = 0,
         sync_type=None,
-    ) -> Optional[List[Dict]]:
+    ) -> list[dict] | None:
         """Query Kingdee with the assembled form query parameters."""
         try:
             form_queries = config_manager.get_form_queries()
@@ -599,7 +599,7 @@ class FormSyncRunner:
             self.logger.error("查询金蝶 %s 数据失败: %s", form_name, exc)
             return None
 
-    def _build_write_summary(self, form_name: str, fetched: int, outcome: "WriteOutcome") -> Dict[str, int]:
+    def _build_write_summary(self, form_name: str, fetched: int, outcome: WriteOutcome) -> dict[str, int]:
         deduped = outcome.deduped if form_name.strip() in self.owner.DEDUPLICATION_FORMS else 0
         invalid = outcome.invalid
         failed = max(0, fetched - invalid - deduped - outcome.inserted)
@@ -631,9 +631,9 @@ class FormSyncRunner:
         self,
         form_name: str,
         table_name: str | None,
-        failed_rows: List[Dict[str, Any]],
+        failed_rows: list[dict[str, Any]],
         outcome: WriteOutcome,
-    ) -> List[WriteFailureDetail]:
+    ) -> list[WriteFailureDetail]:
         details = list(outcome.failure_details or [])
         if details or outcome.failed <= 0:
             return details
@@ -651,7 +651,7 @@ class FormSyncRunner:
         self,
         form_name: str,
         table_name: str | None,
-        rows: List[Dict[str, Any]],
+        rows: list[dict[str, Any]],
         outcome: WriteOutcome,
     ) -> WriteOutcome:
         summary = self._build_write_summary(form_name, fetched=len(rows), outcome=outcome)
@@ -665,7 +665,7 @@ class FormSyncRunner:
         normalized.failure_details = self._resolve_failure_details(form_name, table_name, rows, normalized)
         return normalized
 
-    def insert_database_data(self, form_name: str, data: List[Dict], db_manager=None) -> WriteOutcome:
+    def insert_database_data(self, form_name: str, data: list[dict], db_manager=None) -> WriteOutcome:
         """Insert queried form data using writer mappings."""
         manager = db_manager or mysql_manager
         method_name = self.owner.INSERT_METHOD_MAP.get(form_name)

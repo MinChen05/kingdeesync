@@ -1,14 +1,18 @@
 from __future__ import annotations
 
-from contextlib import contextmanager
-from datetime import datetime
 import importlib
 import logging
 import sys
 import types
 import unittest
+from contextlib import contextmanager
+from datetime import datetime
 from types import SimpleNamespace
 from unittest.mock import Mock, patch
+
+from src.core.metrics import MetricsCollector
+from src.core.write_outcome import WriteOutcome
+
 
 @contextmanager
 def _load_form_sync_runner_module():
@@ -27,13 +31,13 @@ def _load_form_sync_runner_module():
 
     requests_stub = types.ModuleType("requests")
 
-    class _RequestException(Exception):
+    class _RequestError(Exception):
         pass
 
-    class _Timeout(_RequestException):
+    class _TimeoutError(_RequestError):
         pass
 
-    class _ConnectionError(_RequestException):
+    class _ConnectionError(_RequestError):
         pass
 
     class _Session:
@@ -48,8 +52,8 @@ def _load_form_sync_runner_module():
             pass
 
     requests_stub.exceptions = types.SimpleNamespace(
-        RequestException=_RequestException,
-        Timeout=_Timeout,
+        RequestException=_RequestError,
+        Timeout=_TimeoutError,
         ConnectionError=_ConnectionError,
     )
     requests_stub.Session = _Session
@@ -57,10 +61,10 @@ def _load_form_sync_runner_module():
     config_manager_stub = types.ModuleType("src.config.config_manager")
 
     config_manager_stub.config_manager = SimpleNamespace(
-        get_form_queries=lambda: {},
+        get_form_queries=dict,
         get_db_config=lambda: {"type": "mysql", "mysql": {}, "sqlserver": {}},
-        get_kingdee_config=lambda: {},
-        get_insert_method_map=lambda: {},
+        get_kingdee_config=dict,
+        get_insert_method_map=dict,
         get_increment_field=lambda _key: None,
         set_increment_field=lambda _key, _value: None,
     )
@@ -88,14 +92,14 @@ def _load_form_sync_runner_module():
             if pkg is None:
                 continue
             if core_pkg_attr_present:
-                setattr(pkg, "form_sync_runner", core_pkg_attr_value)
+                pkg.form_sync_runner = core_pkg_attr_value
             elif hasattr(pkg, "form_sync_runner"):
                 delattr(pkg, "form_sync_runner")
         for pkg in (live_config_pkg, config_pkg):
             if pkg is None:
                 continue
             if config_pkg_attr_present:
-                setattr(pkg, "config_manager", config_pkg_attr_value)
+                pkg.config_manager = config_pkg_attr_value
             elif hasattr(pkg, "config_manager"):
                 delattr(pkg, "config_manager")
         for name, module in original_modules.items():
@@ -103,8 +107,6 @@ def _load_form_sync_runner_module():
                 sys.modules[name] = module
             else:
                 sys.modules.pop(name, None)
-from src.core.write_outcome import WriteOutcome
-from src.core.metrics import MetricsCollector
 
 
 class FormSyncRunnerOutcomeTests(unittest.TestCase):
@@ -336,7 +338,7 @@ class FormSyncRunnerOutcomeTests(unittest.TestCase):
                 attempts["count"] += 1
                 if attempts["count"] == 1:
                     kwargs["page_callback"]([{"FID": 1, "FBillNo": "SO001"}, {"FID": 2, "FBillNo": "SO002"}])
-                return None
+                return
 
             with (
                 patch.object(form_sync_runner, "create_shared_db_manager", return_value=fake_db),

@@ -27,7 +27,7 @@ class SyncMetrics:
     records_invalid: int = 0
     records_deduped: int = 0
     records_failed: int = 0
-    failure_categories: Dict[str, int] = field(default_factory=dict)
+    failure_categories: dict[str, int] = field(default_factory=dict)
     api_calls: int = 0
     api_latency_total: float = 0.0
     api_latency_max: float = 0.0
@@ -66,7 +66,7 @@ class SyncMetrics:
             return self.api_latency_total / self.api_calls
         return 0.0
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         return {
             "form_name": self.form_name,
             "duration_seconds": round(self.duration, 3),
@@ -93,8 +93,8 @@ class MetricsCollector:
 
     def __init__(self):
         self._lock = threading.Lock()
-        self._current_metrics: Dict[tuple[str, str], SyncMetrics] = {}
-        self._history: List[SyncMetrics] = []
+        self._current_metrics: dict[tuple[str, str], SyncMetrics] = {}
+        self._history: list[SyncMetrics] = []
         self._global_stats = {
             "total_syncs": 0,
             "successful_syncs": 0,
@@ -119,12 +119,12 @@ class MetricsCollector:
             self._current_metrics[(normalized_run_id, form_name)] = metrics
             return metrics
 
-    def get_metrics(self, run_id: str | None, form_name: str) -> Optional[SyncMetrics]:
+    def get_metrics(self, run_id: str | None, form_name: str) -> SyncMetrics | None:
         """获取当前同步的指标"""
         with self._lock:
             return self._current_metrics.get(self._build_key(run_id, form_name))
 
-    def end_sync(self, run_id: str | None, form_name: str, success: bool = True) -> Optional[SyncMetrics]:
+    def end_sync(self, run_id: str | None, form_name: str, success: bool = True) -> SyncMetrics | None:
         """结束记录同步指标"""
         with self._lock:
             metrics = self._current_metrics.pop(self._build_key(run_id, form_name), None)
@@ -206,7 +206,7 @@ class MetricsCollector:
             if metrics:
                 metrics.error_count += 1
 
-    def get_global_stats(self) -> Dict[str, Any]:
+    def get_global_stats(self) -> dict[str, Any]:
         """获取全局统计"""
         with self._lock:
             stats = self._global_stats.copy()
@@ -222,12 +222,12 @@ class MetricsCollector:
                 stats["avg_qps"] = 0
             return stats
 
-    def get_history(self, limit: int = 50) -> List[Dict[str, Any]]:
+    def get_history(self, limit: int = 50) -> list[dict[str, Any]]:
         """获取历史指标"""
         with self._lock:
             return [m.to_dict() for m in self._history[-limit:]]
 
-    def get_form_stats(self, form_name: str) -> Dict[str, Any]:
+    def get_form_stats(self, form_name: str) -> dict[str, Any]:
         """获取特定表单的统计"""
         with self._lock:
             form_metrics = [m for m in self._history if m.form_name == form_name]
@@ -249,12 +249,12 @@ class MetricsCollector:
                 "avg_api_latency_ms": round(sum(m.avg_api_latency for m in form_metrics) / len(form_metrics) * 1000, 2),
             }
 
-    def export_run_snapshot(self, run_id: str | None, form_names: List[str]) -> Dict[str, Dict[str, Any]]:
+    def export_run_snapshot(self, run_id: str | None, form_names: list[str]) -> dict[str, dict[str, Any]]:
         """导出指定表单最近一次同步的指标快照。"""
         with self._lock:
             normalized_run_id = self._normalize_run_id(run_id)
             requested_forms = {str(form_name) for form_name in form_names}
-            snapshots: Dict[str, Dict[str, Any]] = {}
+            snapshots: dict[str, dict[str, Any]] = {}
 
             for metrics in reversed(self._history):
                 if (
@@ -309,7 +309,7 @@ class MetricsCollector:
             "各表单统计:",
         ]
 
-        forms = set(m.form_name for m in self._history)
+        forms = {m.form_name for m in self._history}
         for form in sorted(forms):
             form_stats = self.get_form_stats(form)
             lines.append(

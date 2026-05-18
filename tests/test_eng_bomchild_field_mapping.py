@@ -358,6 +358,32 @@ class EngBomChildFieldMappingTests(unittest.TestCase):
         self.assertEqual(prepared[4], "RESOLVED-CHILD-007")
         self.assertEqual(prepared[5], "RESOLVED-CHILD-NAME-007")
 
+    def test_prepare_eng_bom_child_data_falls_back_to_original_child_fields_when_resolver_raises(self) -> None:
+        manager = self._build_manager()
+        manager.field_mapping_resolver = Mock()
+        manager.field_mapping_resolver.resolve_field.side_effect = [
+            ValueError("resolver failed"),
+            ValueError("resolver failed"),
+        ]
+
+        prepared = manager._prepare_eng_bom_child_data(
+            {
+                "FID": 101,
+                "FTreeEntity_FENTRYID": 202,
+                "FTreeEntity_FSEQ": 3,
+                "FMATERIALID": "MAT-PARENT",
+                "FCHILDNUMBER": "MAT-CHILD-008",
+                "FCHILDNAME": "Child Material 008",
+                "FNUMERATOR": "2",
+                "FDENOMINATOR": "1",
+                "FMATERIALTYPE": "8",
+            }
+        )
+
+        self.assertIsNotNone(prepared)
+        self.assertEqual(prepared[4], "MAT-CHILD-008")
+        self.assertEqual(prepared[5], "Child Material 008")
+
     def test_ensure_additional_columns_for_eng_bomchild_adds_child_number_column_on_sqlserver(self) -> None:
         manager = self._build_manager()
         manager.cursor = FakeCursor(fetchone_results=[None, None])

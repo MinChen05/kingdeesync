@@ -270,6 +270,38 @@ class ApPayableFieldMappingTests(unittest.TestCase):
         self.assertEqual(resolve_call.args[2]["FNOTAXAMOUNTFOR"], "999.00")
         self.assertEqual(prepared[15], 654.32)
 
+    def test_prepare_ap_payable_data_falls_back_to_original_no_tax_amount_when_resolver_raises(self) -> None:
+        manager = MySQLManager.__new__(MySQLManager)
+        manager.field_mapping_resolver = Mock()
+        manager.field_mapping_resolver.resolve_field.side_effect = ValueError("resolver failed")
+
+        prepared = manager._prepare_ap_payable_data(
+            {
+                "FID": 1006,
+                "FEntityDetail_FENTRYID": 2006,
+                "FEntityDetail_FSEQ": 1,
+                "FBillTypeID.FNAME": "标准应付单",
+                "FBillNo": "AP202601006",
+                "FDATE": "2026-01-10",
+                "FPURCHASEORGID.FNAME": "台州市金宇机电有限公司",
+                "F_ora_Base1.FNAME": "测试客户",
+                "FSUPPLIERID.FNAME": "测试供应商",
+                "FSETACCOUNTTYPE": "3",
+                "FMATERIALID.FNUMBER": "FEE-TRANS",
+                "FMATERIALID.FNAME": "交通运输费",
+                "FPRICEUNITID.FNAME": "元",
+                "FPRICEQTY": "1",
+                "FALLAMOUNTFOR_D": "113.00",
+                "FNOTAXAMOUNTFOR_D": "100.00",
+                "FNOTAXAMOUNTFOR": "999.00",
+                "FDISCOUNTAMOUNTFOR": "0",
+                "FModifyDate": "2026-01-10 10:00:00",
+            }
+        )
+
+        self.assertIsNotNone(prepared)
+        self.assertEqual(prepared[15], 100.0)
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -246,6 +246,53 @@ class PrdMoCancelStatusTests(unittest.TestCase):
         self.assertEqual(resolve_call.args[2]["FCANCELSTATUS"], None)
         self.assertEqual(prepared[-1], "RESOLVED-LEGACY-CANCEL")
 
+    def test_prepare_production_order_data_passes_normalized_cancel_status_key_on_new_field_list(self) -> None:
+        self.manager.field_mapping_resolver = Mock()
+        self.manager.field_mapping_resolver.resolve_field.return_value = "RESOLVED-NEW-LIST-CANCEL"
+
+        prepared = self.manager._prepare_production_order_data(
+            [
+                1,
+                "MO20260518007",
+                "生产订单",
+                "2026-05-18 08:00:00",
+                100,
+                200,
+                "A",
+                "2026-05-18 08:00:00",
+                "2026-05-18 09:00:00",
+                "B",
+            ]
+        )
+
+        self.assertIsNotNone(prepared)
+        resolve_call = self.manager.field_mapping_resolver.resolve_field.call_args
+        self.assertIsNotNone(resolve_call)
+        self.assertEqual(resolve_call.args[2]["FCANCELSTATUS"], "B")
+        self.assertEqual(prepared[-1], "RESOLVED-NEW-LIST-CANCEL")
+
+    def test_prepare_production_order_data_falls_back_to_original_cancel_status_when_resolver_raises(self) -> None:
+        self.manager.field_mapping_resolver = Mock()
+        self.manager.field_mapping_resolver.resolve_field.side_effect = ValueError("resolver failed")
+
+        prepared = self.manager._prepare_production_order_data(
+            {
+                "FID": 4,
+                "FBILLNO": "MO20260518008",
+                "FBILLTYPE.FNAME": "生产订单",
+                "FDATE": "2026-05-18 08:00:00",
+                "FPRDORGID": 100,
+                "FWORKSHOPID": 200,
+                "FDocumentStatus": "A",
+                "FCREATEDATE": "2026-05-18 08:00:00",
+                "FMODIFYDATE": "2026-05-18 09:00:00",
+                "FCANCELSTATUS": "B",
+            }
+        )
+
+        self.assertIsNotNone(prepared)
+        self.assertEqual(prepared[-1], "B")
+
 
 if __name__ == "__main__":
     unittest.main()

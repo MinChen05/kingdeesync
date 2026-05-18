@@ -1244,7 +1244,11 @@ class MySQLManager:
         resolver = getattr(self, "field_mapping_resolver", None)
         if resolver is None:
             return None
-        return resolver.resolve_field(table, field, row_map)
+        try:
+            return resolver.resolve_field(table, field, row_map)
+        except Exception as exc:
+            logger.warning("字段映射解析失败，回退原始字段值: table=%s field=%s error=%s", table, field, exc)
+            return None
 
     def _prepare_production_order_data(self, item) -> tuple | None:
         """准备生产订单数据（新增 FCREATEDATE）
@@ -1322,6 +1326,7 @@ class MySQLManager:
                         "FDocumentStatus": item[6],
                         "FCREATEDATE": item[7],
                         "FModifyDate": item[8],
+                        "FCANCELSTATUS": item[9],
                         "FCancelStatus": item[9],
                     }
                     fcancel = self._resolve_configured_field("prd_mo", "FCANCELSTATUS", cancel_row)

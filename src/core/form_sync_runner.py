@@ -235,6 +235,7 @@ class FormSyncRunner:
                     try:
                         insert_start = time.perf_counter()
                         outcome = self.insert_database_data(form_name, page_data, db_manager=local_db)
+                        outcome.failure_details = self._resolve_failure_details(form_name, table_name, page_data, outcome)
                         insert_duration = time.perf_counter() - insert_start
                         insert_duration_ref[0] += insert_duration
                         metrics_collector.record_write_outcome(form_name, outcome, insert_duration)
@@ -242,7 +243,7 @@ class FormSyncRunner:
                         total_invalid_ref[0] += outcome.invalid
                         total_deduped_ref[0] += outcome.deduped
                         total_fetched_ref[0] += len(page_data)
-                        failure_details_ref.extend(self._resolve_failure_details(form_name, table_name, page_data, outcome))
+                        failure_details_ref.extend(outcome.failure_details)
                         self.owner._notify_progress(f"[{form_name}] 已同步 {total_inserted_ref[0]} 条数据...", 60)
                     except Exception as exc:
                         self.logger.error("[%s] 异步插入数据库失败: %s", form_name, exc)
@@ -357,12 +358,13 @@ class FormSyncRunner:
             elif all_rows_buffer:
                 insert_start = time.perf_counter()
                 outcome = self.insert_database_data(form_name, all_rows_buffer, db_manager=local_db)
+                outcome.failure_details = self._resolve_failure_details(form_name, table_name, all_rows_buffer, outcome)
                 insert_duration_ref[0] = time.perf_counter() - insert_start
                 metrics_collector.record_write_outcome(form_name, outcome, insert_duration_ref[0])
                 total_inserted_ref[0] = outcome.inserted
                 total_invalid_ref[0] = outcome.invalid
                 total_deduped_ref[0] = outcome.deduped
-                failure_details_ref.extend(self._resolve_failure_details(form_name, table_name, all_rows_buffer, outcome))
+                failure_details_ref.extend(outcome.failure_details)
                 self.owner._notify_progress(f"[{form_name}] 批量写入完成，共 {outcome.inserted} 条", 75)
 
             perf_after_query = time.perf_counter()

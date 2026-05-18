@@ -233,6 +233,9 @@ class FormSyncRunnerOutcomeTests(unittest.TestCase):
         self.assertEqual(sum(result["failure_categories"].values()), 1)
         self.assertEqual(captured_sync_log["status"], "failed")
         mock_metrics.record_write_outcome.assert_called_once()
+        recorded_outcome = mock_metrics.record_write_outcome.call_args.args[1]
+        self.assertTrue(recorded_outcome.failure_details)
+        self.assertEqual(recorded_outcome.failure_details[0].category, "sql_error")
         self.assertTrue(any(len(call.args) >= 3 and call.args[2] == "write_failure_detail" for call in mock_audit.mock_calls))
 
 

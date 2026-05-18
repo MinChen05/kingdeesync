@@ -37,11 +37,17 @@ def _load_config_manager():
         with patch.dict(sys.modules, {"src.utils.crypto_util": crypto_util_stub}):
             return importlib.import_module("src.config.config_manager")
     finally:
+        live_config_pkg = sys.modules.get("src.config")
         if config_pkg is not None:
             if config_pkg_attr_present:
                 setattr(config_pkg, "config_manager", config_pkg_attr_value)
             elif hasattr(config_pkg, "config_manager"):
                 delattr(config_pkg, "config_manager")
+        if live_config_pkg is not None and live_config_pkg is not config_pkg:
+            if config_pkg_attr_present:
+                setattr(live_config_pkg, "config_manager", config_pkg_attr_value)
+            elif hasattr(live_config_pkg, "config_manager"):
+                delattr(live_config_pkg, "config_manager")
         for name in ("src.config.config_manager", "src.config.config_accessors", "src.config.config_reader", "src.utils.crypto_util"):
             sys.modules.pop(name, None)
         for name, module in original_modules.items():

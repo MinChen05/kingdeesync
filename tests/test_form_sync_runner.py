@@ -61,15 +61,18 @@ def _load_form_sync_runner_module():
                 "requests": requests_stub,
                 "src.core.mysql_manager": mysql_manager_stub,
             },
-        ):
+            ):
             return importlib.import_module("src.core.form_sync_runner")
     finally:
+        live_core_pkg = sys.modules.get("src.core")
         sys.modules.pop("src.core.form_sync_runner", None)
-        if core_pkg is not None:
+        for pkg in (live_core_pkg, core_pkg):
+            if pkg is None:
+                continue
             if core_pkg_attr_present:
-                setattr(core_pkg, "form_sync_runner", core_pkg_attr_value)
-            elif hasattr(core_pkg, "form_sync_runner"):
-                delattr(core_pkg, "form_sync_runner")
+                setattr(pkg, "form_sync_runner", core_pkg_attr_value)
+            elif hasattr(pkg, "form_sync_runner"):
+                delattr(pkg, "form_sync_runner")
         for name, module in original_modules.items():
             if module is not None:
                 sys.modules[name] = module

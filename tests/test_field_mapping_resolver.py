@@ -4,6 +4,29 @@ import unittest
 
 
 class FieldMappingResolverTests(unittest.TestCase):
+    def test_resolve_prefers_first_present_source_alias_when_both_are_present(self) -> None:
+        from src.core.field_mapping_resolver import FieldMappingResolver
+
+        resolver = FieldMappingResolver(
+            {
+                "prd_mo": {
+                    "FCANCELSTATUS": {
+                        "sources": ["FCANCELSTATUS", "FCancelStatus"],
+                        "type": "string",
+                        "default": "",
+                    }
+                }
+            }
+        )
+
+        result = resolver.resolve_field(
+            "prd_mo",
+            "FCANCELSTATUS",
+            {"FCANCELSTATUS": "A", "FCancelStatus": "B"},
+        )
+
+        self.assertEqual(result, "A")
+
     def test_resolve_prefers_first_present_source_alias(self) -> None:
         from src.core.field_mapping_resolver import FieldMappingResolver
 

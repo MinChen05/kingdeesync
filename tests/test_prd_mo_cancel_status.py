@@ -209,6 +209,7 @@ class PrdMoCancelStatusTests(unittest.TestCase):
             "FCANCELSTATUS",
             unittest.mock.ANY,
         )
+        self.assertEqual(prepared[-1], "B")
 
 
 if __name__ == "__main__":

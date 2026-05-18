@@ -182,6 +182,7 @@ class ApPayableFieldMappingTests(unittest.TestCase):
             "FNOTAXAMOUNTFOR",
             unittest.mock.ANY,
         )
+        self.assertEqual(prepared[15], 100.0)
 
 
 if __name__ == "__main__":

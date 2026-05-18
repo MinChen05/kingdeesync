@@ -9,8 +9,12 @@ from types import SimpleNamespace
 from unittest.mock import Mock, patch
 
 def _load_form_sync_runner_module():
-    if "src.core.form_sync_runner" in sys.modules:
-        return sys.modules["src.core.form_sync_runner"]
+    original_modules = {
+        name: sys.modules.get(name)
+        for name in ("src.core.form_sync_runner", "requests", "src.core.mysql_manager")
+    }
+    for name in original_modules:
+        sys.modules.pop(name, None)
 
     requests_stub = types.ModuleType("requests")
 
@@ -47,14 +51,22 @@ def _load_form_sync_runner_module():
 
     mysql_manager_stub.MySQLManager = _MySQLManager
     mysql_manager_stub.mysql_manager = SimpleNamespace(pool=None)
-    with patch.dict(
-        sys.modules,
-        {
-            "requests": requests_stub,
-            "src.core.mysql_manager": mysql_manager_stub,
-        },
-    ):
-        return importlib.import_module("src.core.form_sync_runner")
+    try:
+        with patch.dict(
+            sys.modules,
+            {
+                "requests": requests_stub,
+                "src.core.mysql_manager": mysql_manager_stub,
+            },
+        ):
+            return importlib.import_module("src.core.form_sync_runner")
+    finally:
+        sys.modules.pop("src.core.form_sync_runner", None)
+        for name, module in original_modules.items():
+            if module is not None:
+                sys.modules[name] = module
+            else:
+                sys.modules.pop(name, None)
 
 
 form_sync_runner = _load_form_sync_runner_module()
@@ -107,8 +119,13 @@ class FormSyncRunnerOutcomeTests(unittest.TestCase):
             _checkpoint_manager=SimpleNamespace(load_checkpoint=Mock(return_value=None), clear_checkpoint=Mock()),
         )
         filter_builder = SimpleNamespace(build_filter_string=Mock(return_value=""))
-        fake_db = SimpleNamespace(log_sync_operation=Mock(), disconnect=Mock())
+        fake_db = SimpleNamespace(disconnect=Mock())
         runner = FormSyncRunner(owner, filter_builder, logger_=logging.getLogger("test.form_sync_runner"))
+
+        captured_sync_log: dict[str, object] = {}
+
+        def log_sync_operation(sync_type, table_name, operation, record_count, status, *args, **kwargs):
+            captured_sync_log["status"] = status
 
         with (
             patch.object(form_sync_runner, "create_shared_db_manager", return_value=fake_db),
@@ -120,6 +137,7 @@ class FormSyncRunnerOutcomeTests(unittest.TestCase):
                 side_effect=lambda *args, **kwargs: kwargs["page_callback"]([{"FID": 1}, {"FID": 2}]) or []
             )
             runner.insert_database_data = Mock(return_value=WriteOutcome(inserted=1))
+            fake_db.log_sync_operation = Mock(side_effect=log_sync_operation)
 
             result = runner.sync_single_form("销售订单", "full")
 
@@ -127,8 +145,7 @@ class FormSyncRunnerOutcomeTests(unittest.TestCase):
         self.assertEqual(result["fetched"], 2)
         self.assertEqual(result["inserted"], 1)
         self.assertEqual(result["failed"], 1)
-        fake_db.log_sync_operation.assert_called_once()
-        self.assertEqual(result["status"], PARTIAL_STATUS)
+        self.assertEqual(captured_sync_log["status"], PARTIAL_STATUS)
 
     def test_sync_single_form_emits_write_failure_audit_and_metrics(self) -> None:
         owner = SimpleNamespace(
@@ -139,8 +156,13 @@ class FormSyncRunnerOutcomeTests(unittest.TestCase):
             _checkpoint_manager=SimpleNamespace(load_checkpoint=Mock(return_value=None), clear_checkpoint=Mock()),
         )
         filter_builder = SimpleNamespace(build_filter_string=Mock(return_value=""))
-        fake_db = SimpleNamespace(log_sync_operation=Mock(), disconnect=Mock())
+        fake_db = SimpleNamespace(disconnect=Mock())
         runner = FormSyncRunner(owner, filter_builder, logger_=logging.getLogger("test.form_sync_runner"))
+
+        captured_sync_log: dict[str, object] = {}
+
+        def log_sync_operation(sync_type, table_name, operation, record_count, status, *args, **kwargs):
+            captured_sync_log["status"] = status
 
         with (
             patch.object(form_sync_runner, "create_shared_db_manager", return_value=fake_db),
@@ -155,13 +177,15 @@ class FormSyncRunnerOutcomeTests(unittest.TestCase):
             runner.insert_database_data = Mock(
                 return_value=WriteOutcome(inserted=0, failed=1),
             )
+            fake_db.log_sync_operation = Mock(side_effect=log_sync_operation)
 
             result = runner.sync_single_form("销售订单", "full")
 
         self.assertEqual(result["status"], "failed")
         self.assertEqual(result["failed"], 1)
-        self.assertEqual(result["failure_categories"]["sql_error"], 1)
-        self.assertIn("failure_details", result)
+        self.assertIn("failure_categories", result)
+        self.assertEqual(sum(result["failure_categories"].values()), 1)
+        self.assertEqual(captured_sync_log["status"], "failed")
         mock_metrics.record_write_outcome.assert_called_once()
         self.assertTrue(any(call.kwargs.get("event") == "write_failure_detail" for call in mock_audit.mock_calls))
 

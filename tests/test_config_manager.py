@@ -10,8 +10,12 @@ from pathlib import Path
 from unittest.mock import patch
 
 def _load_config_manager():
-    if "src.config.config_manager" in sys.modules:
-        return sys.modules["src.config.config_manager"]
+    original_modules = {
+        name: sys.modules.get(name)
+        for name in ("src.config.config_manager", "src.config.config_accessors", "src.config.config_reader", "src.utils.crypto_util")
+    }
+    for name in original_modules:
+        sys.modules.pop(name, None)
 
     crypto_util_stub = types.ModuleType("src.utils.crypto_util")
 
@@ -26,8 +30,17 @@ def _load_config_manager():
 
     crypto_util_stub.CryptoUtil = _CryptoUtil
 
-    with patch.dict(sys.modules, {"src.utils.crypto_util": crypto_util_stub}):
-        return importlib.import_module("src.config.config_manager")
+    try:
+        with patch.dict(sys.modules, {"src.utils.crypto_util": crypto_util_stub}):
+            return importlib.import_module("src.config.config_manager")
+    finally:
+        for name in ("src.config.config_manager", "src.config.config_accessors", "src.config.config_reader", "src.utils.crypto_util"):
+            sys.modules.pop(name, None)
+        for name, module in original_modules.items():
+            if module is not None:
+                sys.modules[name] = module
+            else:
+                sys.modules.pop(name, None)
 
 
 ConfigManager = _load_config_manager().ConfigManager

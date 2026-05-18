@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from contextlib import contextmanager
 import importlib
 import json
 import sys
@@ -9,6 +10,7 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
+@contextmanager
 def _load_config_manager():
     original_modules = {
         name: sys.modules.get(name)
@@ -35,7 +37,7 @@ def _load_config_manager():
 
     try:
         with patch.dict(sys.modules, {"src.utils.crypto_util": crypto_util_stub}):
-            return importlib.import_module("src.config.config_manager")
+            yield importlib.import_module("src.config.config_manager")
     finally:
         live_config_pkg = sys.modules.get("src.config")
         if config_pkg is not None:
@@ -57,130 +59,123 @@ def _load_config_manager():
                 sys.modules.pop(name, None)
 
 
-def _scrub_config_manager_package_attr() -> None:
-    config_pkg = sys.modules.get("src.config")
-    if config_pkg is not None and "src.config.config_manager" not in sys.modules and hasattr(config_pkg, "config_manager"):
-        delattr(config_pkg, "config_manager")
-
-
-ConfigManager = _load_config_manager().ConfigManager
-_scrub_config_manager_package_attr()
-
-
 class ConfigManagerTests(unittest.TestCase):
     def test_package_attr_cleanup_does_not_leave_detached_config_manager(self) -> None:
-        _scrub_config_manager_package_attr()
+        with _load_config_manager():
+            pass
+
         config_pkg = sys.modules.get("src.config")
-        if config_pkg is not None:
-            self.assertFalse(
-                hasattr(config_pkg, "config_manager") and "src.config.config_manager" not in sys.modules
-            )
+        self.assertTrue(config_pkg is None or not hasattr(config_pkg, "config_manager"))
 
     def test_db_config_and_form_query_overrides(self) -> None:
         sales_order = "\u9500\u552e\u8ba2\u5355"
         outstock = "\u9500\u552e\u51fa\u5e93\u5355"
 
-        with tempfile.TemporaryDirectory() as tmp_dir:
-            tmp_path = Path(tmp_dir)
-            config_path = tmp_path / "config.ini"
-            queries_path = tmp_path / "form-queries.json"
+        with _load_config_manager() as config_manager_module:
+            config_cls = config_manager_module.ConfigManager
+            with tempfile.TemporaryDirectory() as tmp_dir:
+                tmp_path = Path(tmp_dir)
+                config_path = tmp_path / "config.ini"
+                queries_path = tmp_path / "form-queries.json"
 
-            config_path.write_text(
-                "\n".join(
-                    [
-                        "[KINGDEE]",
-                        "login_url = https://example.com/login",
-                        "query_url = https://example.com/query",
-                        "acct_id = demo",
-                        "username = user",
-                        "password = plain",
-                        "lcid = 2052",
-                        "",
-                        "[DATABASE]",
-                        "type = sqlserver",
-                        "",
-                        "[MYSQL]",
-                        "host = 127.0.0.1",
-                        "user = root",
-                        "password = plain",
-                        "database = kingdee",
-                        "charset = utf8mb4",
-                        "port = 3306",
-                        "",
-                        "[SQLSERVER]",
-                        "host = 127.0.0.1",
-                        "user = sa",
-                        "password = plain",
-                        "database = kingdee",
-                        "port = 1433",
-                        "driver = ODBC Driver 17 for SQL Server",
-                        "",
-                        "[SYNC]",
-                        "auto_sync = false",
-                        "sync_interval = 60",
-                        f"default_forms = {sales_order},{outstock}",
-                        "",
-                        "[GUI]",
-                        "window_width = 1200",
-                        "window_height = 800",
-                        "",
-                        "[FILTER_STRINGS]",
-                        f"{sales_order} = FBillNo = 'OVERRIDE'",
-                    ]
-                ),
-                encoding="utf-8",
-            )
-            queries_path.write_text(
-                json.dumps(
-                    {
-                        sales_order: {
-                            "FormId": "SAL_SaleOrder",
-                            "FieldKeys": "FID,FBillNo,FModifyDate",
-                            "FilterString": "FDocumentStatus='C'",
-                        }
-                    },
-                    ensure_ascii=False,
-                    indent=2,
-                ),
-                encoding="utf-8",
-            )
+                config_path.write_text(
+                    "\n".join(
+                        [
+                            "[KINGDEE]",
+                            "login_url = https://example.com/login",
+                            "query_url = https://example.com/query",
+                            "acct_id = demo",
+                            "username = user",
+                            "password = plain",
+                            "lcid = 2052",
+                            "",
+                            "[DATABASE]",
+                            "type = sqlserver",
+                            "",
+                            "[MYSQL]",
+                            "host = 127.0.0.1",
+                            "user = root",
+                            "password = plain",
+                            "database = kingdee",
+                            "charset = utf8mb4",
+                            "port = 3306",
+                            "",
+                            "[SQLSERVER]",
+                            "host = 127.0.0.1",
+                            "user = sa",
+                            "password = plain",
+                            "database = kingdee",
+                            "port = 1433",
+                            "driver = ODBC Driver 17 for SQL Server",
+                            "",
+                            "[SYNC]",
+                            "auto_sync = false",
+                            "sync_interval = 60",
+                            f"default_forms = {sales_order},{outstock}",
+                            "",
+                            "[GUI]",
+                            "window_width = 1200",
+                            "window_height = 800",
+                            "",
+                            "[FILTER_STRINGS]",
+                            f"{sales_order} = FBillNo = 'OVERRIDE'",
+                        ]
+                    ),
+                    encoding="utf-8",
+                )
+                queries_path.write_text(
+                    json.dumps(
+                        {
+                            sales_order: {
+                                "FormId": "SAL_SaleOrder",
+                                "FieldKeys": "FID,FBillNo,FModifyDate",
+                                "FilterString": "FDocumentStatus='C'",
+                            }
+                        },
+                        ensure_ascii=False,
+                        indent=2,
+                    ),
+                    encoding="utf-8",
+                )
 
-            manager = ConfigManager(str(config_path))
+                manager = config_cls(str(config_path))
 
-            db_config = manager.get_db_config()
-            self.assertEqual(db_config["type"], "sqlserver")
-            self.assertEqual(db_config["sqlserver"]["driver"], "ODBC Driver 17 for SQL Server")
-            self.assertEqual(db_config["mysql"]["database"], "kingdee")
+                db_config = manager.get_db_config()
+                self.assertEqual(db_config["type"], "sqlserver")
+                self.assertEqual(db_config["sqlserver"]["driver"], "ODBC Driver 17 for SQL Server")
+                self.assertEqual(db_config["mysql"]["database"], "kingdee")
 
-            sync_config = manager.get_sync_config()
-            self.assertEqual(sync_config["default_forms"], [sales_order, outstock])
-            self.assertFalse(sync_config["auto_sync"])
-            self.assertEqual(sync_config["sync_interval"], 60)
+                sync_config = manager.get_sync_config()
+                self.assertEqual(sync_config["default_forms"], [sales_order, outstock])
+                self.assertFalse(sync_config["auto_sync"])
+                self.assertEqual(sync_config["sync_interval"], 60)
 
-            queries = manager.get_form_queries()
-            self.assertEqual(queries[sales_order]["FormId"], "SAL_SaleOrder")
-            self.assertEqual(queries[sales_order]["FilterString"], "FBillNo = 'OVERRIDE'")
+                queries = manager.get_form_queries()
+                self.assertEqual(queries[sales_order]["FormId"], "SAL_SaleOrder")
+                self.assertEqual(queries[sales_order]["FilterString"], "FBillNo = 'OVERRIDE'")
 
     def test_sync_config_exposes_circuit_breaker_defaults(self) -> None:
-        with tempfile.TemporaryDirectory() as tmp_dir:
-            config_path = Path(tmp_dir) / "config.ini"
-            config_path.write_text(
-                "\n".join(
-                    [
-                        "[SYNC]",
-                        "auto_sync = false",
-                        "sync_interval = 60",
-                    ]
-                ),
-                encoding="utf-8",
-            )
-            manager = ConfigManager(str(config_path))
+        with _load_config_manager() as config_manager_module:
+            config_cls = config_manager_module.ConfigManager
+            with tempfile.TemporaryDirectory() as tmp_dir:
+                config_path = Path(tmp_dir) / "config.ini"
+                config_path.write_text(
+                    "\n".join(
+                        [
+                            "[SYNC]",
+                            "auto_sync = false",
+                            "sync_interval = 60",
+                        ]
+                    ),
+                    encoding="utf-8",
+                )
+                manager = config_cls(str(config_path))
 
-            sync_config = manager.get_sync_config()
+                sync_config = manager.get_sync_config()
 
-            self.assertTrue(sync_config["circuit_breaker_enabled"])
-            self.assertEqual(sync_config["circuit_breaker_threshold"], 3)
-            self.assertEqual(sync_config["circuit_breaker_cooldown_secs"], 30)
+        self.assertTrue(sync_config["circuit_breaker_enabled"])
+        self.assertEqual(sync_config["circuit_breaker_threshold"], 3)
+        self.assertEqual(sync_config["circuit_breaker_cooldown_secs"], 30)
 
 
 if __name__ == "__main__":

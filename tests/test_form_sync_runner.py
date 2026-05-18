@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from contextlib import contextmanager
 import importlib
 import logging
 import sys
@@ -8,14 +9,18 @@ import unittest
 from types import SimpleNamespace
 from unittest.mock import Mock, patch
 
+@contextmanager
 def _load_form_sync_runner_module():
     original_modules = {
         name: sys.modules.get(name)
-        for name in ("src.core", "src.core.form_sync_runner", "requests", "src.core.mysql_manager")
+        for name in ("src.core", "src.config", "src.core.form_sync_runner", "requests", "src.core.mysql_manager", "src.config.config_manager")
     }
     core_pkg = original_modules["src.core"]
+    config_pkg = original_modules["src.config"]
     core_pkg_attr_present = bool(core_pkg and hasattr(core_pkg, "form_sync_runner"))
     core_pkg_attr_value = getattr(core_pkg, "form_sync_runner", None) if core_pkg_attr_present else None
+    config_pkg_attr_present = bool(config_pkg and hasattr(config_pkg, "config_manager"))
+    config_pkg_attr_value = getattr(config_pkg, "config_manager", None) if config_pkg_attr_present else None
     for name in original_modules:
         sys.modules.pop(name, None)
 
@@ -48,6 +53,16 @@ def _load_form_sync_runner_module():
     )
     requests_stub.Session = _Session
     mysql_manager_stub = types.ModuleType("src.core.mysql_manager")
+    config_manager_stub = types.ModuleType("src.config.config_manager")
+
+    config_manager_stub.config_manager = SimpleNamespace(
+        get_form_queries=lambda: {},
+        get_db_config=lambda: {"type": "mysql", "mysql": {}, "sqlserver": {}},
+        get_kingdee_config=lambda: {},
+        get_insert_method_map=lambda: {},
+        get_increment_field=lambda _key: None,
+        set_increment_field=lambda _key, _value: None,
+    )
 
     class _MySQLManager:
         pass
@@ -60,11 +75,13 @@ def _load_form_sync_runner_module():
             {
                 "requests": requests_stub,
                 "src.core.mysql_manager": mysql_manager_stub,
+                "src.config.config_manager": config_manager_stub,
             },
-            ):
-            return importlib.import_module("src.core.form_sync_runner")
+        ):
+            yield importlib.import_module("src.core.form_sync_runner")
     finally:
         live_core_pkg = sys.modules.get("src.core")
+        live_config_pkg = sys.modules.get("src.config")
         sys.modules.pop("src.core.form_sync_runner", None)
         for pkg in (live_core_pkg, core_pkg):
             if pkg is None:
@@ -73,44 +90,40 @@ def _load_form_sync_runner_module():
                 setattr(pkg, "form_sync_runner", core_pkg_attr_value)
             elif hasattr(pkg, "form_sync_runner"):
                 delattr(pkg, "form_sync_runner")
+        for pkg in (live_config_pkg, config_pkg):
+            if pkg is None:
+                continue
+            if config_pkg_attr_present:
+                setattr(pkg, "config_manager", config_pkg_attr_value)
+            elif hasattr(pkg, "config_manager"):
+                delattr(pkg, "config_manager")
         for name, module in original_modules.items():
             if module is not None:
                 sys.modules[name] = module
             else:
                 sys.modules.pop(name, None)
-
-
-def _scrub_form_sync_runner_package_attr() -> None:
-    core_pkg = sys.modules.get("src.core")
-    if core_pkg is not None and "src.core.form_sync_runner" not in sys.modules and hasattr(core_pkg, "form_sync_runner"):
-        delattr(core_pkg, "form_sync_runner")
-
-
-form_sync_runner = _load_form_sync_runner_module()
-_scrub_form_sync_runner_package_attr()
-FormSyncRunner = form_sync_runner.FormSyncRunner
-PARTIAL_STATUS = form_sync_runner.PARTIAL_STATUS
 from src.core.write_outcome import WriteOutcome
 
 
 class FormSyncRunnerOutcomeTests(unittest.TestCase):
     def test_package_attr_cleanup_does_not_leave_detached_form_sync_runner(self) -> None:
-        _scrub_form_sync_runner_package_attr()
+        with _load_form_sync_runner_module():
+            pass
+
         core_pkg = sys.modules.get("src.core")
-        if core_pkg is not None:
-            self.assertFalse(
-                hasattr(core_pkg, "form_sync_runner") and "src.core.form_sync_runner" not in sys.modules
-            )
+        self.assertTrue(core_pkg is None or not hasattr(core_pkg, "form_sync_runner"))
 
     def test_build_write_summary_separates_invalid_deduped_and_failed(self) -> None:
-        owner = SimpleNamespace(DEDUPLICATION_FORMS={"生产入库单"})
-        runner = FormSyncRunner(owner, SimpleNamespace(), logger_=logging.getLogger("test.form_sync_runner"))
+        with _load_form_sync_runner_module() as form_sync_runner:
+            runner_cls = form_sync_runner.FormSyncRunner
+            owner = SimpleNamespace(DEDUPLICATION_FORMS={"生产入库单"})
+            runner = runner_cls(owner, SimpleNamespace(), logger_=logging.getLogger("test.form_sync_runner"))
 
-        summary = runner._build_write_summary(
-            "生产入库单",
-            fetched=10,
-            outcome=WriteOutcome(inserted=6, invalid=2, deduped=1),
-        )
+            summary = runner._build_write_summary(
+                "生产入库单",
+                fetched=10,
+                outcome=WriteOutcome(inserted=6, invalid=2, deduped=1),
+            )
 
         self.assertEqual(
             summary,
@@ -124,88 +137,95 @@ class FormSyncRunnerOutcomeTests(unittest.TestCase):
         )
 
     def test_insert_database_data_prefers_execute_writer_with_outcome(self) -> None:
-        owner = SimpleNamespace(
-            DEDUPLICATION_FORMS={"生产入库单"},
-            INSERT_METHOD_MAP={"生产入库单": "insert_prd_instock"},
-        )
-        manager = SimpleNamespace(execute_writer_with_outcome=Mock(return_value=WriteOutcome(inserted=3)))
-        runner = FormSyncRunner(owner, SimpleNamespace(), logger_=logging.getLogger("test.form_sync_runner"))
+        with _load_form_sync_runner_module() as form_sync_runner:
+            runner_cls = form_sync_runner.FormSyncRunner
+            owner = SimpleNamespace(
+                DEDUPLICATION_FORMS={"生产入库单"},
+                INSERT_METHOD_MAP={"生产入库单": "insert_prd_instock"},
+            )
+            manager = SimpleNamespace(execute_writer_with_outcome=Mock(return_value=WriteOutcome(inserted=3)))
+            runner = runner_cls(owner, SimpleNamespace(), logger_=logging.getLogger("test.form_sync_runner"))
 
-        outcome = runner.insert_database_data("生产入库单", [{"FID": 1}], db_manager=manager)
+            outcome = runner.insert_database_data("生产入库单", [{"FID": 1}], db_manager=manager)
 
         self.assertEqual(outcome, WriteOutcome(inserted=3))
         manager.execute_writer_with_outcome.assert_called_once_with("insert_prd_instock", [{"FID": 1}])
 
     def test_sync_single_form_marks_partial_when_rows_fail_to_write(self) -> None:
-        owner = SimpleNamespace(
-            DEDUPLICATION_FORMS=set(),
-            INSERT_METHOD_MAP={"销售订单": "insert_sales_orders"},
-            table_mapping={"销售订单": "saleorder"},
-            _notify_progress=Mock(),
-            _checkpoint_manager=SimpleNamespace(load_checkpoint=Mock(return_value=None), clear_checkpoint=Mock()),
-        )
-        filter_builder = SimpleNamespace(build_filter_string=Mock(return_value=""))
-        fake_db = SimpleNamespace(disconnect=Mock())
-        runner = FormSyncRunner(owner, filter_builder, logger_=logging.getLogger("test.form_sync_runner"))
-
-        captured_sync_log: dict[str, object] = {}
-
-        def log_sync_operation(sync_type, table_name, operation, record_count, status, *args, **kwargs):
-            captured_sync_log["status"] = status
-
-        with (
-            patch.object(form_sync_runner, "create_shared_db_manager", return_value=fake_db),
-            patch.object(form_sync_runner, "emit_audit_log"),
-            patch.object(form_sync_runner, "config_manager") as mock_config_manager,
-        ):
-            mock_config_manager.get_form_queries.return_value = {"销售订单": {"FieldKeys": "FID,FBillNo"}}
-            runner.query_kingdee_data = Mock(
-                side_effect=lambda *args, **kwargs: kwargs["page_callback"]([{"FID": 1}, {"FID": 2}]) or []
+        with _load_form_sync_runner_module() as form_sync_runner:
+            runner_cls = form_sync_runner.FormSyncRunner
+            partial_status = form_sync_runner.PARTIAL_STATUS
+            owner = SimpleNamespace(
+                DEDUPLICATION_FORMS=set(),
+                INSERT_METHOD_MAP={"销售订单": "insert_sales_orders"},
+                table_mapping={"销售订单": "saleorder"},
+                _notify_progress=Mock(),
+                _checkpoint_manager=SimpleNamespace(load_checkpoint=Mock(return_value=None), clear_checkpoint=Mock()),
             )
-            runner.insert_database_data = Mock(return_value=WriteOutcome(inserted=1))
-            fake_db.log_sync_operation = Mock(side_effect=log_sync_operation)
+            filter_builder = SimpleNamespace(build_filter_string=Mock(return_value=""))
+            fake_db = SimpleNamespace(disconnect=Mock())
+            runner = runner_cls(owner, filter_builder, logger_=logging.getLogger("test.form_sync_runner"))
 
-            result = runner.sync_single_form("销售订单", "full")
+            captured_sync_log: dict[str, object] = {}
 
-        self.assertEqual(result["status"], PARTIAL_STATUS)
+            def log_sync_operation(sync_type, table_name, operation, record_count, status, *args, **kwargs):
+                captured_sync_log["status"] = status
+
+            with (
+                patch.object(form_sync_runner, "create_shared_db_manager", return_value=fake_db),
+                patch.object(form_sync_runner, "emit_audit_log"),
+                patch.object(form_sync_runner, "config_manager") as mock_config_manager,
+            ):
+                mock_config_manager.get_form_queries.return_value = {"销售订单": {"FieldKeys": "FID,FBillNo"}}
+                runner.query_kingdee_data = Mock(
+                    side_effect=lambda *args, **kwargs: kwargs["page_callback"]([{"FID": 1}, {"FID": 2}]) or []
+                )
+                runner.insert_database_data = Mock(return_value=WriteOutcome(inserted=1))
+                fake_db.log_sync_operation = Mock(side_effect=log_sync_operation)
+
+                result = runner.sync_single_form("销售订单", "full")
+
+        self.assertEqual(result["status"], partial_status)
         self.assertEqual(result["fetched"], 2)
         self.assertEqual(result["inserted"], 1)
         self.assertEqual(result["failed"], 1)
-        self.assertEqual(captured_sync_log["status"], PARTIAL_STATUS)
+        self.assertEqual(captured_sync_log["status"], partial_status)
 
     def test_sync_single_form_emits_write_failure_audit_and_metrics(self) -> None:
-        owner = SimpleNamespace(
-            DEDUPLICATION_FORMS=set(),
-            INSERT_METHOD_MAP={"销售订单": "insert_sales_orders"},
-            table_mapping={"销售订单": "saleorder"},
-            _notify_progress=Mock(),
-            _checkpoint_manager=SimpleNamespace(load_checkpoint=Mock(return_value=None), clear_checkpoint=Mock()),
-        )
-        filter_builder = SimpleNamespace(build_filter_string=Mock(return_value=""))
-        fake_db = SimpleNamespace(disconnect=Mock())
-        runner = FormSyncRunner(owner, filter_builder, logger_=logging.getLogger("test.form_sync_runner"))
-
-        captured_sync_log: dict[str, object] = {}
-
-        def log_sync_operation(sync_type, table_name, operation, record_count, status, *args, **kwargs):
-            captured_sync_log["status"] = status
-
-        with (
-            patch.object(form_sync_runner, "create_shared_db_manager", return_value=fake_db),
-            patch.object(form_sync_runner, "emit_audit_log") as mock_audit,
-            patch.object(form_sync_runner, "metrics_collector", create=True) as mock_metrics,
-            patch.object(form_sync_runner, "config_manager") as mock_config_manager,
-        ):
-            mock_config_manager.get_form_queries.return_value = {"销售订单": {"FieldKeys": "FID,FBillNo"}}
-            runner.query_kingdee_data = Mock(
-                side_effect=lambda *args, **kwargs: kwargs["page_callback"]([{"FID": 1, "FBillNo": "SO001"}]) or []
+        with _load_form_sync_runner_module() as form_sync_runner:
+            runner_cls = form_sync_runner.FormSyncRunner
+            owner = SimpleNamespace(
+                DEDUPLICATION_FORMS=set(),
+                INSERT_METHOD_MAP={"销售订单": "insert_sales_orders"},
+                table_mapping={"销售订单": "saleorder"},
+                _notify_progress=Mock(),
+                _checkpoint_manager=SimpleNamespace(load_checkpoint=Mock(return_value=None), clear_checkpoint=Mock()),
             )
-            runner.insert_database_data = Mock(
-                return_value=WriteOutcome(inserted=0, failed=1),
-            )
-            fake_db.log_sync_operation = Mock(side_effect=log_sync_operation)
+            filter_builder = SimpleNamespace(build_filter_string=Mock(return_value=""))
+            fake_db = SimpleNamespace(disconnect=Mock())
+            runner = runner_cls(owner, filter_builder, logger_=logging.getLogger("test.form_sync_runner"))
 
-            result = runner.sync_single_form("销售订单", "full")
+            captured_sync_log: dict[str, object] = {}
+
+            def log_sync_operation(sync_type, table_name, operation, record_count, status, *args, **kwargs):
+                captured_sync_log["status"] = status
+
+            with (
+                patch.object(form_sync_runner, "create_shared_db_manager", return_value=fake_db),
+                patch.object(form_sync_runner, "emit_audit_log") as mock_audit,
+                patch.object(form_sync_runner, "metrics_collector", create=True) as mock_metrics,
+                patch.object(form_sync_runner, "config_manager") as mock_config_manager,
+            ):
+                mock_config_manager.get_form_queries.return_value = {"销售订单": {"FieldKeys": "FID,FBillNo"}}
+                runner.query_kingdee_data = Mock(
+                    side_effect=lambda *args, **kwargs: kwargs["page_callback"]([{"FID": 1, "FBillNo": "SO001"}]) or []
+                )
+                runner.insert_database_data = Mock(
+                    return_value=WriteOutcome(inserted=0, failed=1),
+                )
+                fake_db.log_sync_operation = Mock(side_effect=log_sync_operation)
+
+                result = runner.sync_single_form("销售订单", "full")
 
         self.assertEqual(result["status"], "failed")
         self.assertEqual(result["failed"], 1)

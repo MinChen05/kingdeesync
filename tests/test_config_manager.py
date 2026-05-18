@@ -1,14 +1,15 @@
 from __future__ import annotations
 
-from contextlib import contextmanager
 import importlib
 import json
 import sys
-import types
 import tempfile
+import types
 import unittest
+from contextlib import contextmanager
 from pathlib import Path
 from unittest.mock import patch
+
 
 @contextmanager
 def _load_config_manager():
@@ -42,12 +43,12 @@ def _load_config_manager():
         live_config_pkg = sys.modules.get("src.config")
         if config_pkg is not None:
             if config_pkg_attr_present:
-                setattr(config_pkg, "config_manager", config_pkg_attr_value)
+                config_pkg.config_manager = config_pkg_attr_value
             elif hasattr(config_pkg, "config_manager"):
                 delattr(config_pkg, "config_manager")
         if live_config_pkg is not None and live_config_pkg is not config_pkg:
             if config_pkg_attr_present:
-                setattr(live_config_pkg, "config_manager", config_pkg_attr_value)
+                live_config_pkg.config_manager = config_pkg_attr_value
             elif hasattr(live_config_pkg, "config_manager"):
                 delattr(live_config_pkg, "config_manager")
         for name in ("src.config.config_manager", "src.config.config_accessors", "src.config.config_reader", "src.utils.crypto_util"):
@@ -61,11 +62,19 @@ def _load_config_manager():
 
 class ConfigManagerTests(unittest.TestCase):
     def test_package_attr_cleanup_does_not_leave_detached_config_manager(self) -> None:
+        original_pkg = sys.modules.get("src.config")
+        original_has_attr = bool(original_pkg and hasattr(original_pkg, "config_manager"))
+        original_attr_value = getattr(original_pkg, "config_manager", None) if original_has_attr else None
+
         with _load_config_manager():
             pass
 
         config_pkg = sys.modules.get("src.config")
-        self.assertTrue(config_pkg is None or not hasattr(config_pkg, "config_manager"))
+        if original_has_attr:
+            self.assertIsNotNone(config_pkg)
+            self.assertIs(config_pkg.config_manager, original_attr_value)
+        else:
+            self.assertTrue(config_pkg is None or not hasattr(config_pkg, "config_manager"))
 
     def test_db_config_and_form_query_overrides(self) -> None:
         sales_order = "\u9500\u552e\u8ba2\u5355"

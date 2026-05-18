@@ -91,6 +91,9 @@ DEFAULT_CONFIG_DATA = {
         "full_start_date": "2000-01-01",
         "run_heartbeat_interval_secs": "15",
         "run_heartbeat_timeout_secs": "120",
+        "circuit_breaker_enabled": "true",
+        "circuit_breaker_threshold": "3",
+        "circuit_breaker_cooldown_secs": "30",
     },
     "GUI": {
         "theme": "blue",

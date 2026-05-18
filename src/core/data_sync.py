@@ -20,6 +20,7 @@ from src.core.form_sync_runner import FormSyncRunner, create_shared_db_manager
 from src.core.kingdee_api import kingdee_client
 from src.core.mysql_manager import mysql_manager, MySQLManager
 from src.core.audit_logging import emit_audit_log
+from src.core.circuit_breaker import LocalCircuitBreaker
 from src.config.config_manager import config_manager
 from src.core.retry_manager import CheckpointManager, SyncCheckpoint
 
@@ -74,6 +75,12 @@ class DataSyncManager:
         self._active_run_message = ""
         self._shutdown_requested = threading.Event()
         self._shutdown_reason = ""
+        sync_config = config_manager.get_sync_config()
+        self.circuit_breaker = LocalCircuitBreaker(
+            enabled=bool(sync_config.get("circuit_breaker_enabled", True)),
+            threshold=int(sync_config.get("circuit_breaker_threshold", 3) or 3),
+            cooldown_seconds=int(sync_config.get("circuit_breaker_cooldown_secs", 30) or 30),
+        )
 
     def add_sync_callback(self, callback):
         """添加同步进度回调函数"""
@@ -401,7 +408,57 @@ class DataSyncManager:
 
     def _sync_single_form(self, form_name: str, sync_type: SyncType) -> Dict[str, Any]:
         """Delegate single-form execution to the dedicated form sync runner."""
-        return self.form_sync_runner.sync_single_form(form_name, sync_type)
+        if not self.circuit_breaker.allow(form_name):
+            return self._create_circuit_open_result(form_name)
+
+        try:
+            result = self.form_sync_runner.sync_single_form(form_name, sync_type)
+        except Exception as exc:
+            self.circuit_breaker.record_failure(form_name, type(exc).__name__)
+            raise
+
+        self._record_circuit_breaker_result(form_name, result)
+        return result
+
+    def _create_circuit_open_result(self, form_name: str) -> Dict[str, Any]:
+        return {
+            "status": "circuit_open",
+            "message": f"[{form_name}] 熔断器开启，暂时跳过同步",
+            "record_count": 0,
+            "inserted": 0,
+            "updated": 0,
+            "error_type": "circuit_open",
+            "failure_categories": {"circuit_open": 1},
+            "failure_details": [],
+            "duration": 0.0,
+        }
+
+    def _record_circuit_breaker_result(self, form_name: str, result: Dict[str, Any]) -> None:
+        status = str(result.get("status", "")).lower()
+        if status == SyncStatus.SUCCESS.value:
+            self.circuit_breaker.record_success(form_name)
+            return
+
+        if status not in (SyncStatus.FAILED.value, SyncStatus.PARTIAL.value):
+            return
+
+        failure_categories = result.get("failure_categories")
+        if isinstance(failure_categories, dict):
+            recorded = False
+            for category, count in failure_categories.items():
+                try:
+                    if int(count or 0) <= 0:
+                        continue
+                except Exception:
+                    continue
+                self.circuit_breaker.record_failure(form_name, str(category))
+                recorded = True
+            if recorded:
+                return
+
+        error_type = str(result.get("error_type", "")).strip()
+        if error_type:
+            self.circuit_breaker.record_failure(form_name, error_type)
 
     def _truncate_table_for_complete(self, table_name: str, manager: MySQLManager) -> bool:
         """Delegate pre-complete truncation to FormSyncRunner."""

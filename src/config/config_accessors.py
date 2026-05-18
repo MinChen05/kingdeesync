@@ -236,6 +236,18 @@ class ConfigAccessors:
             sync_config["run_heartbeat_interval_secs"] * 2,
             _as_int(sync_config.get("run_heartbeat_timeout_secs", "120"), 120),
         )
+        sync_config["circuit_breaker_enabled"] = _as_bool(
+            sync_config.get("circuit_breaker_enabled", "true"),
+            True,
+        )
+        sync_config["circuit_breaker_threshold"] = max(
+            1,
+            _as_int(sync_config.get("circuit_breaker_threshold", "3"), 3),
+        )
+        sync_config["circuit_breaker_cooldown_secs"] = max(
+            0,
+            _as_int(sync_config.get("circuit_breaker_cooldown_secs", "30"), 30),
+        )
 
         default_forms_raw = sync_config.get("default_forms", "")
         if default_forms_raw:

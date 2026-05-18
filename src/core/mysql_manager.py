@@ -15,6 +15,7 @@ import pyodbc
 from dbutils.pooled_db import PooledDB
 
 from src.config.config_manager import config_manager
+from src.core.field_mapping_resolver import FieldMappingResolver
 from src.core.performance_logging import log_prepare_metrics
 from src.core.sync_log_repository import SyncLogRepository
 from src.core.sync_run_repository import SyncRunRepository
@@ -111,6 +112,9 @@ class MySQLManager:
         """重新加载配置并初始化连接池"""
         cfg = config_manager.get_db_config()
         self.db_type = cfg.get("type", "mysql").lower()
+        get_field_mappings = getattr(config_manager, "get_field_mappings", None)
+        field_mappings = get_field_mappings() if callable(get_field_mappings) else {}
+        self.field_mapping_resolver = FieldMappingResolver(field_mappings)
         # 依据类型选择对应配置
         if self.db_type == "sqlserver":
             self.config = cfg.get("sqlserver", {})
@@ -1236,6 +1240,12 @@ class MySQLManager:
         # 返回映射值，如果没有对应的映射则返回原值
         return status_map.get(status_str, status_str)
 
+    def _resolve_configured_field(self, table: str, field: str, row_map: dict[str, Any]) -> Any:
+        resolver = getattr(self, "field_mapping_resolver", None)
+        if resolver is None:
+            return None
+        return resolver.resolve_field(table, field, row_map)
+
     def _prepare_production_order_data(self, item) -> tuple | None:
         """准备生产订单数据（新增 FCREATEDATE）
         字段顺序: FID, FBILLNO, FBILLTYPE, FDATE, FPRDORGID, FWORKSHOPID, FDocumentStatus, FCREATEDATE, FMODIFYDATE, FCANCELSTATUS
@@ -1265,7 +1275,14 @@ class MySQLManager:
                     fdocstatus = ""
                 fcreated = self._parse_datetime(item.get("FCREATEDATE") or item.get("FCreateDate"))
                 fmodifydate = self._parse_datetime(item.get("FMODIFYDATE") or item.get("FModifyDate"))
-                fcancel = self._safe_str(item.get("FCANCELSTATUS") or item.get("FCancelStatus"))
+                cancel_row = dict(item)
+                cancel_row["FDocumentStatus"] = item.get("FDocumentStatus") or item.get("FDOCUMENTSTATUS") or item.get(
+                    "FSTATUS"
+                )
+                fcancel = self._resolve_configured_field("prd_mo", "FCANCELSTATUS", cancel_row)
+                if fcancel is None:
+                    fcancel = item.get("FCANCELSTATUS") or item.get("FCancelStatus")
+                fcancel = self._safe_str(fcancel)
                 if fcancel is None:
                     fcancel = ""
                 return (
@@ -1295,7 +1312,22 @@ class MySQLManager:
                         fdocstatus = ""
                     fcreated = self._parse_datetime(item[7])
                     fmodifydate = self._parse_datetime(item[8])
-                    fcancel = self._safe_str(item[9])
+                    cancel_row = {
+                        "FID": item[0],
+                        "FBILLNO": item[1],
+                        "FBILLTYPE.FNAME": item[2],
+                        "FDATE": item[3],
+                        "FPRDORGID": item[4],
+                        "FWORKSHOPID": item[5],
+                        "FDocumentStatus": item[6],
+                        "FCREATEDATE": item[7],
+                        "FModifyDate": item[8],
+                        "FCancelStatus": item[9],
+                    }
+                    fcancel = self._resolve_configured_field("prd_mo", "FCANCELSTATUS", cancel_row)
+                    if fcancel is None:
+                        fcancel = item[9]
+                    fcancel = self._safe_str(fcancel)
                     if fcancel is None:
                         fcancel = ""
                     return (
@@ -1321,7 +1353,18 @@ class MySQLManager:
                     fdocstatus = ""
                     fcreated = None
                     fmodifydate = self._parse_datetime(item[14])
-                    fcancel = self._safe_str(item[15])
+                    cancel_row = {
+                        "FID": item[0],
+                        "FBILLNO": item[3],
+                        "FBILLTYPE": item[4],
+                        "FDATE": item[8],
+                        "FModifyDate": item[14],
+                        "FCANCELSTATUS": item[15],
+                    }
+                    fcancel = self._resolve_configured_field("prd_mo", "FCANCELSTATUS", cancel_row)
+                    if fcancel is None:
+                        fcancel = item[15]
+                    fcancel = self._safe_str(fcancel)
                     if fcancel is None:
                         fcancel = ""
                     return (
@@ -2175,9 +2218,10 @@ class MySQLManager:
                 fpriceunitname = self._safe_str(item.get("FPRICEUNITID.FNAME") or item.get("FPRICEUNITID.FName"))
                 fpriceqty = self._to_decimal_or_none(item.get("FPRICEQTY") or 0)
                 fallamountfor_d = self._to_decimal_or_none(item.get("FALLAMOUNTFOR_D") or 0)
-                fnotaxamountfor = self._to_decimal_or_none(
-                    item.get("FNoTaxAmountFor_D") or item.get("FNOTAXAMOUNTFOR_D") or 0
-                )
+                fnotaxamountfor = self._resolve_configured_field("ap_payable", "FNOTAXAMOUNTFOR", item)
+                if fnotaxamountfor is None:
+                    fnotaxamountfor = item.get("FNoTaxAmountFor_D") or item.get("FNOTAXAMOUNTFOR_D") or 0
+                fnotaxamountfor = self._to_decimal_or_none(fnotaxamountfor)
                 fdiscountamountfor = self._to_decimal_or_none(item.get("FDISCOUNTAMOUNTFOR") or 0)
                 fentrydiscountrate = self._to_decimal_or_none(item.get("FENTRYDISCOUNTRATE"))
                 fentrytaxrate = self._to_decimal_or_none(item.get("FENTRYTAXRATE"))
@@ -3452,16 +3496,24 @@ class MySQLManager:
         直接映射�?MySQL/SQL Server 列（不再使用 FMATERIALIDCHILD �?FQTY2�?"""
         try:
             if isinstance(item, dict):
-                child_number = (
-                    item.get("FMATERIALIDCHILD.FNUMBER")
-                    or item.get("FMATERIALIDCHILD.FNumber")
-                    or item.get("FCHILDNUMBER")
+                child_row = dict(item)
+                child_row.setdefault(
+                    "FCHILDNUMBER",
+                    item.get("FMATERIALIDCHILD.FNUMBER") or item.get("FMATERIALIDCHILD.FNumber"),
                 )
-                child_name = (
-                    item.get("FMATERIALIDCHILD.FNAME")
-                    or item.get("FMATERIALIDCHILD.FName")
-                    or item.get("FCHILDNAME")
-                )
+                child_row.setdefault("FCHILDNAME", item.get("FMATERIALIDCHILD.FNAME") or item.get("FMATERIALIDCHILD.FName"))
+                child_number = self._resolve_configured_field("eng_bomchild", "FCHILDNUMBER", child_row)
+                if child_number is None:
+                    child_number = (
+                        item.get("FMATERIALIDCHILD.FNUMBER")
+                        or item.get("FMATERIALIDCHILD.FNumber")
+                        or item.get("FCHILDNUMBER")
+                    )
+                child_name = self._resolve_configured_field("eng_bomchild", "FCHILDNAME", child_row)
+                if child_name is None:
+                    child_name = item.get("FMATERIALIDCHILD.FNAME") or item.get("FMATERIALIDCHILD.FName") or item.get(
+                        "FCHILDNAME"
+                    )
                 return (
                     (self._to_int_or_none(item.get("FID") or 0) or item.get("FId")),  # FID
                     (self._to_int_or_none(item.get("FTreeEntity_FENTRYID") or 0) or item.get("FENTRYID")),  # FENTRYID
@@ -3486,13 +3538,41 @@ class MySQLManager:
             if isinstance(item, list) and len(item) >= 18:
                 # 列表模式下，尝试兼容可能存在的第19个字段（FMODIFYDATE），若无则为None
                 fmodifydate = self._parse_datetime(item[18]) if len(item) > 18 else None
+                child_row = {
+                    "FID": item[0],
+                    "FTreeEntity_FENTRYID": item[1],
+                    "FTreeEntity_FSEQ": item[2],
+                    "FMATERIALID": item[3],
+                    "FMATERIALIDCHILD.FNUMBER": item[4],
+                    "FMATERIALIDCHILD.FNAME": item[5],
+                    "FNUMERATOR": item[6],
+                    "FDENOMINATOR": item[7],
+                    "FISSUETYPE": item[8],
+                    "FBACKFLUSHTYPE": item[9],
+                    "FSUPPLYORG": item[10],
+                    "FSTOCKID": item[11],
+                    "FENTRYROWID": item[12],
+                    "FREPLACEGROUP": item[13],
+                    "FQTY": item[14],
+                    "FACTUALQTY": item[15],
+                    "FMASTERID": item[16],
+                    "FMATERIALTYPE": item[17],
+                }
+                if len(item) > 18:
+                    child_row["FMODIFYDATE"] = item[18]
+                child_number = self._resolve_configured_field("eng_bomchild", "FCHILDNUMBER", child_row)
+                if child_number is None:
+                    child_number = item[4]
+                child_name = self._resolve_configured_field("eng_bomchild", "FCHILDNAME", child_row)
+                if child_name is None:
+                    child_name = item[5]
                 return (
                     (self._to_int_or_none(item[0]) or 0),  # FID
                     (self._to_int_or_none(item[1]) or 0),  # FENTRYID
                     (self._to_int_or_none(item[2]) or 0),  # FSEQ
                     self._safe_str(item[3]),  # FMATERIALID
-                    self._safe_str(item[4]),  # FCHILDNUMBER
-                    self._safe_str(item[5]),  # FCHILDNAME
+                    self._safe_str(child_number),  # FCHILDNUMBER
+                    self._safe_str(child_name),  # FCHILDNAME
                     (self._to_decimal_or_none(item[6]) or 0.0),  # FNUMERATOR
                     (self._to_decimal_or_none(item[7]) or 0.0),  # FDENOMINATOR
                     self._safe_str(item[8]),  # FISSUETYPE

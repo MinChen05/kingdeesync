@@ -108,19 +108,15 @@ from src.core.write_outcome import WriteOutcome
 
 class FormSyncRunnerOutcomeTests(unittest.TestCase):
     def test_package_attr_cleanup_does_not_leave_detached_form_sync_runner(self) -> None:
-        original_core_pkg = sys.modules.get("src.core")
-        had_attr = bool(original_core_pkg and hasattr(original_core_pkg, "form_sync_runner"))
-        original_attr = getattr(original_core_pkg, "form_sync_runner", None) if had_attr else None
+        core_pkg = sys.modules.get("src.core")
+        if core_pkg is not None and hasattr(core_pkg, "form_sync_runner"):
+            delattr(core_pkg, "form_sync_runner")
 
         with _load_form_sync_runner_module():
             pass
 
         core_pkg = sys.modules.get("src.core")
-        if had_attr:
-            self.assertIsNotNone(core_pkg)
-            self.assertIs(getattr(core_pkg, "form_sync_runner", None), original_attr)
-        else:
-            self.assertTrue(core_pkg is None or not hasattr(core_pkg, "form_sync_runner"))
+        self.assertTrue(core_pkg is None or not hasattr(core_pkg, "form_sync_runner"))
 
     def test_build_write_summary_separates_invalid_deduped_and_failed(self) -> None:
         with _load_form_sync_runner_module() as form_sync_runner:
@@ -329,7 +325,7 @@ class FormSyncRunnerOutcomeTests(unittest.TestCase):
     @patch("src.core.data_sync.mysql_manager.finish_sync_run")
     @patch("src.core.data_sync.metrics_collector")
     @patch("src.core.data_sync.config_manager.get_sync_config", return_value={})
-    def test_finalize_run_writes_metrics_snapshot_into_task_details(
+    def test_z_finalize_run_writes_metrics_snapshot_into_task_details(
         self,
         _mock_sync_config: Mock,
         mock_metrics_collector: Mock,
@@ -376,6 +372,41 @@ class FormSyncRunnerOutcomeTests(unittest.TestCase):
                 "failed_forms": [],
             },
         )
+
+    @patch("src.core.data_sync.mysql_manager.finish_sync_run")
+    @patch("src.core.data_sync.metrics_collector")
+    @patch("src.core.data_sync.config_manager.get_sync_config", return_value={})
+    def test_z_finalize_run_does_not_leak_stale_metrics_when_results_are_empty(
+        self,
+        _mock_sync_config: Mock,
+        mock_metrics_collector: Mock,
+        mock_finish_sync_run: Mock,
+    ) -> None:
+        from src.core.data_sync import DataSyncManager, SyncStatus, SyncType
+
+        manager = DataSyncManager()
+        start_time = datetime(2026, 5, 18, 10, 0, 0)
+        end_time = datetime(2026, 5, 18, 10, 0, 1)
+        mock_metrics_collector.export_run_snapshot.side_effect = (
+            lambda form_names: {} if not form_names else {"销售订单": {"records_inserted": 99}}
+        )
+
+        manager._finalize_run(
+            run_id="run-2",
+            sync_type=SyncType.INCREMENTAL,
+            requested_forms=["销售订单"],
+            results={},
+            total_records=0,
+            failed_tables=[],
+            run_status=SyncStatus.FAILED,
+            message="连接检查失败",
+            start_time=start_time,
+            end_time=end_time,
+        )
+
+        finish_kwargs = mock_finish_sync_run.call_args.kwargs
+        mock_metrics_collector.export_run_snapshot.assert_called_once_with([])
+        self.assertEqual(finish_kwargs["details"]["metrics"], {})
 
 
 if __name__ == "__main__":

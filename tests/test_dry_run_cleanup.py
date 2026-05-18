@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import io
+import re
 import tempfile
 import unittest
 from contextlib import redirect_stdout
@@ -14,33 +15,62 @@ def _candidate_path(candidate: object) -> Path:
     return Path(raw_path)
 
 
+def _candidate_size(candidate: object) -> int:
+    if isinstance(candidate, dict):
+        raw_size = candidate.get("size")
+    elif isinstance(candidate, (tuple, list)) and len(candidate) > 1:
+        raw_size = candidate[1]
+    else:
+        raw_size = getattr(candidate, "size", None)
+
+    if raw_size is None:
+        raise AssertionError(f"candidate does not expose size: {candidate!r}")
+
+    return int(raw_size)
+
+
 class DryRunCleanupTests(unittest.TestCase):
     def test_collect_cleanup_candidates_reports_existing_targets(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             root = Path(tmpdir)
             (root / ".worktrees").mkdir()
             (root / ".venv").mkdir()
-            (root / "logs").mkdir()
+            logs_dir = root / "logs"
+            logs_dir.mkdir()
             (root / ".mypy_cache").mkdir()
             (root / ".pytest_cache").mkdir()
             (root / ".ruff_cache").mkdir()
             (root / "checkpoints").mkdir()
             (root / "pkg").mkdir()
             (root / "pkg" / "__pycache__").mkdir()
+            app_log = logs_dir / "app.log"
+            app_log.write_text("keep me", encoding="utf-8")
             (root / "tmp-dashboard.png").write_bytes(b"png")
 
             candidates = dry_run_cleanup.collect_cleanup_candidates(root)
-            candidate_paths = {_candidate_path(candidate).resolve() for candidate in candidates}
+            candidate_by_path = {
+                _candidate_path(candidate).resolve(): candidate for candidate in candidates
+            }
 
-            self.assertIn((root / ".worktrees").resolve(), candidate_paths)
-            self.assertIn((root / ".venv").resolve(), candidate_paths)
-            self.assertIn((root / "logs").resolve(), candidate_paths)
-            self.assertIn((root / ".mypy_cache").resolve(), candidate_paths)
-            self.assertIn((root / ".pytest_cache").resolve(), candidate_paths)
-            self.assertIn((root / ".ruff_cache").resolve(), candidate_paths)
-            self.assertIn((root / "checkpoints").resolve(), candidate_paths)
-            self.assertIn((root / "pkg" / "__pycache__").resolve(), candidate_paths)
-            self.assertIn((root / "tmp-dashboard.png").resolve(), candidate_paths)
+            self.assertIn((root / ".worktrees").resolve(), candidate_by_path)
+            self.assertIn((root / ".venv").resolve(), candidate_by_path)
+            self.assertIn((root / "logs").resolve(), candidate_by_path)
+            self.assertIn((root / ".mypy_cache").resolve(), candidate_by_path)
+            self.assertIn((root / ".pytest_cache").resolve(), candidate_by_path)
+            self.assertIn((root / ".ruff_cache").resolve(), candidate_by_path)
+            self.assertIn((root / "checkpoints").resolve(), candidate_by_path)
+            self.assertIn((root / "pkg" / "__pycache__").resolve(), candidate_by_path)
+            self.assertIn((root / "tmp-dashboard.png").resolve(), candidate_by_path)
+
+            self.assertEqual(0, _candidate_size(candidate_by_path[(root / ".worktrees").resolve()]))
+            self.assertEqual(0, _candidate_size(candidate_by_path[(root / ".venv").resolve()]))
+            self.assertEqual(app_log.stat().st_size, _candidate_size(candidate_by_path[(root / "logs").resolve()]))
+            self.assertEqual(0, _candidate_size(candidate_by_path[(root / ".mypy_cache").resolve()]))
+            self.assertEqual(0, _candidate_size(candidate_by_path[(root / ".pytest_cache").resolve()]))
+            self.assertEqual(0, _candidate_size(candidate_by_path[(root / ".ruff_cache").resolve()]))
+            self.assertEqual(0, _candidate_size(candidate_by_path[(root / "checkpoints").resolve()]))
+            self.assertEqual(0, _candidate_size(candidate_by_path[(root / "pkg" / "__pycache__").resolve()]))
+            self.assertEqual(3, _candidate_size(candidate_by_path[(root / "tmp-dashboard.png").resolve()]))
 
     def test_collect_cleanup_candidates_returns_empty_list_when_targets_missing(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -87,8 +117,11 @@ class DryRunCleanupTests(unittest.TestCase):
             self.assertIn("__pycache__", output)
             self.assertIn("tmp-dashboard.png", output)
             self.assertRegex(output, r"(目录|directory)")
-            self.assertRegex(output, r"(文件|file)")
             self.assertRegex(output, r"(高收益|低风险|建议|high|low|risk)")
+            self.assertRegex(
+                output,
+                re.compile(r"tmp-dashboard\.png.*(文件|file).*(3|3\s*(B|bytes))", re.S),
+            )
             self.assertTrue((root / ".worktrees").exists())
             self.assertTrue((root / ".venv").exists())
             self.assertTrue(logs_dir.exists())

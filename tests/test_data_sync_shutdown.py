@@ -30,6 +30,44 @@ class DataSyncShutdownTests(unittest.TestCase):
 
         mock_sync_manager.sync_data.assert_not_called()
 
+class AutoSyncSchedulerSyncTypeTests(unittest.TestCase):
+    @patch("src.core.scheduler.config_manager.update_config")
+    @patch("src.core.scheduler.schedule.every")
+    @patch("src.core.scheduler.schedule.clear")
+    def test_configure_sync_forces_incremental_mode(
+        self,
+        _mock_schedule_clear: Mock,
+        mock_schedule_every: Mock,
+        mock_update_config: Mock,
+    ) -> None:
+        mock_schedule_every.return_value.minutes.do.return_value = None
+        scheduler = AutoSyncScheduler()
+
+        scheduler.configure_sync(["sales_order"], SyncType.FULL, 30)
+
+        self.assertEqual(scheduler.sync_type, SyncType.INCREMENTAL)
+        mock_update_config.assert_any_call("SYNC", "sync_type", SyncType.INCREMENTAL.value)
+
+    def test_execute_sync_always_uses_incremental_mode(self) -> None:
+        scheduler = AutoSyncScheduler()
+        scheduler.status = SchedulerStatus.RUNNING
+        scheduler.sync_forms = ["sales_order"]
+        scheduler.sync_type = SyncType.FULL
+
+        with patch("src.core.scheduler.sync_manager") as mock_sync_manager:
+            mock_sync_manager.is_shutdown_requested.return_value = False
+            mock_sync_manager.sync_data.return_value = {
+                "status": "success",
+                "details": {},
+            }
+            scheduler._execute_sync()
+
+        mock_sync_manager.sync_data.assert_called_once_with(
+            ["sales_order"],
+            SyncType.INCREMENTAL,
+        )
+        self.assertEqual(scheduler.sync_type, SyncType.INCREMENTAL)
+
 
 if __name__ == "__main__":
     unittest.main()

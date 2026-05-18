@@ -9,12 +9,12 @@ import copy
 import json
 import logging
 import os
-from typing import Any, Dict
+from typing import Any
 
 from src.config.config_reader import ConfigReader
 
 
-def load_tables_json(config_file: str, logger: logging.Logger) -> Dict[str, Any]:
+def load_tables_json(config_file: str, logger: logging.Logger) -> dict[str, Any]:
     """Load tables.json from runtime-aware candidate paths."""
     try:
         config_dir = os.path.dirname(os.path.abspath(config_file))
@@ -25,7 +25,7 @@ def load_tables_json(config_file: str, logger: logging.Logger) -> Dict[str, Any]
             mapping_file = os.path.join(base_dir, "config", "tables.json")
 
         if os.path.exists(mapping_file):
-            with open(mapping_file, "r", encoding="utf-8") as fp:
+            with open(mapping_file, encoding="utf-8") as fp:
                 return json.load(fp)
     except Exception as err:
         logger.error("Error loading tables.json: %s", err)
@@ -37,25 +37,22 @@ def resolve_form_queries_candidates(config_file: str) -> list[str]:
     """Build form-queries.json candidate paths."""
     config_dir = os.path.dirname(os.path.abspath(config_file))
     base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-    root_dir = os.path.dirname(base_dir)
 
     return [
         os.path.join(config_dir, "form-queries.json"),
         os.path.join(config_dir, "src", "config", "form-queries.json"),
-        os.path.join(config_dir, "dotnet", "form-queries.json"),
         os.path.join(base_dir, "config", "form-queries.json"),
-        os.path.join(root_dir, "dotnet", "form-queries.json"),
     ]
 
 
-def load_form_queries_json(config_file: str, logger: logging.Logger) -> Dict[str, Dict[str, Any]]:
+def load_form_queries_json(config_file: str, logger: logging.Logger) -> dict[str, dict[str, Any]]:
     """Load form-queries.json with fallback candidates."""
     for file_path in resolve_form_queries_candidates(config_file):
         try:
             if not os.path.exists(file_path):
                 continue
 
-            with open(file_path, "r", encoding="utf-8") as fp:
+            with open(file_path, encoding="utf-8") as fp:
                 data = json.load(fp)
 
             if isinstance(data, dict):
@@ -103,18 +100,18 @@ class ConfigAccessors:
     def config_file(self) -> str:
         return self.reader.config_file
 
-    def _load_tables_json(self) -> Dict[str, Any]:
+    def _load_tables_json(self) -> dict[str, Any]:
         return load_tables_json(self.config_file, self.logger)
 
-    def _load_form_queries_json(self) -> Dict[str, Dict[str, Any]]:
+    def _load_form_queries_json(self) -> dict[str, dict[str, Any]]:
         return load_form_queries_json(self.config_file, self.logger)
 
-    def get_table_mapping(self) -> Dict[str, str]:
+    def get_table_mapping(self) -> dict[str, str]:
         raw = self._load_tables_json()
         if not raw:
             return {}
 
-        result: Dict[str, str] = {}
+        result: dict[str, str] = {}
         for form_name, val in raw.items():
             if isinstance(val, dict):
                 result[form_name] = val.get("table", "")
@@ -122,9 +119,9 @@ class ConfigAccessors:
                 result[form_name] = str(val)
         return result
 
-    def get_insert_method_map(self) -> Dict[str, str]:
+    def get_insert_method_map(self) -> dict[str, str]:
         raw = self._load_tables_json()
-        result: Dict[str, str] = {}
+        result: dict[str, str] = {}
         for form_name, val in raw.items():
             if not isinstance(val, dict):
                 continue
@@ -133,11 +130,11 @@ class ConfigAccessors:
                 result[form_name] = method
         return result
 
-    def get_kingdee_config(self) -> Dict[str, Any]:
+    def get_kingdee_config(self) -> dict[str, Any]:
         if "KINGDEE" not in self.config:
             self.reader.create_default()
 
-        cfg: Dict[str, Any] = dict(self.config["KINGDEE"])
+        cfg: dict[str, Any] = dict(self.config["KINGDEE"])
         cfg["pagination_enabled"] = _as_bool(cfg.get("pagination_enabled", "false"), False)
         cfg["request_timeout"] = _as_int(cfg.get("request_timeout", "0"), 0)
         cfg["page_size"] = _as_int(cfg.get("page_size", "50000"), 50000)
@@ -160,10 +157,10 @@ class ConfigAccessors:
         cfg["auto_logout_on_exit"] = _as_bool(cfg.get("auto_logout_on_exit", "false"), False)
         return cfg
 
-    def get_mysql_config(self) -> Dict[str, str]:
+    def get_mysql_config(self) -> dict[str, str]:
         return dict(self.config["MYSQL"])
 
-    def get_db_config(self) -> Dict[str, Any]:
+    def get_db_config(self) -> dict[str, Any]:
         db_type = "mysql"
         try:
             if "DATABASE" in self.config and "type" in self.config["DATABASE"]:
@@ -173,7 +170,7 @@ class ConfigAccessors:
         except Exception:
             db_type = "mysql"
 
-        mysql_cfg: Dict[str, str] = {}
+        mysql_cfg: dict[str, str] = {}
         try:
             mysql_cfg = self.get_mysql_config()
         except Exception:
@@ -186,7 +183,7 @@ class ConfigAccessors:
                 "port": "3306",
             }
 
-        sqlserver_cfg: Dict[str, str] = {}
+        sqlserver_cfg: dict[str, str] = {}
         try:
             if "SQLSERVER" in self.config:
                 sqlserver_cfg = dict(self.config["SQLSERVER"])
@@ -211,8 +208,8 @@ class ConfigAccessors:
 
         return {"type": db_type, "mysql": mysql_cfg, "sqlserver": sqlserver_cfg}
 
-    def get_sync_config(self) -> Dict[str, Any]:
-        sync_config: Dict[str, Any] = dict(self.config["SYNC"])
+    def get_sync_config(self) -> dict[str, Any]:
+        sync_config: dict[str, Any] = dict(self.config["SYNC"])
         sync_config["auto_sync"] = _as_bool(sync_config["auto_sync"], False)
         sync_config["sync_interval"] = _as_int(sync_config["sync_interval"], 60)
 
@@ -265,8 +262,8 @@ class ConfigAccessors:
         except Exception as err:
             self.logger.error("Failed to save sync preferences: %s", err)
 
-    def get_gui_config(self) -> Dict[str, Any]:
-        gui_config: Dict[str, Any] = dict(self.config["GUI"])
+    def get_gui_config(self) -> dict[str, Any]:
+        gui_config: dict[str, Any] = dict(self.config["GUI"])
         gui_config["window_width"] = _as_int(gui_config["window_width"], 1200)
         gui_config["window_height"] = _as_int(gui_config["window_height"], 800)
         return gui_config
@@ -304,7 +301,7 @@ class ConfigAccessors:
         except Exception:
             pass
 
-    def get_form_queries(self) -> Dict[str, Dict[str, Any]]:
+    def get_form_queries(self) -> dict[str, dict[str, Any]]:
         queries = self._load_form_queries_json()
         if not queries:
             return {}

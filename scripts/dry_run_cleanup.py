@@ -111,6 +111,10 @@ def _format_size(size: int) -> str:
 def _render_report(candidates: Iterable[CleanupCandidate], root: Path) -> str:
     lines = [f"Dry-run cleanup report for: {root.resolve()}"]
     candidate_list = list(candidates)
+    total_size = sum(candidate.size for candidate in candidate_list)
+    lines.append(
+        f"Summary: {len(candidate_list)} candidate(s), total size: {_format_size(total_size)}"
+    )
 
     if not candidate_list:
         lines.append("No cleanup candidates found.")

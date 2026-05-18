@@ -81,6 +81,16 @@ class DryRunCleanupTests(unittest.TestCase):
 
             self.assertEqual([], list(candidates))
 
+    def test_render_report_includes_summary_even_when_no_candidates_exist(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+
+            output = dry_run_cleanup._render_report([], root)
+
+            self.assertIn("Summary: 0 candidate(s), total size: 0 B", output)
+            self.assertIn("No cleanup candidates found.", output)
+            self.assertIn("No files were deleted.", output)
+
     def test_collect_cleanup_candidates_skips_nested_pycache_inside_aggregated_roots(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             root = Path(tmpdir)
@@ -149,6 +159,9 @@ class DryRunCleanupTests(unittest.TestCase):
                     exit_code = exc.code
 
             output = buffer.getvalue()
+            expected_total_size = app_log.stat().st_size + dashboard_png.stat().st_size
+            self.assertIn("Summary: 9 candidate(s), total size:", output)
+            self.assertIn(f"total size: {expected_total_size} B", output)
             self.assertIn("No files were deleted.", output)
             self.assertIn(".worktrees", output)
             self.assertIn(".venv", output)

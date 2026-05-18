@@ -41,10 +41,10 @@ class MySQLManager:
     """数据库管理器：使用连接池优化（支持 MySQL / SQL Server）。"""
 
     _metadata_cache_lock = threading.Lock()
-    _table_columns_cache: Dict[Tuple[str, str], Dict[str, str]] = {}
-    _identity_column_cache: Dict[Tuple[str, str], Optional[str]] = {}
+    _table_columns_cache: dict[tuple[str, str], dict[str, str]] = {}
+    _identity_column_cache: dict[tuple[str, str], str | None] = {}
 
-    def _maybe_create_stage_index(self, stage_ref: str, base_name: str, pk_cols: List[str], row_count: int) -> None:
+    def _maybe_create_stage_index(self, stage_ref: str, base_name: str, pk_cols: list[str], row_count: int) -> None:
         """为大批量 staging 表创建主键索引，加速后续 MERGE 匹配。
 
         注意：使用独立 cursor 执行，避免与同一连接上其他 cursor 的状态冲突。
@@ -241,40 +241,39 @@ class MySQLManager:
                     self.pool = SimpleConnectionPool(lambda: pyodbc.connect(conn_str, autocommit=True))
                     logger.info("SQL Server轻量直连池初始化成功（驱动直连模式）")
                     return True
-                else:
-                    try:
-                        _max_conn = int(self.config.get("pool_maxconnections", 10))
-                        _min_cached = int(self.config.get("pool_mincached", 2))
-                        _max_cached = int(self.config.get("pool_maxcached", 5))
-                        self.pool = PooledDB(
-                            creator=pyodbc.connect,
-                            maxconnections=_max_conn,
-                            mincached=_min_cached,
-                            maxcached=_max_cached,
-                            maxshared=3,
-                            blocking=True,
-                            maxusage=None,
-                            setsession=[],
-                            ping=1,
-                            # 连接字符串作为位置参数传入
-                            args=(conn_str,),
-                            kwargs={"autocommit": True},
+                try:
+                    _max_conn = int(self.config.get("pool_maxconnections", 10))
+                    _min_cached = int(self.config.get("pool_mincached", 2))
+                    _max_cached = int(self.config.get("pool_maxcached", 5))
+                    self.pool = PooledDB(
+                        creator=pyodbc.connect,
+                        maxconnections=_max_conn,
+                        mincached=_min_cached,
+                        maxcached=_max_cached,
+                        maxshared=3,
+                        blocking=True,
+                        maxusage=None,
+                        setsession=[],
+                        ping=1,
+                        # 连接字符串作为位置参数传入
+                        args=(conn_str,),
+                        kwargs={"autocommit": True},
+                    )
+                    logger.info(f"SQL Server连接池初始化成功: {database}")
+                    return True
+                except Exception as pe:
+                    # 某些环境下，直连预检通过，但 PooledDB 内部初始化可能抛出 IM002（未指定DSN/默认驱动），
+                    # 此处无需告警，直接降级为轻量直连池即可，不影响后续同步。
+                    msg = str(pe)
+                    if "IM002" in msg and "SQLDriverConnect" in msg:
+                        logger.info(
+                            "SQL Server连接池初始化失败(IM002)，已自动降级为轻量直连池；直连预检已通过，不影响后续同步"
                         )
-                        logger.info(f"SQL Server连接池初始化成功: {database}")
-                        return True
-                    except Exception as pe:
-                        # 某些环境下，直连预检通过，但 PooledDB 内部初始化可能抛出 IM002（未指定DSN/默认驱动），
-                        # 此处无需告警，直接降级为轻量直连池即可，不影响后续同步。
-                        msg = str(pe)
-                        if "IM002" in msg and "SQLDriverConnect" in msg:
-                            logger.info(
-                                "SQL Server连接池初始化失败(IM002)，已自动降级为轻量直连池；直连预检已通过，不影响后续同步"
-                            )
-                        else:
-                            logger.warning(f"SQL Server连接池初始化失败，使用轻量直连池降级: {msg}")
-                        self.pool = SimpleConnectionPool(lambda: pyodbc.connect(conn_str, autocommit=True))
-                        logger.info("SQL Server轻量直连池初始化成功")
-                        return True
+                    else:
+                        logger.warning(f"SQL Server连接池初始化失败，使用轻量直连池降级: {msg}")
+                    self.pool = SimpleConnectionPool(lambda: pyodbc.connect(conn_str, autocommit=True))
+                    logger.info("SQL Server轻量直连池初始化成功")
+                    return True
             else:
                 # MySQL 路径
                 charset = self.config.get("charset", "utf8mb4")
@@ -416,7 +415,7 @@ class MySQLManager:
         logger.error("测试数据库连接在 %s 次重试后仍然失败", retries)
         return False
 
-    def insert_generic_data(self, table_name: str, data: List[Dict[str, Any]]) -> int:
+    def insert_generic_data(self, table_name: str, data: list[dict[str, Any]]) -> int:
         """通用数据插入方法，依据字典键自动匹配列"""
         if not data:
             return 0
@@ -528,7 +527,7 @@ class MySQLManager:
                 self.connection.rollback()
             return 0
 
-    def execute_writer_with_outcome(self, method_name: str, data: List[Dict]) -> WriteOutcome:
+    def execute_writer_with_outcome(self, method_name: str, data: list[dict]) -> WriteOutcome:
         """Execute a writer and preserve structured write outcome metadata."""
         self._last_write_outcome = WriteOutcome()
         inserted = self.writer_registry.execute(self, method_name, data)
@@ -536,7 +535,7 @@ class MySQLManager:
             self._last_write_outcome.inserted = WriteOutcome.from_insert_count(inserted).inserted
         return self._last_write_outcome
 
-    def execute_writer(self, method_name: str, data: List[Dict]) -> int:
+    def execute_writer(self, method_name: str, data: list[dict]) -> int:
         """Execute a registered writer by name."""
         return self.execute_writer_with_outcome(method_name, data).inserted
 
@@ -571,7 +570,7 @@ class MySQLManager:
             return False
 
     @staticmethod
-    def _format_forms_summary(forms: Optional[List[str]]) -> str:
+    def _format_forms_summary(forms: list[str] | None) -> str:
         """Format forms via the dedicated sync run repository."""
         return SyncRunRepository.format_forms_summary(forms)
 
@@ -579,7 +578,7 @@ class MySQLManager:
         """Ensure sync_runs exists via the dedicated sync run repository."""
         return self.sync_run_repository.ensure_table()
 
-    def start_sync_run(self, run_id: str, sync_type: str, forms: Optional[List[str]], start_time: datetime) -> bool:
+    def start_sync_run(self, run_id: str, sync_type: str, forms: list[str] | None, start_time: datetime) -> bool:
         """Delegate sync run start persistence to the sync run repository."""
         return self.sync_run_repository.start_run(run_id, sync_type, forms, start_time)
 
@@ -595,7 +594,7 @@ class MySQLManager:
         self,
         run_id: str,
         sync_type: str,
-        forms: Optional[List[str]],
+        forms: list[str] | None,
         total_records: int,
         success_count: int,
         failure_count: int,
@@ -603,8 +602,8 @@ class MySQLManager:
         message: str,
         start_time: datetime,
         end_time: datetime,
-        failed_forms: Optional[List[str]] = None,
-        details: Optional[Dict[str, Any]] = None,
+        failed_forms: list[str] | None = None,
+        details: dict[str, Any] | None = None,
     ) -> bool:
         """Delegate sync run completion persistence to the sync run repository."""
         return self.sync_run_repository.finish_run(
@@ -660,7 +659,7 @@ class MySQLManager:
             error_type=error_type,
         )
 
-    def get_last_modify_time(self, table_name: str) -> Optional[datetime]:
+    def get_last_modify_time(self, table_name: str) -> datetime | None:
         """获取表中最后同步时间 (SYNC_TIME)"""
         try:
             if not self.connection or not self.cursor:
@@ -696,7 +695,7 @@ class MySQLManager:
             logger.error(f"获取 {table_name} 最后修改时间失败: {str(e)}")
             return None
 
-    def get_last_time(self, table_name: str, time_field: str) -> Optional[datetime]:
+    def get_last_time(self, table_name: str, time_field: str) -> datetime | None:
         """获取指定表的最大时间字段值，用于增量同步"""
         try:
             if not self.connection or not self.cursor:
@@ -710,11 +709,10 @@ class MySQLManager:
             if result:
                 if isinstance(result, dict):
                     return result.get("last_time")
-                else:
-                    try:
-                        return result[0]
-                    except Exception:
-                        return None
+                try:
+                    return result[0]
+                except Exception:
+                    return None
             return None
         except Exception as e:
             logger.error(f"获取 {table_name}.{time_field} 最大时间失败: {str(e)}")
@@ -740,16 +738,14 @@ class MySQLManager:
                 if "T" in date_str:
                     # ISO格式: 2023-01-01T00:00:00
                     return datetime.fromisoformat(date_str.replace("Z", "+00:00"))
-                elif len(date_str) == 10:
+                if len(date_str) == 10:
                     # 日期格式: 2023-01-01
                     return datetime.strptime(date_str, "%Y-%m-%d")
-                else:
-                    # 其他格式尝试
-                    return datetime.strptime(date_str, "%Y-%m-%d %H:%M:%S")
-            elif isinstance(date_str, datetime):
+                # 其他格式尝试
+                return datetime.strptime(date_str, "%Y-%m-%d %H:%M:%S")
+            if isinstance(date_str, datetime):
                 return date_str
-            else:
-                return None
+            return None
         except Exception as e:
             logger.warning(f"日期解析失败: {date_str}, 错误: {str(e)}")
             return None
@@ -926,13 +922,13 @@ class MySQLManager:
         except Exception:
             return None
 
-    def insert_production_orders(self, data: List[Dict]) -> int:
+    def insert_production_orders(self, data: list[dict]) -> int:
         return self.execute_writer("insert_production_orders", data)
 
-    def insert_prd_moentry(self, data: List[Dict]) -> int:
+    def insert_prd_moentry(self, data: list[dict]) -> int:
         return self.execute_writer("insert_prd_moentry", data)
 
-    def _parse_insert_sql(self, sql: str) -> Tuple[Optional[str], List[str]]:
+    def _parse_insert_sql(self, sql: str) -> tuple[str | None, list[str]]:
         """解析 INSERT 语句，提取表名与列名列表（用于 SQL Server MERGE 生成）"""
         try:
             import re
@@ -956,14 +952,14 @@ class MySQLManager:
             self._table_columns_cache.pop(cache_key, None)
             self._identity_column_cache.pop(cache_key, None)
 
-    def _get_table_columns_info(self, table_name: str) -> Dict[str, str]:
+    def _get_table_columns_info(self, table_name: str) -> dict[str, str]:
         cache_key = (getattr(self, "db_type", "mysql"), self._normalize_table_cache_key(table_name))
         with self._metadata_cache_lock:
             cached = self._table_columns_cache.get(cache_key)
         if cached is not None:
             return cached
 
-        columns_info: Dict[str, str] = {}
+        columns_info: dict[str, str] = {}
         if not self.cursor or not table_name:
             return columns_info
 
@@ -1009,7 +1005,7 @@ class MySQLManager:
             return False
         return str(column_name).upper() in self._get_table_columns_info(table_name)
 
-    def _get_primary_key(self, table_name: str) -> Optional[str]:
+    def _get_primary_key(self, table_name: str) -> str | None:
         """获取已知表的主键列名（用于 SQL Server MERGE）"""
         mapping = {
             "prd_mo": "FID",
@@ -1035,7 +1031,7 @@ class MySQLManager:
         }
         return mapping.get((table_name or "").lower())
 
-    def _get_identity_columns(self, table_name: str) -> Optional[str]:
+    def _get_identity_columns(self, table_name: str) -> str | None:
         """返回指定表的标识(IDENTITY)列（用于 SQL Server，避免 UPDATE/INSERT 显式写入导致错误）
         注意：此映射按当前项目表结构维护；如表结构变更需同步更新。
         """
@@ -1101,7 +1097,7 @@ class MySQLManager:
             # 非致命：记录警告，后续逻辑会根据 has_sync_time 判定是否写入
             logger.warning(f"[{table_name}] 自动添加 SYNC_TIME 列失败: {e}")
 
-    def _batch_insert(self, sql: str, data: List[Dict], prepare_func) -> int:
+    def _batch_insert(self, sql: str, data: list[dict], prepare_func) -> int:
         """批量插入数据 - 优化版本，使用事务和分批处理"""
         if data and len(data) > 0:
             logger.debug(
@@ -1240,7 +1236,7 @@ class MySQLManager:
         # 返回映射值，如果没有对应的映射则返回原值
         return status_map.get(status_str, status_str)
 
-    def _prepare_production_order_data(self, item) -> Optional[Tuple]:
+    def _prepare_production_order_data(self, item) -> tuple | None:
         """准备生产订单数据（新增 FCREATEDATE）
         字段顺序: FID, FBILLNO, FBILLTYPE, FDATE, FPRDORGID, FWORKSHOPID, FDocumentStatus, FCREATEDATE, FMODIFYDATE, FCANCELSTATUS
         """
@@ -1284,7 +1280,7 @@ class MySQLManager:
                     fmodifydate,
                     fcancel,
                 )
-            elif isinstance(item, list):
+            if isinstance(item, list):
                 # 列表格式数据
                 if len(item) == 10:
                     # 新FieldKeys: FID, FBILLNO, FBILLTYPE.FNAME, FDATE, FPRDORGID, FWORKSHOPID, FDocumentStatus, FCREATEDATE, FModifyDate, FCancelStatus
@@ -1314,7 +1310,7 @@ class MySQLManager:
                         fmodifydate,
                         fcancel,
                     )
-                elif len(item) >= 16:  # 旧字段集（含 FMATERIALID 等）
+                if len(item) >= 16:  # 旧字段集（含 FMATERIALID 等）
                     # 仅提取新字段
                     fid = self._to_int_or_none(item[0]) or 0
                     fbillno = self._safe_str(item[3])
@@ -1340,17 +1336,15 @@ class MySQLManager:
                         fmodifydate,
                         fcancel,
                     )
-                else:
-                    logger.warning(f"列表数据项不完整: {len(item)}")
-                    return None
-            else:
-                logger.warning(f"不支持的数据类型: {type(item)}")
+                logger.warning(f"列表数据项不完整: {len(item)}")
                 return None
+            logger.warning(f"不支持的数据类型: {type(item)}")
+            return None
         except Exception as e:
             logger.error(f"准备生产订单数据失败: {str(e)}")
             return None
 
-    def _prepare_prd_moentry_data(self, item) -> Optional[Tuple]:
+    def _prepare_prd_moentry_data(self, item) -> tuple | None:
         """准备生产订单明细数据（PRD_MOENTRY，19字段，含源单、辅助数量、F_ora_Text1）"""
         try:
             if isinstance(item, dict):
@@ -1417,7 +1411,7 @@ class MySQLManager:
                     f_ora_text1,
                     fmodifydate,
                 )
-            elif isinstance(item, (list, tuple)) and len(item) >= 18:
+            if isinstance(item, (list, tuple)) and len(item) >= 18:
                 f_ora_text1 = self._safe_str(item[18]) if len(item) > 18 else None
                 fmaterialnumber = self._safe_str(item[19]) if len(item) > 19 else None
                 fdescription = self._safe_str(item[20]) if len(item) > 20 else None
@@ -1446,20 +1440,19 @@ class MySQLManager:
                     f_ora_text1,
                     self._parse_datetime(item[17]),
                 )
-            else:
-                logger.warning(f"生产订单明细不支持的数据类型: {type(item)}")
-                return None
+            logger.warning(f"生产订单明细不支持的数据类型: {type(item)}")
+            return None
         except Exception as e:
             logger.error(f"准备生产订单明细数据失败: {str(e)}")
             return None
 
-    def insert_prd_ppbom(self, data: List[Dict]) -> int:
+    def insert_prd_ppbom(self, data: list[dict]) -> int:
         return self.execute_writer("insert_prd_ppbom", data)
 
-    def insert_prd_ppbom_entry(self, data: List[Dict]) -> int:
+    def insert_prd_ppbom_entry(self, data: list[dict]) -> int:
         return self.execute_writer("insert_prd_ppbom_entry", data)
 
-    def _prepare_prd_ppbom_entry_data(self, item) -> Optional[Tuple]:
+    def _prepare_prd_ppbom_entry_data(self, item) -> tuple | None:
         """准备生产用料清单明细行数据映射，兼容字典与列表格式。
         FieldKeys 顺序: FID,FEntity_FENTRYID,FEntity_FSEQ,FMOID,FMOBILLNO,FMOENTRYID,FMOENTRYSEQ,FBOMENTRYID,FMATERIALID2,FNEEDDATE2,
         FBASESTDQTY,FBASENEEDQTY,FBASEMUSTQTY,FSTDQTY,FNEEDQTY2,FMUSTQTY,FBASEPICKEDQTY,F_ORA_DATETIME,FMODIFYDATE
@@ -1496,7 +1489,7 @@ class MySQLManager:
                     plan_end,
                     modify_date,
                 )
-            elif isinstance(item, list):
+            if isinstance(item, list):
                 if len(item) < 19:
                     logger.warning(f"列表数据项不完整: {len(item)}")
                     return None
@@ -1525,17 +1518,16 @@ class MySQLManager:
                     plan_end,  # FPLANEND
                     modify_date,  # FMODIFYDATE
                 )
-            else:
-                logger.warning(f"不支持的数据类型: {type(item)}")
-                return None
+            logger.warning(f"不支持的数据类型: {type(item)}")
+            return None
         except Exception as e:
             logger.error(f"准备生产用料清单明细数据失败: {str(e)}")
             return None
 
-    def insert_prd_ppbom_main(self, data: List[Dict]) -> int:
+    def insert_prd_ppbom_main(self, data: list[dict]) -> int:
         return self.execute_writer("insert_prd_ppbom_main", data)
 
-    def _prepare_prd_ppbom_main_data(self, item) -> Optional[Tuple]:
+    def _prepare_prd_ppbom_main_data(self, item) -> tuple | None:
         """准备生产用料清单主表行数据映射，兼容字典与列表格式"""
         try:
             if isinstance(item, dict):
@@ -1549,7 +1541,7 @@ class MySQLManager:
                     self._parse_datetime(item.get("FCREATEDATE") or item.get("FCreateDate")),
                     self._parse_datetime(item.get("FModifyDate")),
                 )
-            elif isinstance(item, list):
+            if isinstance(item, list):
                 if len(item) < 8:
                     logger.warning(f"列表数据项不完整: {len(item)}")
                     return None
@@ -1563,14 +1555,13 @@ class MySQLManager:
                     self._parse_datetime(item[6]),  # FCreateDate
                     self._parse_datetime(item[7]),  # FModifyDate
                 )
-            else:
-                logger.warning(f"不支持的数据类型: {type(item)}")
-                return None
+            logger.warning(f"不支持的数据类型: {type(item)}")
+            return None
         except Exception as e:
             logger.error(f"准备生产用料清单主表数据失败: {str(e)}")
             return None
 
-    def _prepare_prd_ppbom_data(self, item) -> Optional[tuple]:
+    def _prepare_prd_ppbom_data(self, item) -> tuple | None:
         """准备生产用料清单主表插入行数据映射（与扩展 FieldKeys 对应）。
         FieldKeys 顺序: FID, FBILLNO, FMATERIALID, FPRDORGID, FWORKSHOPID, FBOMID, FBASEQTY, FQTY, FMOTYPE, FMOID, FMOBILLNO, FMOENTRYID, FMOENTRYSEQ, FDOCUMENTSTATUS, FCREATEDATE, FMODIFYDATE, FAPPROVEDATE, FSALEORDERID, FSALEORDERNO, FSALEORDERENTRYID, FSALEORDERENTRYSEQ
         支持字典或列表格式。
@@ -1624,7 +1615,7 @@ class MySQLManager:
                     fsaleorderentryid,
                     fsaleorderentryseq,
                 )
-            elif isinstance(item, list):
+            if isinstance(item, list):
                 if len(item) < 21:
                     logger.warning(f"列表数据项不完整: {len(item)}")
                     return None
@@ -1672,42 +1663,44 @@ class MySQLManager:
                     fsaleorderentryid,
                     fsaleorderentryseq,
                 )
-            else:
-                logger.warning(f"不支持的数据类型: {type(item)}")
-                return None
+            logger.warning(f"不支持的数据类型: {type(item)}")
+            return None
         except Exception as e:
             logger.error(f"准备生产用料清单主表数据失败: {str(e)}")
             return None
 
-    def insert_sales_orders(self, data: List[Dict]) -> int:
+    def insert_sales_orders(self, data: list[dict]) -> int:
         return self.execute_writer("insert_sales_orders", data)
 
-    def insert_sales_returnstock(self, data: List[Dict]) -> int:
+    def insert_sales_returnstock(self, data: list[dict]) -> int:
         return self.execute_writer("insert_sales_returnstock", data)
 
-    def insert_sales_outstock(self, data: List[Dict]) -> int:
+    def insert_sales_outstock(self, data: list[dict]) -> int:
         return self.execute_writer("insert_sales_outstock", data)
 
-    def insert_delivery_notice(self, data: List[Dict]) -> int:
+    def insert_delivery_notice(self, data: list[dict]) -> int:
         return self.execute_writer("insert_delivery_notice", data)
 
-    def insert_prd_instock(self, data: List[Dict]) -> int:
+    def insert_prd_instock(self, data: list[dict]) -> int:
         return self.execute_writer("insert_prd_instock", data)
 
-    def _prepare_prd_instock_data(self, item) -> Optional[Tuple]:
+    def _prepare_prd_instock_data(self, item) -> tuple | None:
         """准备生产入库单数据
         目标字段顺序: FID, FENTRYID, FBILLNO, FDATE, FMATERIALID, FREALQTY, FSRCENTRYSEQ, FSRCBILLNO, FMoEntrySeq, FDOCUMENTSTATUS, FMoBillNo, FModifyDate
         支持字典/列表两种返回结构，并做必要的容错与类型转换
         """
         try:
+            def mark_invalid() -> None:
+                outcome = getattr(self, "_last_write_outcome", None)
+                if outcome is not None:
+                    outcome.invalid = int(getattr(outcome, "invalid", 0) or 0) + 1
+
             if isinstance(item, dict):
                 raw_fid = item.get("FID") or item.get("FId") or item.get("Id")
-                fid = self._to_int_or_none(raw_fid) or 0
+                fid = self._to_int_or_none(raw_fid)
                 # 明细行主键可能返回为 FEntity_FENTRYID 或 FENTRYID
                 raw_fentryid = item.get("FEntity_FENTRYID") or item.get("FENTRYID")
-                fentryid = self._to_int_or_none(raw_fentryid) or 0
-                if fid is None and fentryid is not None:
-                    fid = fentryid
+                fentryid = self._to_int_or_none(raw_fentryid)
                 if fid is None or fentryid is None:
                     billno = item.get("FBILLNO") or item.get("FBillNo")
                     logger.warning(
@@ -1718,8 +1711,13 @@ class MySQLManager:
                         type(raw_fentryid).__name__,
                         billno,
                     )
+                    mark_invalid()
                     return None
-                billno = item.get("FBILLNO") or item.get("FBillNo")
+                billno = self._safe_str(item.get("FBILLNO") or item.get("FBillNo"))
+                if billno is None:
+                    logger.warning("生产入库单单号为空，已跳过: FID=%s FENTRYID=%s", fid, fentryid)
+                    mark_invalid()
+                    return None
                 fdate = self._parse_datetime(item.get("FDATE") or item.get("FDate"))
                 materialid = self._to_int_or_none(item.get("FMATERIALID") or 0) or item.get("FMaterialId")
                 realqty = self._to_decimal_or_none(item.get("FREALQTY") or 0.0) or item.get("FRealQty")
@@ -1745,15 +1743,15 @@ class MySQLManager:
                     fmobillno,
                     fmodify,
                 )
-            elif isinstance(item, list) and len(item) >= 1:
+            if isinstance(item, list) and len(item) >= 1:
                 # 按 FieldKeys 顺序: FID,FEntity_FENTRYID,FBILLNO,FDATE,FMATERIALID,FREALQTY,FSrcEntrySeq,FSRCBILLNO,FMoEntrySeq,FDOCUMENTSTATUS,FMoBillNo,FModifyDate
-                get_item = lambda i: (item[i] if i < len(item) else None)
+                def get_item(i):
+                    return item[i] if i < len(item) else None
+
                 raw_fid = get_item(0)
                 raw_fentryid = get_item(1)
-                fid = self._to_int_or_none(raw_fid) or 0
-                fentryid = self._to_int_or_none(raw_fentryid) or 0
-                if fid is None and fentryid is not None:
-                    fid = fentryid
+                fid = self._to_int_or_none(raw_fid)
+                fentryid = self._to_int_or_none(raw_fentryid)
                 if fid is None or fentryid is None:
                     logger.warning(
                         "生产入库单主键为空，已跳过: FID=%s(%s) FENTRYID=%s(%s) len=%s",
@@ -1763,8 +1761,13 @@ class MySQLManager:
                         type(raw_fentryid).__name__,
                         len(item),
                     )
+                    mark_invalid()
                     return None
-                billno = get_item(2)
+                billno = self._safe_str(get_item(2))
+                if billno is None:
+                    logger.warning("生产入库单单号为空，已跳过: FID=%s FENTRYID=%s", fid, fentryid)
+                    mark_invalid()
+                    return None
                 fdate = self._parse_datetime(get_item(3))
                 materialid = self._to_int_or_none(get_item(4) or 0)
                 realqty = self._to_decimal_or_none(get_item(5) or 0.0)
@@ -1790,19 +1793,18 @@ class MySQLManager:
                     fmobillno,
                     fmodify,
                 )
-            else:
-                return None
+            return None
         except Exception as e:
             logger.error(f"准备生产入库单数据失败: {str(e)}")
             return None
 
-    def insert_forecast_orders(self, data: List[Dict]) -> int:
+    def insert_forecast_orders(self, data: list[dict]) -> int:
         return self.execute_writer("insert_forecast_orders", data)
 
-    def insert_purchase_order(self, data: List[Dict]) -> int:
+    def insert_purchase_order(self, data: list[dict]) -> int:
         return self.execute_writer("insert_purchase_order", data)
 
-    def _prepare_purchase_order_data(self, item) -> Optional[Tuple]:
+    def _prepare_purchase_order_data(self, item) -> tuple | None:
         """准备采购订单数据映射
         API→SQL字段映射：
         FID→FID，FPOOrderEntry_FENTRYID→FENTRYID，FBillNo→FBillNo，FDocumentStatus→FDocumentStatus，
@@ -1850,7 +1852,7 @@ class MySQLManager:
                     fmodify,
                     fapprove,
                 )
-            elif isinstance(item, (list, tuple)) and len(item) >= 14:
+            if isinstance(item, (list, tuple)) and len(item) >= 14:
                 fid = self._to_int_or_none(item[0]) or 0
                 fentryid = self._to_int_or_none(item[1]) or 0
                 billno = item[2]
@@ -1883,15 +1885,14 @@ class MySQLManager:
                     fmodify,
                     fapprove,
                 )
-            else:
-                return None
+            return None
         except Exception:
             return None
 
-    def insert_sub_subreqorder(self, data: List[Dict]) -> int:
+    def insert_sub_subreqorder(self, data: list[dict]) -> int:
         return self.execute_writer("insert_sub_subreqorder", data)
 
-    def _prepare_sub_subreqorder_data(self, item) -> Optional[Tuple]:
+    def _prepare_sub_subreqorder_data(self, item) -> tuple | None:
         try:
             if isinstance(item, dict):
                 fid = self._to_int_or_none(item.get("FID") or 0)
@@ -1932,7 +1933,7 @@ class MySQLManager:
                     fdocstatus,
                     fdescription,
                 )
-            elif isinstance(item, (list, tuple)) and len(item) >= 16:
+            if isinstance(item, (list, tuple)) and len(item) >= 16:
                 fid = self._to_int_or_none(item[0]) or 0
                 fentryid = self._to_int_or_none(item[1]) or 0
                 fsrcbillno = item[2]
@@ -1971,18 +1972,17 @@ class MySQLManager:
                     fdocstatus,
                     fdescription,
                 )
-            else:
-                return None
+            return None
         except Exception:
             return None
 
-    def insert_ap_payable(self, data: List[Dict]) -> int:
+    def insert_ap_payable(self, data: list[dict]) -> int:
         return self.execute_writer("insert_ap_payable", data)
 
-    def insert_ar_receivable(self, data: List[Dict]) -> int:
+    def insert_ar_receivable(self, data: list[dict]) -> int:
         return self.execute_writer("insert_ar_receivable", data)
 
-    def _prepare_ar_receivable_data(self, item) -> Optional[Tuple]:
+    def _prepare_ar_receivable_data(self, item) -> tuple | None:
         """准备应收单数据 - 返回顺序必须与SQL字段顺序一致"""
         try:
             if isinstance(item, dict):
@@ -2027,7 +2027,7 @@ class MySQLManager:
                     fallamountfor_d,
                     fmodifydate,
                 )
-            elif isinstance(item, (list, tuple)) and len(item) >= 15:
+            if isinstance(item, (list, tuple)) and len(item) >= 15:
                 fid = self._to_int_or_none(item[0])
                 fentryid = self._to_int_or_none(item[1])
                 fseq = self._to_int_or_none(item[2])
@@ -2063,8 +2063,7 @@ class MySQLManager:
                     fallamountfor_d,
                     fmodifydate,
                 )
-            else:
-                return None
+            return None
         except Exception:
             return None
 
@@ -2084,7 +2083,7 @@ class MySQLManager:
                     (table,),
                 )
 
-            existing: Dict[str, str] = {}
+            existing: dict[str, str] = {}
             for row in self.cursor.fetchall() or []:
                 if isinstance(row, dict):
                     col = row.get("COLUMN_NAME")
@@ -2151,7 +2150,7 @@ class MySQLManager:
         except Exception as e:
             logger.debug(f"[AP_Payable] 检查/补列失败: {e}")
 
-    def _prepare_ap_payable_data(self, item) -> Optional[Tuple]:
+    def _prepare_ap_payable_data(self, item) -> tuple | None:
         """准备应付单数据 - 返回顺序必须与SQL字段顺序一致"""
         try:
             if isinstance(item, dict):
@@ -2176,7 +2175,9 @@ class MySQLManager:
                 fpriceunitname = self._safe_str(item.get("FPRICEUNITID.FNAME") or item.get("FPRICEUNITID.FName"))
                 fpriceqty = self._to_decimal_or_none(item.get("FPRICEQTY") or 0)
                 fallamountfor_d = self._to_decimal_or_none(item.get("FALLAMOUNTFOR_D") or 0)
-                fnotaxamountfor = self._to_decimal_or_none(item.get("FNOTAXAMOUNTFOR") or 0)
+                fnotaxamountfor = self._to_decimal_or_none(
+                    item.get("FNoTaxAmountFor_D") or item.get("FNOTAXAMOUNTFOR_D") or 0
+                )
                 fdiscountamountfor = self._to_decimal_or_none(item.get("FDISCOUNTAMOUNTFOR") or 0)
                 fentrydiscountrate = self._to_decimal_or_none(item.get("FENTRYDISCOUNTRATE"))
                 fentrytaxrate = self._to_decimal_or_none(item.get("FENTRYTAXRATE"))
@@ -2209,7 +2210,7 @@ class MySQLManager:
                     fentrytaxrate,
                     fmodifydate,
                 )
-            elif isinstance(item, (list, tuple)) and len(item) >= 20:
+            if isinstance(item, (list, tuple)) and len(item) >= 20:
                 fid = self._to_int_or_none(item[0])
                 fentryid = self._to_int_or_none(item[1])
                 fseq = self._to_int_or_none(item[2])
@@ -2255,19 +2256,12 @@ class MySQLManager:
                     fentrytaxrate,
                     fmodifydate,
                 )
-                    fpriceqty,
-                    fallamountfor_d,
-                    fnotaxamountfor,
-                    fdiscountamountfor,
-                    fmodifydate,
-                )
-            else:
-                return None
+            return None
         except Exception:
             return None
 
     # 已移除生产用料清单插入方法
-    def _prepare_sales_order_data(self, item) -> Optional[Tuple]:
+    def _prepare_sales_order_data(self, item) -> tuple | None:
         """准备销售订单数据
         目标字段顺序:
         FID, FENTRYID, FSEQ, FBILLTYPENAME, FBILLNO, FDATE, FCUSTNAME,
@@ -2316,9 +2310,11 @@ class MySQLManager:
                     item.get("FDocumentStatus"),
                     sync_time,
                 )
-            elif isinstance(item, list) and len(item) >= 1:
+            if isinstance(item, list) and len(item) >= 1:
                 # 列表格式数据（金蝶API直接返回的数组格式），容错处理长度不足
-                get_item = lambda i: (item[i] if i < len(item) else None)
+                def get_item(i):
+                    return item[i] if i < len(item) else None
+
                 fid_val = self._to_int_or_none(get_item(0) or 0)
                 fentry_val = get_item(1)
                 if fid_val is None or fentry_val is None:
@@ -2350,9 +2346,8 @@ class MySQLManager:
                     get_item(21),
                     sync_time,
                 )
-            else:
-                logger.warning(f"不支持的数据类型或列表数据项不足: {type(item)}")
-                return None
+            logger.warning(f"不支持的数据类型或列表数据项不足: {type(item)}")
+            return None
         except Exception as e:
             logger.error(f"准备销售订单数据失败: {str(e)}, 数据: {item}")
             return None
@@ -2370,7 +2365,7 @@ class MySQLManager:
                 self.cursor.execute("SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME=?", (table,))
             else:
                 self.cursor.execute("SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME=%s", (table,))
-            existing = set([str(r[0]).strip().upper() for r in self.cursor.fetchall() if r and r[0] is not None])
+            existing = {str(r[0]).strip().upper() for r in self.cursor.fetchall() if r and r[0] is not None}
             to_add = []
             if "FMATERIALID" not in existing:
                 to_add.append("FMATERIALID")
@@ -2650,7 +2645,7 @@ class MySQLManager:
         except Exception as e:
             logger.warning(f"检查或调整 bd_material.FMATERIALGROUP 类型失败: {e}")
 
-    def _prepare_sales_returnstock_data(self, item) -> Optional[Tuple]:
+    def _prepare_sales_returnstock_data(self, item) -> tuple | None:
         """准备销售退货单数据
         按照数据库字段顺序: FENTRYID, FBILLNO, FDATE, FRetcustNAME, FRetcustGROUP, FSalesManNAME,
         FReturnType, FRealQty, FMaterialNAME, FMaterialFNUMBER, FMaterialTYPE,
@@ -2674,7 +2669,7 @@ class MySQLManager:
                     self._parse_date(item.get("FDeliveryDate")),  # FDeliveryDate
                     self._parse_datetime(item.get("FModifyDate")),  # FModifyDate
                 )
-            elif isinstance(item, list) and len(item) >= 13:
+            if isinstance(item, list) and len(item) >= 13:
                 return (
                     item[0],  # FENTRYID
                     item[1],  # FBILLNO
@@ -2691,14 +2686,13 @@ class MySQLManager:
                     self._parse_date(str(item[12]) if item[12] else None),  # FDELIVERYDATE
                     self._parse_datetime(str(item[13]) if len(item) > 13 and item[13] else None),  # FMODIFYDATE
                 )
-            else:
-                logger.warning(f"不支持的数据类型或列表数据项不足: {type(item)}")
-                return None
+            logger.warning(f"不支持的数据类型或列表数据项不足: {type(item)}")
+            return None
         except Exception as e:
             logger.warning(f"准备销售退货单数据失败: {e}")
             return None
 
-    def _prepare_sales_outstock_data(self, item) -> Optional[Tuple]:
+    def _prepare_sales_outstock_data(self, item) -> tuple | None:
         """准备销售出库单数据
         按照数据库字段顺序: FENTRYID, FSEQ, FBILLTYPENAME, FBILLNO, FDATE, FCUSTNAME,
         FSALEORGNAME, FCUSTGROUP, FREALQTY, FMATERIALNAME, FMATERIALNUMBER,
@@ -2728,7 +2722,7 @@ class MySQLManager:
                     sync_time,
                     item.get("FMaterialID.FDescription"),
                 )
-            elif isinstance(item, list) and len(item) >= 15:
+            if isinstance(item, list) and len(item) >= 15:
                 # 列表格式数据（金蝶 API 直接返回的数组格式）
                 # 根据 FieldKeys 的顺序映射到数据库字段
                 sync_time = datetime.now()
@@ -2751,14 +2745,13 @@ class MySQLManager:
                     sync_time,
                     item[15] if len(item) > 15 else None,
                 )
-            else:
-                logger.warning(f"不支持的数据类型或列表数据项不足: {type(item)}")
-                return None
+            logger.warning(f"不支持的数据类型或列表数据项不足: {type(item)}")
+            return None
         except Exception as e:
             logger.error(f"准备销售出库单数据失败: {str(e)}, 数据: {item}")
             return None
 
-    def _prepare_forecast_order_data(self, item) -> Optional[Tuple]:
+    def _prepare_forecast_order_data(self, item) -> tuple | None:
         """准备预测订单数据
         按照数据库字段顺序: FENTRYID, FBILLNO, FFOREORGNAME, FCUSTNAME, FCUSTGROUP, FMATERIALNAME,
         FMATERIALNUMBER, FQTY, FORA_BASE_FNAME, FORA_BASEPROPERTY_CA9, FORA_BASEPROPERTY_UKY,
@@ -2785,7 +2778,7 @@ class MySQLManager:
                     self._parse_datetime(item.get("F_ora_Date")),  # F_ORA_DATE
                     item.get("FMaterialId.FDescription"),  # FDescription
                 )
-            elif isinstance(item, list) and len(item) >= 13:
+            if isinstance(item, list) and len(item) >= 13:
                 # 列表格式数据（金蝶 API 直接返回的数组格式）
                 # 根据 FieldKeys 的顺序映射到数据库字段
                 has_cust_group = len(item) >= 14
@@ -2816,14 +2809,13 @@ class MySQLManager:
                     self._parse_datetime(str(item[ora_date_idx]) if item[ora_date_idx] else None),  # F_ORA_DATE
                     fdescription,  # FDescription
                 )
-            else:
-                logger.warning(f"不支持的数据类型或列表数据项不足: {type(item)}")
-                return None
+            logger.warning(f"不支持的数据类型或列表数据项不足: {type(item)}")
+            return None
         except Exception as e:
             logger.error(f"准备预测订单数据失败: {str(e)}, 数据: {item}")
             return None
 
-    def _prepare_delivery_notice_data(self, item) -> Optional[Tuple]:
+    def _prepare_delivery_notice_data(self, item) -> tuple | None:
         """准备发货通知单数据
         按照数据库字段顺序: FID, FENTRYID, FSEQ, FBILLNO, FDATE, FCUSTNAME,
         FMATERIALNAME, FMATERIALNUMBER, FQTY, FSUMOUTQTY, FCLOSESTATUS_MX, FMODIFYDATE,
@@ -2872,7 +2864,7 @@ class MySQLManager:
                     src_bill_no,
                     sync_time,
                 )
-            elif isinstance(item, list) and len(item) >= 13:
+            if isinstance(item, list) and len(item) >= 13:
                 fid = self._to_int_or_none(item[0]) or 0
                 entry_id = item[1]
                 if entry_id is None:
@@ -2906,17 +2898,16 @@ class MySQLManager:
                     src_bill_no,
                     sync_time,
                 )
-            else:
-                logger.warning(f"不支持的数据类型或列表数据项不足: {type(item)}")
-                return None
+            logger.warning(f"不支持的数据类型或列表数据项不足: {type(item)}")
+            return None
         except Exception as e:
             logger.error(f"准备发货通知单数据失败: {str(e)}, 数据: {item}")
             return None
 
-    def insert_customer_data(self, data: List[Dict]) -> int:
+    def insert_customer_data(self, data: list[dict]) -> int:
         return self.execute_writer("insert_customer_data", data)
 
-    def _prepare_customer_data(self, item) -> Optional[Tuple]:
+    def _prepare_customer_data(self, item) -> tuple | None:
         """准备客户资料数据
         按照数据库字段顺序: FCUSTID, FNUMBER, FNAME, FGROUP, FSELLERNAME,
         FSTAFF, FCUSTLEVEL, FCUSTPYPE, FCREATEDATE, FMODIFYDATE
@@ -2937,7 +2928,7 @@ class MySQLManager:
                     self._format_date_only(item.get("FCreateDate")),  # FCREATEDATE
                     self._parse_datetime(item.get("FModifyDate")),  # FMODIFYDATE
                 )
-            elif isinstance(item, list) and len(item) >= 10:
+            if isinstance(item, list) and len(item) >= 10:
                 # 列表格式数据（金蝶 API 直接返回的数组格式）
                 # 根据 FieldKeys 的顺序映射到数据库字段
                 return (
@@ -2952,17 +2943,16 @@ class MySQLManager:
                     self._format_date_only(str(item[3]) if item[3] else None),  # FCREATEDATE
                     self._parse_datetime(str(item[4]) if item[4] else None),  # FMODIFYDATE
                 )
-            else:
-                logger.warning(f"不支持的数据类型或列表数据项不足: {type(item)}")
-                return None
+            logger.warning(f"不支持的数据类型或列表数据项不足: {type(item)}")
+            return None
         except Exception as e:
             logger.error(f"准备客户资料数据失败: {str(e)}, 数据: {item}")
             return None
 
-    def insert_stk_inventory(self, data: List[Dict]) -> int:
+    def insert_stk_inventory(self, data: list[dict]) -> int:
         return self.execute_writer("insert_stk_inventory", data)
 
-    def _prepare_stk_inventory_data(self, item) -> Optional[Tuple]:
+    def _prepare_stk_inventory_data(self, item) -> tuple | None:
         """准备即时库存数据，兼容字典与列表格式（字段映射）
         动态根据当前配置的 FieldKeys 进行列表到字段名的映射，避免字段顺序或数量变化导致插入失败。
         """
@@ -2998,7 +2988,7 @@ class MySQLManager:
             fk_base = [k.split(".")[-1] for k in fk_list]
 
             # 将输入转换为以字段名为键的字典，便于按数据库列顺序取值
-            row_map: Dict[str, Any] = {}
+            row_map: dict[str, Any] = {}
 
             if isinstance(item, dict):
                 # 直接使用字典（兼容金蝶返回字典格式）
@@ -3055,14 +3045,14 @@ class MySQLManager:
             return None
 
     # 物料主数据插入与映射
-    def insert_bd_material(self, data: List[Dict]) -> int:
+    def insert_bd_material(self, data: list[dict]) -> int:
         return self.execute_writer("insert_bd_material", data)
 
     # 仓库主数据插入与映射
-    def insert_bd_stock(self, data: List[Dict]) -> int:
+    def insert_bd_stock(self, data: list[dict]) -> int:
         return self.execute_writer("insert_bd_stock", data)
 
-    def _prepare_bd_stock_data(self, item) -> Optional[Tuple]:
+    def _prepare_bd_stock_data(self, item) -> tuple | None:
         """准备仓库主数据，兼容字典与列表格式"""
         try:
             if isinstance(item, dict):
@@ -3083,8 +3073,10 @@ class MySQLManager:
                     _s("FFORBIDSTATUS"),  # 6 FFORBIDSTATUS
                     _s("FNAME"),  # 7 FNAME
                 )
-            elif isinstance(item, list):
-                get_item = lambda i, default="": item[i] if i < len(item) and item[i] is not None else default
+            if isinstance(item, list):
+                def get_item(i, default=""):
+                    return item[i] if i < len(item) and item[i] is not None else default
+
                 return (
                     (self._to_int_or_none(get_item(0) or 0)),  # FSTOCKID
                     (self._to_int_or_none(get_item(1) or 0)),  # FMASTERID
@@ -3095,14 +3087,13 @@ class MySQLManager:
                     get_item(6),  # FFORBIDSTATUS
                     get_item(7),  # FNAME
                 )
-            else:
-                logger.warning(f"不支持的数据类型: {type(item)}")
-                return None
+            logger.warning(f"不支持的数据类型: {type(item)}")
+            return None
         except Exception as e:
             logger.error(f"准备仓库数据失败: {str(e)}")
             return None
 
-    def _prepare_bd_material_data(self, item) -> Optional[Tuple]:
+    def _prepare_bd_material_data(self, item) -> tuple | None:
         """准备物料主数据，兼容字典与列表格式"""
         try:
             if isinstance(item, dict):
@@ -3164,8 +3155,10 @@ class MySQLManager:
                     _s("FNAME"),  # 33 FNAME
                     _s("FSPECIFICATION"),  # 34 FSPECIFICATION
                 )
-            elif isinstance(item, list):
-                get_item = lambda i, default="": item[i] if i < len(item) and item[i] is not None else default
+            if isinstance(item, list):
+                def get_item(i, default=""):
+                    return item[i] if i < len(item) and item[i] is not None else default
+
                 return (
                     get_item(0, None),  # FMATERIALID
                     get_item(1),  # FNUMBER
@@ -3203,18 +3196,17 @@ class MySQLManager:
                     get_item(33),  # FNAME
                     get_item(34),  # FSPECIFICATION
                 )
-            else:
-                logger.warning(f"不支持的数据类型: {type(item)}")
-                return None
+            logger.warning(f"不支持的数据类型: {type(item)}")
+            return None
         except Exception as e:
             logger.error(f"准备物料数据失败: {str(e)}")
             return None
 
     # 辅助资料明细插入与映射
-    def insert_bos_assistantdata_detail(self, data: List[Dict]) -> int:
+    def insert_bos_assistantdata_detail(self, data: list[dict]) -> int:
         return self.execute_writer("insert_bos_assistantdata_detail", data)
 
-    def _prepare_bos_assistantdata_detail_data(self, item) -> Optional[Tuple]:
+    def _prepare_bos_assistantdata_detail_data(self, item) -> tuple | None:
         """准备辅助资料明细数据，兼容字典与列表格式"""
         try:
             if isinstance(item, dict):
@@ -3224,25 +3216,24 @@ class MySQLManager:
                     item.get("FDataValue"),
                     self._parse_datetime(item.get("FModifyDate") or item.get("FMODIFYDATE")),
                 )
-            elif isinstance(item, list) and len(item) >= 5:
+            if isinstance(item, list) and len(item) >= 5:
                 return (
                     item[0],  # FId/FID
                     item[1],  # FNumber
                     item[2],  # FDataValue
                     self._parse_datetime(item[3]),  # FModifyDate
                 )
-            else:
-                logger.warning(f"不支持的数据类型或列表数据项不足: {type(item)}")
-                return None
+            logger.warning(f"不支持的数据类型或列表数据项不足: {type(item)}")
+            return None
         except Exception as e:
             logger.error(f"准备辅助资料明细数据失败: {str(e)}")
             return None
 
     # 辅助资料插入与映射（ASSISTANTDATA）
-    def insert_assistantdata(self, data: List[Dict]) -> int:
+    def insert_assistantdata(self, data: list[dict]) -> int:
         return self.execute_writer("insert_assistantdata", data)
 
-    def _prepare_assistantdata_data(self, item) -> Optional[Tuple]:
+    def _prepare_assistantdata_data(self, item) -> tuple | None:
         """准备辅助资料数据，兼容字典与列表格式"""
         try:
             if isinstance(item, dict):
@@ -3252,26 +3243,25 @@ class MySQLManager:
                     item.get("FDataValue"),
                     self._parse_datetime(item.get("FModifyDate") or item.get("FMODIFYDATE")),
                 )
-            elif isinstance(item, list) and len(item) >= 5:
+            if isinstance(item, list) and len(item) >= 5:
                 return (
                     item[0],  # FId/FID
                     item[1],  # FNumber
                     item[2],  # FDataValue
                     self._parse_datetime(item[3]),  # FModifyDate
                 )
-            else:
-                logger.warning(f"不支持的数据类型或列表数据项不足: {type(item)}")
-                return None
+            logger.warning(f"不支持的数据类型或列表数据项不足: {type(item)}")
+            return None
         except Exception as e:
             logger.error(f"准备辅助资料数据失败: {str(e)}")
             return None
 
     # 物料清单插入与映射（ENG_BOM）
-    def insert_eng_bom(self, data: List[Dict]) -> int:
+    def insert_eng_bom(self, data: list[dict]) -> int:
         return self.execute_writer("insert_eng_bom", data)
 
     # 物料清单子项插入与映射（eng_bomchild）
-    def insert_eng_bom_child(self, data: List[Dict]) -> int:
+    def insert_eng_bom_child(self, data: list[dict]) -> int:
         return self.execute_writer("insert_eng_bom_child", data)
 
     def _diagnose_data_type_error(self, table, columns, batch):
@@ -3378,7 +3368,7 @@ class MySQLManager:
             if len(batch) > 20:
                 check_rows.extend(batch[-20:])
 
-            for row_idx, row in enumerate(check_rows):
+            for _row_idx, row in enumerate(check_rows):
                 if len(row) != len(columns):
                     continue
                 for col_idx, value in enumerate(row):
@@ -3412,7 +3402,7 @@ class MySQLManager:
         except Exception as e:
             logger.error(f"字符串截断诊断本身失败: {e}")
 
-    def _prepare_eng_bom_data(self, item) -> Optional[Tuple]:
+    def _prepare_eng_bom_data(self, item) -> tuple | None:
         """准备物料清单数据（32 字段），兼容字典与列表格式"""
         try:
             if isinstance(item, dict):
@@ -3431,7 +3421,7 @@ class MySQLManager:
                     (self._to_decimal_or_none(item.get("FQTY") or 0.0)),  # FQTY
                     (self._to_int_or_none(item.get("FBOMUSE") or 0)),  # FBOMUSE
                 )
-            elif isinstance(item, list) and len(item) >= 12:
+            if isinstance(item, list) and len(item) >= 12:
                 return (
                     item[0],  # FID
                     item[1],  # FMASTERID
@@ -3446,14 +3436,13 @@ class MySQLManager:
                     (self._to_decimal_or_none(item[10]) or 0.0),  # FQTY
                     (self._to_int_or_none(item[11]) or 0),  # FBOMUSE
                 )
-            else:
-                logger.warning(f"不支持的数据类型或列表数据项不足: {type(item)}")
-                return None
+            logger.warning(f"不支持的数据类型或列表数据项不足: {type(item)}")
+            return None
         except Exception as e:
             logger.error(f"准备物料清单数据失败: {str(e)}")
             return None
 
-    def _prepare_eng_bom_child_data(self, item) -> Optional[Tuple]:
+    def _prepare_eng_bom_child_data(self, item) -> tuple | None:
         # ENG_BOM 子项当前按 19 个字段准备数据，FieldKeys 中包含
         # FMATERIALIDCHILD.FNUMBER、FMATERIALIDCHILD.FNAME 和 FMODIFYDATE，
         # 并分别映射到写入列 FCHILDNUMBER、FCHILDNAME、FMODIFYDATE。
@@ -3494,7 +3483,7 @@ class MySQLManager:
                     self._safe_str(item.get("FMATERIALTYPE") or item.get("FTreeEntity_FMATERIALTYPE")),  # FMATERIALTYPE
                     self._parse_datetime(item.get("FMODIFYDATE") or item.get("FModifyDate")),  # FMODIFYDATE
                 )
-            elif isinstance(item, list) and len(item) >= 18:
+            if isinstance(item, list) and len(item) >= 18:
                 # 列表模式下，尝试兼容可能存在的第19个字段（FMODIFYDATE），若无则为None
                 fmodifydate = self._parse_datetime(item[18]) if len(item) > 18 else None
                 return (
@@ -3518,9 +3507,8 @@ class MySQLManager:
                     self._safe_str(item[17]),  # FMATERIALTYPE
                     fmodifydate,  # FMODIFYDATE
                 )
-            else:
-                logger.warning(f"不支持的数据类型或列表数据项不足: {type(item)}")
-                return None
+            logger.warning(f"不支持的数据类型或列表数据项不足: {type(item)}")
+            return None
         except Exception as e:
             logger.error(f"准备物料清单子项数据失败: {str(e)}")
             return None

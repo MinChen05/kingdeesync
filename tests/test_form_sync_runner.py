@@ -415,7 +415,10 @@ class FormSyncRunnerOutcomeTests(unittest.TestCase):
         self.assertLess(call_order.index("insert_database_data"), call_order.index("save_checkpoint"))
         saved_checkpoint = checkpoint_manager.save_checkpoint.call_args.args[0]
         self.assertEqual(saved_checkpoint.next_start_row, 2)
-        self.assertTrue(saved_checkpoint.last_written_record_keys)
+        self.assertEqual(
+            saved_checkpoint.last_written_record_keys,
+            ["FID=1|FBILLNO=SO001", "FID=2|FBILLNO=SO002"],
+        )
 
     def test_metrics_collector_export_run_snapshot_is_scoped_by_run_id(self) -> None:
         collector = MetricsCollector()

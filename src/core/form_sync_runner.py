@@ -650,15 +650,27 @@ class FormSyncRunner:
             return None
 
     def _build_write_summary(self, form_name: str, fetched: int, outcome: WriteOutcome) -> dict[str, int]:
-        deduped = outcome.deduped if form_name.strip() in self.owner.DEDUPLICATION_FORMS else 0
+        is_dedup_table = form_name.strip() in self.owner.DEDUPLICATION_FORMS
+        deduped = outcome.deduped if is_dedup_table else 0
         invalid = outcome.invalid
-        failed = max(0, fetched - invalid - deduped - outcome.inserted)
+        raw_failed = max(0, fetched - invalid - deduped - outcome.inserted)
+        # 如果 failure_details 为空，说明没有真实 SQL 错误，
+        # 差异全部来自写入引擎内部的隐式去重。
+        has_real_failures = bool(outcome.failure_details)
+        if raw_failed > 0 and not has_real_failures:
+            return {
+                "fetched": fetched,
+                "inserted": outcome.inserted,
+                "invalid": invalid,
+                "deduped": deduped + raw_failed,
+                "failed": 0,
+            }
         return {
             "fetched": fetched,
             "inserted": outcome.inserted,
             "invalid": invalid,
             "deduped": deduped,
-            "failed": failed,
+            "failed": raw_failed,
         }
 
     @staticmethod

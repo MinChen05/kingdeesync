@@ -3267,6 +3267,7 @@ class MySQLManager:
                     (_s("FBARCODE") or _s("FBarcode")),  # 32 FBARCODE
                     _s("FNAME"),  # 33 FNAME
                     _s("FSPECIFICATION"),  # 34 FSPECIFICATION
+                    (_s("FDESCRIPTION") or _s("FDescription")),  # 35 FDESCRIPTION
                 )
             if isinstance(item, list):
                 def get_item(i, default=""):
@@ -3308,6 +3309,7 @@ class MySQLManager:
                     get_item(32),  # FBARCODE
                     get_item(33),  # FNAME
                     get_item(34),  # FSPECIFICATION
+                    get_item(35),  # FDESCRIPTION
                 )
             logger.warning(f"不支持的数据类型: {type(item)}")
             return None

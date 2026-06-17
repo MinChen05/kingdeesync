@@ -132,14 +132,14 @@ def insert_bd_material(manager, data: List[Dict]) -> int:
                  FREFSTATUS, F_TMHE_TEXT, F_JY_TEXT, F_JY_TEXT1, F_JY_TEXT2, F_JYX_TEXT1, F_JYX_TEXT2, F_JYX_TEXT4,
                  F_JYX_TEXT3, F_JYX_ASSISTANT, F_JYX_ASSISTANT1, F_JYX_ASSISTANT2, F_JY_QTY, F_JY_QTY1,
                  F_KDKF_HJFS, F_ORA_TEXT_9SB, F_ORA_TEXT_QTR, F_ORA_TEXT_QTR1, FERPCLSID, FCATEGORYID, FTYPEID,
-                 FBARCODE, FNAME, FSPECIFICATION)
+                 FBARCODE, FNAME, FSPECIFICATION, FDESCRIPTION)
                 VALUES (
                     %s, %s, %s, %s, %s, %s, %s,
                     %s, %s, %s, %s, %s,
                     %s, %s, %s, %s, %s, %s, %s, %s,
                     %s, %s, %s, %s, %s, %s,
                     %s, %s, %s, %s, %s, %s,
-                    %s, %s, %s
+                    %s, %s, %s, %s
                 )
                 ON DUPLICATE KEY UPDATE
                     FNUMBER = VALUES(FNUMBER),
@@ -176,6 +176,7 @@ def insert_bd_material(manager, data: List[Dict]) -> int:
                     FBARCODE = VALUES(FBARCODE),
                     FNAME = VALUES(FNAME),
                     FSPECIFICATION = VALUES(FSPECIFICATION),
+                    FDESCRIPTION = VALUES(FDESCRIPTION),
                     SYNC_TIME = CURRENT_TIMESTAMP
                 """
             return manager._batch_insert(sql, data, manager._prepare_bd_material_data)

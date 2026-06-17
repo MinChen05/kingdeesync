@@ -2559,20 +2559,18 @@ class MySQLManager:
                     (table, column),
                 )
 
-            if self.cursor.fetchone():
-                return
+            if not self.cursor.fetchone():
+                if is_sqlserver:
+                    self.cursor.execute(f"ALTER TABLE {table} ADD {column} NVARCHAR(50) NULL")
+                else:
+                    self.cursor.execute(f"ALTER TABLE {table} ADD COLUMN {column} VARCHAR(50) NULL")
 
-            if is_sqlserver:
-                self.cursor.execute(f"ALTER TABLE {table} ADD {column} NVARCHAR(50) NULL")
-            else:
-                self.cursor.execute(f"ALTER TABLE {table} ADD COLUMN {column} VARCHAR(50) NULL")
-
-            try:
-                self.connection.commit()
-            except Exception:
-                pass
-            self._invalidate_table_metadata_cache(table)
-            logger.info(f"已为 {table}.{column} 创建字段")
+                try:
+                    self.connection.commit()
+                except Exception:
+                    pass
+                self._invalidate_table_metadata_cache(table)
+                logger.info(f"已为 {table}.{column} 创建字段")
         except Exception as e:
             logger.debug(f"检查或新增 bd_material 扩展字段失败: {e}")
 

@@ -343,6 +343,31 @@ class BdMaterialDescriptionTests(unittest.TestCase):
         executed = [sql for sql, _ in cursor.execute_calls]
         self.assertFalse(any("ALTER" in sql for sql in executed))
 
+    def test_ensure_additional_columns_still_checks_fdescription_when_ora_text_exists(self) -> None:
+        class FakeCursor:
+            def __init__(self):
+                self._fetchone_result = None
+
+            def execute(self, sql, params=None):
+                pass
+
+            def fetchone(self):
+                return self._fetchone_result
+
+        manager = MySQLManager.__new__(MySQLManager)
+        manager.db_type = "sqlserver"
+        manager.cursor = FakeCursor()
+        manager.connection = Mock()
+        manager._invalidate_table_metadata_cache = Mock()
+
+        # F_ORA_TEXT_9SB already exists → early path should NOT return before FDESCRIPTION check
+        manager.cursor._fetchone_result = ("exists",)
+        manager._ensure_bd_material_fdescription_column = Mock()
+
+        manager._ensure_additional_columns_for_bd_material()
+
+        manager._ensure_bd_material_fdescription_column.assert_called_once()
+
 
 if __name__ == "__main__":
     unittest.main()

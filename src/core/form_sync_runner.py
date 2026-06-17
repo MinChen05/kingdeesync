@@ -654,17 +654,6 @@ class FormSyncRunner:
         deduped = outcome.deduped if is_dedup_table else 0
         invalid = outcome.invalid
         raw_failed = max(0, fetched - invalid - deduped - outcome.inserted)
-        # 只有写入引擎明确报告了去重（deduped > 0），且没有真实 SQL 错误时，
-        # 才将差异归为隐式去重。否则应视为写入失败。
-        has_real_failures = bool(outcome.failure_details)
-        if raw_failed > 0 and not has_real_failures and deduped > 0:
-            return {
-                "fetched": fetched,
-                "inserted": outcome.inserted,
-                "invalid": invalid,
-                "deduped": deduped + raw_failed,
-                "failed": 0,
-            }
         return {
             "fetched": fetched,
             "inserted": outcome.inserted,

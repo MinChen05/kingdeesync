@@ -1,0 +1,18 @@
+workflow: full
+phase: verify
+build_mode: executing-plans
+isolation: branch
+verify_mode: null
+base_ref: 1fa632c6f29f130f14ed630efb0655dc762e4d2c
+design_doc: docs/superpowers/specs/2026-06-17-current-project-analysis-baseline-design.md
+plan: docs/superpowers/plans/2026-06-17-current-project-analysis-baseline.md
+verify_result: pending
+verification_report: null
+branch_status: pending
+created_at: 2026-06-17
+verified_at: null
+archived: false
+handoff_context: openspec/changes/analyze-current-project/.comet/handoff/design-context.json
+handoff_hash: 3edddf6844637af907af8d19aeb4333d99df5d7dc39222559861bafd9dc21f21
+build_command: powershell.exe -NoProfile -ExecutionPolicy Bypass -File 'D:\Kingdee\openspec\changes\analyze-current-project\.comet\verify-build.ps1'
+verify_command: powershell.exe -NoProfile -ExecutionPolicy Bypass -File 'D:\Kingdee\openspec\changes\analyze-current-project\.comet\verify-build.ps1'

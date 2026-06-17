@@ -2,6 +2,8 @@
 comet_change: analyze-current-project
 role: technical-design
 canonical_spec: openspec
+archived-with: 2026-06-17-analyze-current-project
+status: final
 ---
 
 # 当前项目分析基线技术设计

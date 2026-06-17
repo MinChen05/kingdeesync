@@ -2,6 +2,7 @@
 change: analyze-current-project
 design-doc: docs/superpowers/specs/2026-06-17-current-project-analysis-baseline-design.md
 base-ref: 1fa632c6f29f130f14ed630efb0655dc762e4d2c
+archived-with: 2026-06-17-analyze-current-project
 ---
 
 # Current Project Analysis Baseline Implementation Plan
@@ -13,8 +14,6 @@ base-ref: 1fa632c6f29f130f14ed630efb0655dc762e4d2c
 **Architecture:** This plan does not change runtime architecture. It finalizes OpenSpec artifacts, the Superpowers Design Doc, Comet state, and verification evidence while preserving the existing Python sync architecture unchanged.
 
 **Tech Stack:** Python 3.11, OpenSpec CLI, Comet scripts, Superpowers docs, unittest.
-
----
 
 ## File Structure
 

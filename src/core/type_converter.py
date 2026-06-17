@@ -62,7 +62,11 @@ class TypeConverter:
                 source_parts.append(f"TRY_CONVERT(DATETIME, ?) AS {c}")
             elif dtype in self.TEXT_TYPES:
                 if max_len == -1:
-                    cast_type = f"{dtype.upper()}(MAX)"
+                    # char/nchar 不支持 MAX 语法，回退到 NVARCHAR(MAX)
+                    if dtype in ("char", "nchar"):
+                        cast_type = "NVARCHAR(MAX)"
+                    else:
+                        cast_type = f"{dtype.upper()}(MAX)"
                 elif max_len is not None and int(max_len) > 0:
                     cast_type = f"{dtype.upper()}({int(max_len)})"
                 else:

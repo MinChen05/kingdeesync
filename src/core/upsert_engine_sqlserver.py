@@ -444,7 +444,7 @@ class UpsertEngineSqlServer:
                         try:
                             # 对于 eng_bomchild 等表，fast_executemany 可能会导致 8114 (varchar to numeric) 转换错误
                             # 因此针对该表显式禁用 fast_executemany，以兼容模式插入
-                            if base_name.strip().lower() in ("eng_bomchild", "prd_ppbomentry", "sub_subreqorder"):
+                            if base_name.strip().lower() in ("eng_bomchild", "prd_ppbomentry", "sub_subreqorder", "bd_material"):
                                 manager.cursor.fast_executemany = False
                                 logger.debug(
                                     f"[STAGE] 针对表 {base_name} 禁用 fast_executemany 以避免驱动类型转换错误"
@@ -781,9 +781,9 @@ class UpsertEngineSqlServer:
                     try:
                         if hasattr(manager.connection, "autocommit"):
                             manager.connection.autocommit = False
-                        # 普通路径：ODBC Driver 18 禁用 fast_executemany 以避免崩溃；eng_bomchild 禁用以避免 8114 错误
+                        # 普通路径：ODBC Driver 18 禁用 fast_executemany 以避免崩溃；eng_bomchild/bd_material 禁用以避免 8114/截断错误
                         if hasattr(manager.cursor, "fast_executemany"):
-                            if str(table).strip().lower() in ("eng_bomchild",) or is_d18:
+                            if str(table).strip().lower() in ("eng_bomchild", "bd_material") or is_d18:
                                 manager.cursor.fast_executemany = False
                                 logger.debug(f"针对表 {table} 禁用 fast_executemany (is_d18={is_d18})")
                             else:
@@ -968,7 +968,7 @@ class UpsertEngineSqlServer:
                                 if hasattr(local_conn, "autocommit"):
                                     local_conn.autocommit = False
                                 if hasattr(local_cursor, "fast_executemany"):
-                                    if base_name == "sub_subreqorder" or is_d18:
+                                    if base_name in ("sub_subreqorder", "bd_material") or is_d18:
                                         local_cursor.fast_executemany = False
                                     else:
                                         local_cursor.fast_executemany = True

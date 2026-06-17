@@ -2576,6 +2576,65 @@ class MySQLManager:
         except Exception as e:
             logger.debug(f"检查或新增 bd_material 扩展字段失败: {e}")
 
+        self._ensure_bd_material_fdescription_column()
+
+    def _ensure_bd_material_fdescription_column(self) -> None:
+        """确保 bd_material.FDESCRIPTION 为可存长文本的列（SQL Server: NVARCHAR(MAX)）。"""
+        try:
+            table = "bd_material"
+            column = "FDESCRIPTION"
+            is_sqlserver = getattr(self, "db_type", "mysql") == "sqlserver"
+
+            if is_sqlserver:
+                self.cursor.execute(
+                    "SELECT DATA_TYPE, CHARACTER_MAXIMUM_LENGTH FROM INFORMATION_SCHEMA.COLUMNS "
+                    "WHERE TABLE_NAME=? AND COLUMN_NAME=?",
+                    (table, column),
+                )
+            else:
+                self.cursor.execute(
+                    "SELECT DATA_TYPE, CHARACTER_MAXIMUM_LENGTH FROM INFORMATION_SCHEMA.COLUMNS "
+                    "WHERE TABLE_NAME=%s AND COLUMN_NAME=%s",
+                    (table, column),
+                )
+
+            row = self.cursor.fetchone()
+            if not row:
+                # 缺列，新增
+                if is_sqlserver:
+                    self.cursor.execute(f"ALTER TABLE {table} ADD {column} NVARCHAR(MAX) NULL")
+                else:
+                    self.cursor.execute(f"ALTER TABLE {table} ADD COLUMN {column} TEXT NULL")
+                try:
+                    self.connection.commit()
+                except Exception:
+                    pass
+                self._invalidate_table_metadata_cache(table)
+                logger.info(f"已为 {table}.{column} 创建 NVARCHAR(MAX) 列")
+                return
+
+            # 列已存在，检查是否需要扩宽
+            dtype = str(row[0]).strip().lower() if row[0] else ""
+            max_len = row[1]
+
+            if dtype in ("nvarchar", "varchar") and max_len == -1:
+                # 已是 MAX，无需变更
+                return
+
+            # 需要扩宽：转为 NVARCHAR(MAX)
+            if is_sqlserver:
+                self.cursor.execute(f"ALTER TABLE {table} ALTER COLUMN {column} NVARCHAR(MAX) NULL")
+            else:
+                self.cursor.execute(f"ALTER TABLE {table} MODIFY COLUMN {column} TEXT NULL")
+            try:
+                self.connection.commit()
+            except Exception:
+                pass
+            self._invalidate_table_metadata_cache(table)
+            logger.info(f"已将 {table}.{column} 扩宽为 NVARCHAR(MAX)")
+        except Exception as e:
+            logger.warning(f"检查或扩宽 bd_material.FDESCRIPTION 失败: {e}")
+
     def _ensure_additional_columns_for_eng_bomchild(self) -> None:
         """确保 eng_bomchild 存在当前同步依赖的扩展字段。"""
         try:

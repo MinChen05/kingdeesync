@@ -245,6 +245,183 @@ class UpsertEngineSqlServerTests(unittest.TestCase):
         self.assertEqual(inserted, 1)
         self.assertEqual(len(manager.cursor.executemany_calls[0][1]), 1)
 
+    def test_ar_receivable_staging_allows_omitted_sync_time(self) -> None:
+        manager = FakeSqlServerManager()
+        manager.config["force_staging_tables"] = "ar_receivable"
+        manager.cursor._fetchone_queue = [(1,)]
+        manager._parse_insert_sql = lambda sql: ("AR_receivable", ["FID", "FENTRYID", "FSEQ", "FBILLNO"])
+        manager._get_table_columns_info = lambda table: {
+            "FID": "bigint",
+            "FENTRYID": "bigint",
+            "FSEQ": "int",
+            "FBILLNO": "nvarchar",
+            "SYNC_TIME": "datetime",
+        }
+        manager._get_primary_key = lambda table: "FENTRYID"
+        engine = UpsertEngineSqlServer(manager)
+
+        inserted = engine.execute(
+            sql="INSERT INTO AR_receivable (FID, FENTRYID, FSEQ, FBILLNO) VALUES (%s, %s, %s, %s)",
+            values=[[10, 1001, 1, "AR20260422001"]],
+            batch_size=10000,
+            commit_every_n_batches=0,
+        )
+
+        self.assertEqual(inserted, 1)
+        executed_sql = "\n".join(sql for sql, _params in manager.cursor.execute_calls)
+        self.assertIn("ALTER COLUMN SYNC_TIME DATETIME NULL", executed_sql)
+
+    def test_ar_receivable_staging_uses_type_safe_source_conversions(self) -> None:
+        manager = FakeSqlServerManager()
+        manager.config["force_staging_tables"] = "ar_receivable"
+        manager.cursor._fetchone_queue = [(1,)]
+        manager.cursor._fetchall_queue = [
+            [
+                ("FID", "bigint", None),
+                ("FENTRYID", "bigint", None),
+                ("FDATE", "date", None),
+                ("FTAXPRICE", "numeric", None),
+                ("FPRICEQTY", "decimal", None),
+                ("FALLAMOUNTFOR_D", "decimal", None),
+                ("FModifyDate", "datetime2", None),
+                ("SYNC_TIME", "datetime", None),
+            ]
+        ]
+        manager._parse_insert_sql = lambda sql: (
+            "AR_receivable",
+            ["FID", "FENTRYID", "FDATE", "FTAXPRICE", "FPRICEQTY", "FALLAMOUNTFOR_D", "FModifyDate"],
+        )
+        manager._get_table_columns_info = lambda table: {
+            "FID": "bigint",
+            "FENTRYID": "bigint",
+            "FDATE": "date",
+            "FTAXPRICE": "numeric",
+            "FPRICEQTY": "decimal",
+            "FALLAMOUNTFOR_D": "decimal",
+            "FMODIFYDATE": "datetime2",
+            "SYNC_TIME": "datetime",
+        }
+        manager._get_primary_key = lambda table: "FENTRYID"
+        engine = UpsertEngineSqlServer(manager)
+
+        inserted = engine.execute(
+            sql=(
+                "INSERT INTO AR_receivable "
+                "(FID, FENTRYID, FDATE, FTAXPRICE, FPRICEQTY, FALLAMOUNTFOR_D, FModifyDate) "
+                "VALUES (%s, %s, %s, %s, %s, %s, %s)"
+            ),
+            values=[[10, 1001, "2026-04-22", "12.34", "2", "24.68", "2026-04-22 10:00:00"]],
+            batch_size=10000,
+            commit_every_n_batches=0,
+        )
+
+        self.assertEqual(inserted, 1)
+        staging_sql = manager.cursor.executemany_calls[0][0]
+        self.assertIn("INSERT INTO [dbo].[__stage_", staging_sql)
+        self.assertIn("TRY_CONVERT(DATETIME, ?) AS FDATE", staging_sql)
+        self.assertIn("TRY_CONVERT(DECIMAL(23,10), CONVERT(NVARCHAR(64), ?)), 0) AS FTAXPRICE", staging_sql)
+        self.assertIn("TRY_CONVERT(DECIMAL(23,10), CONVERT(NVARCHAR(64), ?)), 0) AS FPRICEQTY", staging_sql)
+        self.assertIn("TRY_CONVERT(DATETIME, ?) AS FModifyDate", staging_sql)
+
+    def test_ap_payable_uses_manager_column_types_when_information_schema_type_map_is_empty(self) -> None:
+        manager = FakeSqlServerManager()
+        manager.config["force_staging_tables"] = "ap_payable"
+        manager.cursor._fetchone_queue = [(1,)]
+        manager.cursor._fetchall_queue = [[]]
+        manager._parse_insert_sql = lambda sql: (
+            "AP_Payable",
+            ["FID", "FENTRYID", "FDATE", "FPRICEQTY", "FALLAMOUNTFOR_D", "FModifyDate"],
+        )
+        manager._get_table_columns_info = lambda table: {
+            "FID": "bigint",
+            "FENTRYID": "bigint",
+            "FDATE": "datetime",
+            "FPRICEQTY": "numeric",
+            "FALLAMOUNTFOR_D": "numeric",
+            "FMODIFYDATE": "datetime",
+            "SYNC_TIME": "datetime",
+        }
+        manager._get_primary_key = lambda table: "FENTRYID"
+        engine = UpsertEngineSqlServer(manager)
+
+        inserted = engine.execute(
+            sql=(
+                "INSERT INTO AP_Payable "
+                "(FID, FENTRYID, FDATE, FPRICEQTY, FALLAMOUNTFOR_D, FModifyDate) "
+                "VALUES (%s, %s, %s, %s, %s, %s)"
+            ),
+            values=[[10, 1001, "2026-04-22", "2", "24.68", "2026-04-22 10:00:00"]],
+            batch_size=10000,
+            commit_every_n_batches=0,
+        )
+
+        self.assertEqual(inserted, 1)
+        staging_sql = manager.cursor.executemany_calls[0][0]
+        self.assertIn("TRY_CONVERT(DATETIME, ?) AS FDATE", staging_sql)
+        self.assertIn("TRY_CONVERT(DECIMAL(23,10), CONVERT(NVARCHAR(64), ?)), 0) AS FPRICEQTY", staging_sql)
+        self.assertIn("TRY_CONVERT(DATETIME, ?) AS FModifyDate", staging_sql)
+
+    def test_ap_payable_parameter_merge_uses_manager_column_type_fallback(self) -> None:
+        manager = FakeSqlServerManager()
+        manager.cursor._fetchall_queue = [[]]
+        manager._parse_insert_sql = lambda sql: (
+            "AP_Payable",
+            ["FID", "FENTRYID", "FDATE", "FPRICEQTY", "FALLAMOUNTFOR_D", "FModifyDate"],
+        )
+        manager._get_table_columns_info = lambda table: {
+            "FID": "bigint",
+            "FENTRYID": "bigint",
+            "FDATE": "datetime",
+            "FPRICEQTY": "numeric",
+            "FALLAMOUNTFOR_D": "numeric",
+            "FMODIFYDATE": "datetime",
+            "SYNC_TIME": "datetime",
+        }
+        manager._get_primary_key = lambda table: "FENTRYID"
+        engine = UpsertEngineSqlServer(manager)
+
+        inserted = engine.execute(
+            sql=(
+                "INSERT INTO AP_Payable "
+                "(FID, FENTRYID, FDATE, FPRICEQTY, FALLAMOUNTFOR_D, FModifyDate) "
+                "VALUES (%s, %s, %s, %s, %s, %s)"
+            ),
+            values=[[10, 1001, "2026-04-22", "2", "24.68", "2026-04-22 10:00:00"]],
+            batch_size=10000,
+            commit_every_n_batches=0,
+        )
+
+        self.assertEqual(inserted, 1)
+        merge_sql = manager.cursor.executemany_calls[0][0]
+        self.assertIn("TRY_CONVERT(DATETIME, ?) AS FDATE", merge_sql)
+        self.assertIn("TRY_CONVERT(DECIMAL(23,10), CONVERT(NVARCHAR(64), ?)), 0) AS FALLAMOUNTFOR_D", merge_sql)
+
+    def test_text_fallback_uses_max_length_when_information_schema_map_is_empty(self) -> None:
+        manager = FakeSqlServerManager()
+        manager.cursor._fetchall_queue = [[]]
+        manager._parse_insert_sql = lambda sql: (
+            "BD_Material",
+            ["FMATERIALID", "F_JY_TEXT2"],
+        )
+        manager._get_table_columns_info = lambda table: {
+            "FMATERIALID": "bigint",
+            "F_JY_TEXT2": "nvarchar",
+            "SYNC_TIME": "datetime",
+        }
+        manager._get_primary_key = lambda table: "FMATERIALID"
+        engine = UpsertEngineSqlServer(manager)
+
+        inserted = engine.execute(
+            sql="INSERT INTO BD_Material (FMATERIALID, F_JY_TEXT2) VALUES (%s, %s)",
+            values=[[3, "X" * 600]],
+            batch_size=10000,
+            commit_every_n_batches=0,
+        )
+
+        self.assertEqual(inserted, 1)
+        merge_sql = manager.cursor.executemany_calls[0][0]
+        self.assertIn("TRY_CONVERT(NVARCHAR(MAX), ?) AS F_JY_TEXT2", merge_sql)
+
     def test_eng_bomchild_staging_sql_includes_child_name(self) -> None:
         manager = FakeSqlServerManager()
         manager.config["force_staging_tables"] = "eng_bomchild"

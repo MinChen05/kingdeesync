@@ -87,7 +87,7 @@ class SettingsService:
         kd_ok = bool(kingdee_client.test_connection())
         db_ok = bool(mysql_manager.test_connection())
 
-        message = f"??: {'??' if kd_ok else '??'}\n???: {'??' if db_ok else '??'}"
+        message = f"金蝶: {'成功' if kd_ok else '失败'}\n数据库: {'成功' if db_ok else '失败'}"
         return kd_ok, db_ok, message
 
 

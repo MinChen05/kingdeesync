@@ -18,5 +18,6 @@
     "采购订单":           { "table": "PUR_PurchaseOrder",    "insert_method": "insert_purchase_order" },
     "委外订单":           { "table": "sub_subreqorder",      "insert_method": "insert_sub_subreqorder" },
     "科目余额表":         { "table": "GL_RPT_AccountBalance", "insert_method": null },
-    "应付单":             { "table": "AP_Payable",           "insert_method": "insert_ap_payable" }
+    "应付单":             { "table": "AP_Payable",           "insert_method": "insert_ap_payable" },
+    "应收单":             { "table": "AR_receivable",        "insert_method": "insert_ar_receivable" }
 }

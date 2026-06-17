@@ -69,15 +69,15 @@ class FormConfigPage(Win11PageScaffold):
     def _init_action_controls(self) -> None:
         self.search_box = QLineEdit()
         self.search_box.setProperty("td", "win11-input")
-        self.search_box.setPlaceholderText("鎸夎〃鍗曞悕绉扮瓫閫?")
+        self.search_box.setPlaceholderText("按表单名称筛选")
         self.search_box.textChanged.connect(self.filter_cards)
 
-        self.top_status_lbl = QLabel("姝ｅ湪鍔犺浇琛ㄥ崟...")
+        self.top_status_lbl = QLabel("正在加载表单...")
         self.top_status_lbl.setProperty("ui", "win11-meta-text")
         self.top_status_lbl.setProperty("tone", "neutral")
         self.top_status_lbl.setWordWrap(True)
 
-        self.btn_select_all = QPushButton("鍏ㄩ€?")
+        self.btn_select_all = QPushButton("全选")
         self.btn_select_all.setProperty("class", "secondary")
         self.btn_select_all.setFixedHeight(36)
         self.btn_select_all.clicked.connect(self.toggle_all)
@@ -141,28 +141,8 @@ class FormConfigPage(Win11PageScaffold):
             "先搜索，再对当前结果中可见的表单执行批量选择。",
         )
 
-        card.content_layout.addWidget(self.top_status_lbl)
-        return card
-
         row = QHBoxLayout()
         row.setSpacing(12)
-
-        self.search_box = QLineEdit()
-        self.search_box.setProperty("td", "win11-input")
-        self.search_box.setPlaceholderText("按表单名称筛选")
-        self.search_box.setFixedWidth(280)
-        self.search_box.textChanged.connect(self.filter_cards)
-
-        self.top_status_lbl = QLabel("正在加载表单...")
-        self.top_status_lbl.setProperty("ui", "win11-meta-text")
-        self.top_status_lbl.setProperty("tone", "neutral")
-        self.top_status_lbl.setWordWrap(True)
-
-        self.btn_select_all = QPushButton("全选")
-        self.btn_select_all.setProperty("class", "secondary")
-        self.btn_select_all.setFixedHeight(36)
-        self.btn_select_all.setFixedWidth(112)
-        self.btn_select_all.clicked.connect(self.toggle_all)
 
         row.addWidget(self.search_box)
         row.addWidget(self.top_status_lbl, 1)

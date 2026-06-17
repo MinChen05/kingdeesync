@@ -369,6 +369,7 @@ BUSINESS_TABLE_ORDER: dict[str, list[str]] = {
         "FCUSTOMERNAME",
         "FSETACCOUNTTYPE",
         "FBASEPROPERTY1",
+        "FSOURCEBILLNO",
         "FMATERIALNUMBER",
         "FMATERIALNAME",
         "FTAXPRICE",

@@ -497,28 +497,36 @@ class KingdeeAPIClient:
                 page_rows, errors = self._extract_business_rows(result)
                 if errors:
                     logger.error("查询失败: %s", errors)
-                    if self._is_session_error(errors) and not session_retry_used:
-                        logger.warning("[%s] 当前页检测到会话异常，尝试重登后重试...", form_id)
-                        self.logout(force=True)
-                        if self.login():
-                            session_retry_used = True
-                            page_index -= 1
-                            continue
+                    if self._is_session_error(errors):
+                        if session_retry_used < 3:  # 允许最多3次会话重试
+                            logger.warning("[%s] 当前页检测到会话异常，尝试重登后重试... (第%d次)", form_id, session_retry_used + 1)
+                            self.logout(force=True)
+                            time.sleep(2)  # 等待2秒再重登
+                            if self.login():
+                                session_retry_used += 1
+                                page_index -= 1
+                                continue
+                        else:
+                            logger.error("[%s] 会话重试次数已达上限，放弃查询", form_id)
                     return None
 
                 embedded_errors = self._extract_embedded_row_errors(page_rows)
                 if embedded_errors:
                     logger.error("查询结果包含错误响应: %s", embedded_errors)
-                    if self._is_session_error(embedded_errors) and not session_retry_used:
-                        logger.warning("[%s] 当前页检测到会话异常，尝试重登后重试...", form_id)
-                        self.logout(force=True)
-                        if self.login():
-                            session_retry_used = True
-                            page_index -= 1
-                            continue
+                    if self._is_session_error(embedded_errors):
+                        if session_retry_used < 3:  # 允许最多3次会话重试
+                            logger.warning("[%s] 当前页检测到会话异常，尝试重登后重试... (第%d次)", form_id, session_retry_used + 1)
+                            self.logout(force=True)
+                            time.sleep(2)  # 等待2秒再重登
+                            if self.login():
+                                session_retry_used += 1
+                                page_index -= 1
+                                continue
+                        else:
+                            logger.error("[%s] 会话重试次数已达上限，放弃查询", form_id)
                     return None
 
-                session_retry_used = False
+                session_retry_used = 0  # 成功时重置重试计数
 
                 # 统一尝试映射：如果数据是列表且配置了 FieldKeys，则转换为字典
                 if page_rows and isinstance(page_rows[0], list):

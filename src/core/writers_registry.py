@@ -25,6 +25,7 @@ from src.core.production_writer import (
 )
 from src.core.sales_writer import (
     insert_ap_payable,
+    insert_ar_receivable,
     insert_delivery_notice,
     insert_forecast_orders,
     insert_purchase_order,
@@ -45,6 +46,7 @@ WRITER_REGISTRY: Dict[str, WriterFunc] = {
     "insert_purchase_order": insert_purchase_order,
     "insert_sub_subreqorder": insert_sub_subreqorder,
     "insert_ap_payable": insert_ap_payable,
+    "insert_ar_receivable": insert_ar_receivable,
     "insert_production_orders": insert_production_orders,
     "insert_prd_moentry": insert_prd_moentry,
     "insert_prd_ppbom": insert_prd_ppbom,

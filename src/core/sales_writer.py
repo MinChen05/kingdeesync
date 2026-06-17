@@ -500,3 +500,61 @@ def insert_ap_payable(manager, data: List[Dict]) -> int:
         """
         return manager._batch_insert(sql, data, manager._prepare_ap_payable_data)
 
+
+def insert_ar_receivable(manager, data: List[Dict]) -> int:
+        """
+        插入应收单数据
+
+        字段映射:
+        FID -> FID
+        FEntityDetail_FENTRYID -> FENTRYID
+        FEntityDetail_FSEQ -> FSEQ
+        FBillTypeID.FNAME -> FBILLNAME
+        FBillNo -> FBILLNO
+        FDATE -> FDATE
+        FCUSTOMERID.FNAME -> FCUSTOMERNAME
+        FSETACCOUNTTYPE -> FSETACCOUNTTYPE
+        F_ora_BaseProperty1 -> FBASEPROPERTY1
+        FSourceBillNo -> FSOURCEBILLNO
+        FMATERIALID.FNUMBER -> FMATERIALNUMBER
+        FMATERIALID.FNAME -> FMATERIALNAME
+        FTaxPrice -> FTAXPRICE
+        FPriceQty -> FPRICEQTY
+        FALLAMOUNTFOR_D -> FALLAMOUNTFOR_D
+        FModifyDate -> FModifyDate
+        """
+        if not data:
+            return 0
+
+        try:
+            manager._ensure_additional_columns_for_ar_receivable()
+        except Exception as e:
+            logger.warning(f"[AR_receivable] 自动检查/补列失败（可忽略）: {e}")
+
+        sql = """
+            INSERT INTO AR_receivable (
+                FID, FENTRYID, FSEQ, FBILLNAME, FBILLNO, FDATE, FCUSTOMERNAME, FSETACCOUNTTYPE,
+                FBASEPROPERTY1, FSOURCEBILLNO, FMATERIALNUMBER, FMATERIALNAME, FTAXPRICE, FPRICEQTY, FALLAMOUNTFOR_D, FModifyDate
+            ) VALUES (
+                %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s
+            )
+            ON DUPLICATE KEY UPDATE
+                FID=VALUES(FID),
+                FSEQ=VALUES(FSEQ),
+                FBILLNAME=VALUES(FBILLNAME),
+                FBILLNO=VALUES(FBILLNO),
+                FDATE=VALUES(FDATE),
+                FCUSTOMERNAME=VALUES(FCUSTOMERNAME),
+                FSETACCOUNTTYPE=VALUES(FSETACCOUNTTYPE),
+                FBASEPROPERTY1=VALUES(FBASEPROPERTY1),
+                FSOURCEBILLNO=VALUES(FSOURCEBILLNO),
+                FMATERIALNUMBER=VALUES(FMATERIALNUMBER),
+                FMATERIALNAME=VALUES(FMATERIALNAME),
+                FTAXPRICE=VALUES(FTAXPRICE),
+                FPRICEQTY=VALUES(FPRICEQTY),
+                FALLAMOUNTFOR_D=VALUES(FALLAMOUNTFOR_D),
+                FModifyDate=VALUES(FModifyDate),
+                SYNC_TIME=CURRENT_TIMESTAMP
+        """
+        return manager._batch_insert(sql, data, manager._prepare_ar_receivable_data)
+

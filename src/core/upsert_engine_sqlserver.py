@@ -53,6 +53,57 @@ class UpsertEngineSqlServer:
     def _normalize_column_name(self, column: Any) -> str:
         return str(column).strip().upper()
 
+    def _make_stage_sync_time_nullable(self, manager: MySQLManager, table: str, stage_ref: str, columns: list[str]) -> None:
+        if any(self._normalize_column_name(column) == "SYNC_TIME" for column in columns):
+            return
+        try:
+            if not manager._table_has_column(table, "SYNC_TIME"):
+                return
+        except Exception:
+            return
+
+        sync_time_type = "DATETIME"
+        try:
+            data_type = str(manager._get_table_columns_info(table).get("SYNC_TIME", "")).strip().upper()
+            if data_type in {"DATE", "DATETIME", "DATETIME2", "SMALLDATETIME"}:
+                sync_time_type = data_type
+        except Exception:
+            pass
+
+        try:
+            manager.cursor.execute(f"ALTER TABLE {stage_ref} ALTER COLUMN SYNC_TIME {sync_time_type} NULL")
+        except Exception as exc:
+            self.logger.warning("[STAGE] 调整阶段表 SYNC_TIME 可空失败: %s", exc)
+
+    def _build_type_safe_stage_insert_sql(
+        self,
+        base_name: str,
+        stage_ref: str,
+        columns: list[str],
+        col_type_map: dict[str, tuple[str, int | None]] | None = None,
+    ) -> str:
+        col_type_map = col_type_map or self.type_converter.get_column_type_map(base_name)
+        source_parts = self.type_converter.build_source_conversion_parts(columns, col_type_map)
+        return (
+            f"INSERT INTO {stage_ref} ({', '.join(columns)}) "
+            f"SELECT {', '.join(source_parts)}"
+        )
+
+    def _get_column_type_map(self, table_name: str) -> dict[str, tuple[str, int | None]]:
+        col_type_map = self.type_converter.get_column_type_map(table_name)
+        if col_type_map:
+            return col_type_map
+        try:
+            fallback = self.manager._get_table_columns_info(table_name)
+        except Exception:
+            fallback = {}
+        type_map = {}
+        for column, data_type in fallback.items():
+            dtype = str(data_type).lower()
+            max_len = -1 if dtype in self.type_converter.TEXT_TYPES else None
+            type_map[str(column).upper()] = (dtype, max_len)
+        return type_map
+
     def execute(
         self,
         sql: str,
@@ -161,9 +212,10 @@ class UpsertEngineSqlServer:
             insert_vals = [f"s.{c}" for c in columns]
             if identity_col:
                 # INSERT 时也避开标识列，交由 SQL Server 自动生成，避免 544/8102 错误
+                # insert_vals 后续可能追加 GETDATE() 等表达式，保持非严格配对只处理原始列。
                 insert_pairs = [
                     (c, v)
-                    for c, v in zip(insert_cols, insert_vals)
+                    for c, v in zip(insert_cols, insert_vals, strict=False)
                     if c.strip().upper() != identity_col.strip().upper()
                 ]
                 if insert_pairs:
@@ -180,7 +232,7 @@ class UpsertEngineSqlServer:
             on_clause = " AND ".join([f"t.{c} = s.{c}" for c in pk_cols])
             source_sql = f"USING (VALUES ({', '.join(['?' for _ in columns])})) AS s({', '.join(columns)}) "
             # 对所有表启用类型安全转换：将非数值字符串（如 'C'）安全转换为数值，避免 8114 错误
-            col_type_map = self.type_converter.get_column_type_map(base_name)
+            col_type_map = self._get_column_type_map(base_name)
             source_parts = self.type_converter.build_source_conversion_parts(columns, col_type_map)
             source_sql = f"USING (SELECT {', '.join(source_parts)}) AS s({', '.join(columns)}) "
             merge_sql = (
@@ -335,6 +387,7 @@ class UpsertEngineSqlServer:
                             # 即使不存在也忽略
                             pass
                         manager.cursor.execute(create_stage_sql)
+                        self._make_stage_sync_time_nullable(manager, table, stage_ref, columns)
                         # 显式验证阶段表已创建，避免后续加载时报“对象名无效”
                         try:
                             manager.cursor.execute(f"SELECT OBJECT_ID(N'dbo.__stage_{safe_name}_{suffix}', N'U')")
@@ -498,7 +551,12 @@ class UpsertEngineSqlServer:
                                     f"TRY_CAST(? AS DATETIME)"  # FMODIFYDATE
                                 )
                             else:
-                                insert_stage_sql = f"INSERT INTO {stage_ref} ({', '.join(columns)}) VALUES ({', '.join(['?' for _ in columns])})"
+                                insert_stage_sql = self._build_type_safe_stage_insert_sql(
+                                    base_name,
+                                    stage_ref,
+                                    columns,
+                                    col_type_map,
+                                )
                             stage_insert_cols = columns[:]
                         try:
                             if identity_col and any(
@@ -565,6 +623,7 @@ class UpsertEngineSqlServer:
                                         except Exception:
                                             pass
                                         manager.cursor.execute(create_stage_sql)
+                                        self._make_stage_sync_time_nullable(manager, table, stage_ref, columns)
                                         # 再次验证并提交创建
                                         manager.cursor.execute(
                                             f"SELECT OBJECT_ID(N'dbo.__stage_{safe_name}_{suffix}', N'U')"
@@ -835,7 +894,7 @@ class UpsertEngineSqlServer:
                                                     else (manager._hashable_key(row[pk_idx_stage[0]]),)
                                                 )
                                             except Exception:
-                                                key_tuple = tuple()
+                                                key_tuple = ()
                                             try:
                                                 if any((kv is None) or (str(kv).strip() == "") for kv in key_tuple):
                                                     continue

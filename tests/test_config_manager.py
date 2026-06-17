@@ -221,6 +221,16 @@ class ConfigManagerTests(unittest.TestCase):
             ["FCANCELSTATUS", "FCancelStatus"],
         )
 
+    def test_builtin_tables_json_registers_ar_receivable_sync(self) -> None:
+        repo_root = Path(__file__).resolve().parents[1]
+        tables = json.loads((repo_root / "src" / "config" / "tables.json").read_text(encoding="utf-8"))
+        form_queries = json.loads((repo_root / "src" / "config" / "form-queries.json").read_text(encoding="utf-8"))
+
+        self.assertIn("应收单", form_queries)
+        self.assertIn("应收单", tables)
+        self.assertEqual(tables["应收单"]["table"], "AR_receivable")
+        self.assertEqual(tables["应收单"]["insert_method"], "insert_ar_receivable")
+
 
 if __name__ == "__main__":
     unittest.main()

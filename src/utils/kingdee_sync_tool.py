@@ -25,9 +25,9 @@ sys.path.insert(0, current_dir)
 
 # 导入PySide6模块
 try:
-    from PySide6.QtCore import QLocale, Qt
+    from PySide6.QtCore import QLocale, QTimer, Qt
     from PySide6.QtGui import QFont
-    from PySide6.QtWidgets import QApplication
+    from PySide6.QtWidgets import QApplication, QMessageBox
 except ImportError as e:
     print(f"导入PySide6失败: {e}")
     print("请运行以下命令安装依赖:")
@@ -150,8 +150,38 @@ def setup_application_style(app):
     except Exception as e:
         logger.warning(f"应用程序样式设置失败: {str(e)}")
 
+
+def _show_warning_async(title: str, message: str) -> None:
+    """Show a non-modal warning after the current exception handler returns."""
+    app = QApplication.instance()
+    if app is None:
+        return
+
+    def _show() -> None:
+        try:
+            box = QMessageBox(QMessageBox.Warning, title, message, QMessageBox.Ok)
+            box.setModal(False)
+            box.setAttribute(Qt.WA_DeleteOnClose, True)
+            boxes = getattr(app, "_kingdee_warning_boxes", [])
+            boxes.append(box)
+            setattr(app, "_kingdee_warning_boxes", boxes)
+
+            def _forget_box(*_args):
+                try:
+                    boxes.remove(box)
+                except ValueError:
+                    pass
+
+            box.finished.connect(_forget_box)
+            box.show()
+        except Exception as exc:
+            logging.getLogger(__name__).warning("显示警告提示失败: %s", exc)
+
+    QTimer.singleShot(0, _show)
+
+
 def handle_exception(exc_type, exc_value, exc_traceback):
-    """全局异常处理器"""
+    """全局异常处理器 - 防止程序闪退"""
     logger = logging.getLogger(__name__)
 
     if issubclass(exc_type, KeyboardInterrupt):
@@ -160,20 +190,50 @@ def handle_exception(exc_type, exc_value, exc_traceback):
         sys.__excepthook__(exc_type, exc_value, exc_traceback)
         return
 
+    connection_exceptions = (
+        ConnectionError,
+        TimeoutError,
+        BrokenPipeError,
+    )
+    if isinstance(exc_value, connection_exceptions):
+        logger.warning("连接类未捕获异常: %s: %s", exc_type.__name__, exc_value, exc_info=(exc_type, exc_value, exc_traceback))
+        message = UiFeedback.build_error_message(
+            "检测到连接异常，请检查网络、数据库或金蝶服务状态。",
+            f"{exc_type.__name__}: {exc_value}",
+        )
+        _show_warning_async("连接异常", message)
+        return
+
     # 记录异常信息
     logger.error("未捕获的异常", exc_info=(exc_type, exc_value, exc_traceback))
+
+    # 如同步仍在运行，只请求停止，不在 GUI 主线程阻塞等待。
+    try:
+        from src.core.data_sync import sync_manager
+        if sync_manager.is_sync_running():
+            logger.warning("检测到同步正在进行，已请求停止；异常处理不阻塞等待")
+            if hasattr(sync_manager, "request_shutdown"):
+                sync_manager.request_shutdown("unhandled_exception")
+    except Exception:
+        pass
 
     # 显示错误对话框（如果GUI可用）
     try:
         app = QApplication.instance()
         if app:
-            error_msg = UiFeedback.build_error_message("程序运行出现异常，请查看日志后重试。", f"{exc_type.__name__}: {exc_value}")
+            error_msg = UiFeedback.build_error_message(
+                "程序运行出现异常，请查看日志后重试。",
+                f"{exc_type.__name__}: {exc_value}\n\n详细信息已记录到日志文件。"
+            )
             UiFeedback.error(None, "程序错误", error_msg)
     except Exception:
         pass
 
+    # 不退出程序，继续运行
+    logger.info("程序将继续运行，如需重启请手动关闭后重新打开")
+
 def cleanup_and_exit():
-    """清理资源并退出"""
+    """清理资源并退出 - 增强版，防止资源泄漏"""
     logger = logging.getLogger(__name__)
 
     from src.core.data_sync import sync_manager
@@ -182,28 +242,41 @@ def cleanup_and_exit():
 
     try:
         # 停止调度器
-        if auto_scheduler.status.value != "stopped":
-            auto_scheduler.stop()
-            logger.info("自动同步调度器已停止")
-
-        # 关闭数据库连接
-        from src.core.mysql_manager import mysql_manager
-        mysql_manager.disconnect()
-        logger.info("数据库连接已关闭")
-
-        # 关闭金蝶API连接（遵循配置：不自动登出，仅停止心跳）
-        from src.core.kingdee_api import kingdee_client
-        # 先停止心跳线程
         try:
-            kingdee_client.stop_keepalive()
+            if auto_scheduler.status.value != "stopped":
+                auto_scheduler.stop()
+                logger.info("自动同步调度器已停止")
+        except Exception as e:
+            logger.warning(f"停止调度器时出错: {e}")
+
+        # 请求同步线程结束；退出清理不阻塞 GUI 主线程等待。
+        try:
+            if sync_manager.is_sync_running():
+                logger.info("同步仍在运行，已请求停止并继续执行退出清理")
         except Exception:
             pass
-        kd_cfg = config_manager.get_kingdee_config()
-        if kd_cfg.get('auto_logout_on_exit', False):
-            kingdee_client.logout()
-            logger.info("金蝶API连接已登出并关闭")
-        else:
-            logger.info("根据配置已跳过自动登出，仅停止心跳")
+
+        # 关闭数据库连接
+        try:
+            from src.core.mysql_manager import mysql_manager
+            mysql_manager.disconnect()
+            logger.info("数据库连接已关闭")
+        except Exception as e:
+            logger.warning(f"关闭数据库连接时出错: {e}")
+
+        # 关闭金蝶API连接（遵循配置：不自动登出，仅停止心跳）
+        try:
+            from src.core.kingdee_api import kingdee_client
+            # 先停止心跳线程
+            kingdee_client.stop_keepalive()
+            kd_cfg = config_manager.get_kingdee_config()
+            if kd_cfg.get('auto_logout_on_exit', False):
+                kingdee_client.logout()
+                logger.info("金蝶API连接已登出并关闭")
+            else:
+                logger.info("根据配置已跳过自动登出，仅停止心跳")
+        except Exception as e:
+            logger.warning(f"关闭金蝶API连接时出错: {e}")
 
         logger.info("程序清理完成")
 

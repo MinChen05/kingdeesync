@@ -2061,6 +2061,7 @@ class MySQLManager:
                 fcustomername = self._safe_str(item.get("FCUSTOMERID.FNAME") or item.get("FCUSTOMERID.FName") or item.get("FCUSTOMERNAME"))
                 fsetaccounttype = self._safe_str(item.get("FSETACCOUNTTYPE") or item.get("FSetAccountType"))
                 fbaseproperty1 = self._safe_str(item.get("F_ora_BaseProperty1") or item.get("FBASEPROPERTY1"))
+                fsourcebillno = self._safe_str(item.get("FSourceBillNo") or item.get("FSOURCEBILLNO"))
                 fmaterialnumber = self._safe_str(item.get("FMATERIALID.FNUMBER") or item.get("FMATERIALID.FNumber") or item.get("FMATERIALNUMBER"))
                 fmaterialname = self._safe_str(item.get("FMATERIALID.FNAME") or item.get("FMATERIALID.FName") or item.get("FMATERIALNAME"))
                 ftaxprice = self._to_decimal_or_none(item.get("FTaxPrice") or item.get("FTAXPRICE") or 0)
@@ -2080,6 +2081,7 @@ class MySQLManager:
                     fcustomername,
                     fsetaccounttype,
                     fbaseproperty1,
+                    fsourcebillno,
                     fmaterialnumber,
                     fmaterialname,
                     ftaxprice,
@@ -2087,7 +2089,7 @@ class MySQLManager:
                     fallamountfor_d,
                     fmodifydate,
                 )
-            if isinstance(item, (list, tuple)) and len(item) >= 15:
+            if isinstance(item, (list, tuple)) and len(item) >= 16:
                 fid = self._to_int_or_none(item[0])
                 fentryid = self._to_int_or_none(item[1])
                 fseq = self._to_int_or_none(item[2])
@@ -2097,12 +2099,13 @@ class MySQLManager:
                 fcustomername = self._safe_str(item[6])
                 fsetaccounttype = self._safe_str(item[7])
                 fbaseproperty1 = self._safe_str(item[8])
-                fmaterialnumber = self._safe_str(item[9])
-                fmaterialname = self._safe_str(item[10])
-                ftaxprice = self._to_decimal_or_none(item[11]) or 0
-                fpriceqty = self._to_decimal_or_none(item[12]) or 0
-                fallamountfor_d = self._to_decimal_or_none(item[13]) or 0
-                fmodifydate = self._parse_datetime(item[14])
+                fsourcebillno = self._safe_str(item[9])
+                fmaterialnumber = self._safe_str(item[10])
+                fmaterialname = self._safe_str(item[11])
+                ftaxprice = self._to_decimal_or_none(item[12]) or 0
+                fpriceqty = self._to_decimal_or_none(item[13]) or 0
+                fallamountfor_d = self._to_decimal_or_none(item[14]) or 0
+                fmodifydate = self._parse_datetime(item[15])
 
                 if fid is None or fentryid is None or fid <= 0 or fentryid <= 0:
                     return None
@@ -2116,6 +2119,7 @@ class MySQLManager:
                     fcustomername,
                     fsetaccounttype,
                     fbaseproperty1,
+                    fsourcebillno,
                     fmaterialnumber,
                     fmaterialname,
                     ftaxprice,
@@ -2126,6 +2130,47 @@ class MySQLManager:
             return None
         except Exception:
             return None
+
+    def _ensure_additional_columns_for_ar_receivable(self) -> None:
+        """确保 AR_receivable 存在应收单源单号字段。"""
+        try:
+            table = "AR_receivable"
+            is_sqlserver = getattr(self, "db_type", "mysql") == "sqlserver"
+            if is_sqlserver:
+                self.cursor.execute(
+                    "SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME=?",
+                    (table,),
+                )
+            else:
+                self.cursor.execute(
+                    "SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME=%s",
+                    (table,),
+                )
+
+            existing = set()
+            for row in self.cursor.fetchall() or []:
+                if isinstance(row, dict):
+                    col = row.get("COLUMN_NAME")
+                else:
+                    col = row[0] if row else None
+                if col:
+                    existing.add(str(col).strip().upper())
+
+            if "FSOURCEBILLNO" in existing:
+                return
+
+            if is_sqlserver:
+                self.cursor.execute(f"ALTER TABLE {table} ADD FSOURCEBILLNO NVARCHAR(255) NULL")
+            else:
+                self.cursor.execute(f"ALTER TABLE {table} ADD COLUMN FSOURCEBILLNO VARCHAR(255) NULL")
+            try:
+                self.connection.commit()
+            except Exception:
+                pass
+            self._invalidate_table_metadata_cache(table)
+            logger.info("[AR_receivable] 已添加列 FSOURCEBILLNO")
+        except Exception as e:
+            logger.warning(f"[AR_receivable] 处理列 FSOURCEBILLNO 失败: {e}")
 
     def _ensure_additional_columns_for_ap_payable(self) -> None:
         """确保 AP_Payable 存在应付单扩展字段与金额字段列。"""

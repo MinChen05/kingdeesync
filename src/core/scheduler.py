@@ -267,15 +267,26 @@ class AutoSyncScheduler:
         if self._previous_exec_time is not None:
             gap_minutes = (now - self._previous_exec_time).total_seconds() / 60.0
             interval_minutes = self._get_configured_interval_seconds() / 60.0
-            if interval_minutes > 0 and gap_minutes > interval_minutes * 1.8:
+            # 计算上次同步的耗时（如果有记录）
+            last_sync_duration = getattr(self, '_last_sync_duration_minutes', 0)
+            # 预期间隔 = 配置间隔 + 上次同步耗时 + 缓冲时间(5分钟)
+            expected_gap = interval_minutes + last_sync_duration + 5
+            if interval_minutes > 0 and gap_minutes > expected_gap * 1.5:
                 logger.warning(
                     "⚠️ 同步间隔异常：距上次同步已 %.1f 分钟"
-                    "（预期 %.1f 分钟），可能存在数据遗漏",
-                    gap_minutes, interval_minutes,
+                    "（预期 %.1f 分钟 = 间隔 %.1f + 同步耗时 %.1f + 缓冲5分钟），可能存在数据遗漏",
+                    gap_minutes, expected_gap, interval_minutes, last_sync_duration,
                 )
                 self._notify_status_change(
                     self.status,
                     "间隔异常：上次同步 {:.0f} 分钟前".format(gap_minutes),
+                )
+            elif interval_minutes > 0 and gap_minutes > interval_minutes * 1.8:
+                # 同步耗时较长但不算异常
+                logger.info(
+                    "ℹ️ 同步间隔较长：距上次同步已 %.1f 分钟"
+                    "（配置间隔 %.1f 分钟），同步耗时 %.1f 分钟",
+                    gap_minutes, interval_minutes, last_sync_duration,
                 )
 
         self._last_exec_time = now
@@ -286,9 +297,15 @@ class AutoSyncScheduler:
         logger.info(f"⚙️ 模式: {mode_text}")
         logger.info("-" * 40)
 
+        sync_start_time = datetime.now()
         try:
             # 执行同步
             result = sync_manager.sync_data(self.sync_forms, effective_sync_type)
+
+            # 记录同步耗时
+            sync_end_time = datetime.now()
+            self._last_sync_duration_minutes = (sync_end_time - sync_start_time).total_seconds() / 60.0
+            logger.info(f"⏱️ 同步耗时: {self._last_sync_duration_minutes:.1f} 分钟")
 
             # 通知同步完成
             self._notify_sync_complete(result)
@@ -325,14 +342,18 @@ class AutoSyncScheduler:
             error_msg = f"定时同步执行异常: {str(e)}"
             logger.error(error_msg)
 
+            # 记录同步耗时（即使失败）
+            sync_end_time = datetime.now()
+            self._last_sync_duration_minutes = (sync_end_time - sync_start_time).total_seconds() / 60.0
+
             # 创建错误结果
             error_result = {
                 'status': 'failed',
                 'message': error_msg,
                 'total_records': 0,
-                'start_time': datetime.now(),
-                'end_time': datetime.now(),
-                'duration': 0,
+                'start_time': sync_start_time,
+                'end_time': sync_end_time,
+                'duration': self._last_sync_duration_minutes * 60,
                 'details': {}
             }
             self._notify_sync_complete(error_result)

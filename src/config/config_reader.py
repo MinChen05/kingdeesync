@@ -62,7 +62,7 @@ DEFAULT_CONFIG_DATA = {
         "password": "your_password",
         "database": "your_database",
         "port": "1433",
-        "driver": "ODBC Driver 17 for SQL Server",
+        "driver": "ODBC Driver 18 for SQL Server",
         "dsn": "",
         "trusted_connection": "false",
         "encrypt": "auto",
@@ -126,19 +126,21 @@ def _resolve_existing_path(candidate: str) -> str | None:
 def resolve_config_path(config_file: str) -> str:
     """Resolve config path with runtime-compatible lookup order."""
     candidates = [config_file]
+    default_missing_target = config_file
 
     config_basename = os.path.basename(config_file).lower()
     if config_basename == "config.ini":
         config_dir = os.path.dirname(config_file)
         local_override = os.path.join(config_dir, "config.local.ini") if config_dir else "config.local.ini"
         candidates.insert(0, local_override)
+        default_missing_target = local_override
 
     for candidate in candidates:
         resolved = _resolve_existing_path(candidate)
         if resolved:
             return resolved
 
-    return candidates[-1]
+    return default_missing_target
 
 
 def _is_sensitive_key(key: str, sensitive_keys: Iterable[str]) -> bool:

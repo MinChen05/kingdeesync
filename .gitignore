@@ -11,6 +11,8 @@
 # 构建和打包目录
 build/
 dist/
+.reasonix/
+deploy/
 
 # PyInstaller spec 文件
 *.spec
@@ -23,6 +25,7 @@ debug_reporting.txt
 startup_log.txt
 startup_log_v2.txt
 temp_log.txt
+temp_out.txt
 
 # 运行时断点目录
 **/checkpoints/
@@ -32,9 +35,18 @@ temp_log.txt
 .claude/
 .install_salt
 config.local.ini
+config.ini
 .worktrees/
 .worktrees
 .worktrees/
 config.ini.backup
 **/.DS_Store
 tmp-*.png
+
+# 截图过程文件（最终验收图按需单独提交）
+docs/screenshots/current_*.png
+docs/screenshots/target_*.png
+docs/screenshots/*_crop.png
+docs/screenshots/*_before_*.png
+docs/screenshots/*_after_*.png
+docs/screenshots/dashboard_pixel_final_v*.png

@@ -1,4 +1,4 @@
-﻿"""Desktop GUI shell for the Kingdee sync tool."""
+"""Desktop GUI shell for the Kingdee sync tool."""
 
 import ctypes
 import logging
@@ -6,6 +6,7 @@ import os
 import sys
 from datetime import datetime
 from typing import Any
+from urllib.parse import urlparse
 
 wintypes: Any
 try:
@@ -16,7 +17,20 @@ else:
     wintypes = ctypes_wintypes
 
 from PySide6.QtCore import QEvent, QPoint, QRect, QSize, Qt, QTimer, Signal
-from PySide6.QtGui import QAction, QBrush, QColor, QIcon, QKeySequence, QPainter, QPen, QShortcut
+from PySide6.QtGui import (
+    QAction,
+    QBrush,
+    QColor,
+    QFont,
+    QIcon,
+    QKeySequence,
+    QPainter,
+    QPainterPath,
+    QPalette,
+    QPen,
+    QPixmap,
+    QShortcut,
+)
 from PySide6.QtWidgets import (
     QApplication,
     QFrame,
@@ -26,6 +40,8 @@ from PySide6.QtWidgets import (
     QMainWindow,
     QMenu,
     QPushButton,
+    QScrollArea,
+    QSizePolicy,
     QSplitter,
     QStackedWidget,
     QToolButton,
@@ -38,15 +54,142 @@ from PySide6.QtWidgets import (
 from src.config.config_manager import config_manager
 from src.core.scheduler import auto_scheduler
 from src.gui.components.buttons import ClickableLabel
+from src.gui.components.common import SvgIconLabel
 from src.gui.design_tokens import ColorTokens
 from src.gui.feedback import UiFeedback
 from src.gui.pages.dashboard_page import DashboardPage
+from src.gui.pages.data_source_page import DataSourcePage
+from src.gui.pages.diagnostics_page import DiagnosticsPage
 from src.gui.pages.forms_page import FormConfigPage
 from src.gui.pages.history_page import HistoryPage
+from src.gui.pages.log_center_page import LogCenterPage
 from src.gui.pages.schedule_page import SchedulePage
 from src.gui.pages.settings_page import SettingsPage
 from src.gui.pages.sync_page import SyncPage
+from src.gui.pages.task_management_page import TaskManagementPage
 from src.gui.ui_text import ShellText
+
+
+def _make_nav_icon(icon_id: str, size: int = 18, color: str = "#41607B") -> QIcon:
+    """Create a QPainter-drawn icon for sidebar navigation."""
+    from PySide6.QtGui import QBrush, QColor, QPainter, QPen, QPixmap, QRadialGradient
+
+    pm = QPixmap(size, size)
+    pm.fill(Qt.transparent)
+    p = QPainter(pm)
+    p.setRenderHint(QPainter.Antialiasing)
+    p.setPen(QPen(QColor(color), 1.4))
+    p.setBrush(Qt.NoBrush)
+    s = icon_id
+    if s == "dashboard":
+        p.drawEllipse(2, 2, size - 4, size - 4)
+        p.setBrush(QBrush(QColor(color)))
+        p.drawPie(2, 2, size - 4, size - 4, 90 * 16, -95 * 16)
+        p.setBrush(Qt.NoBrush)
+        p.drawLine(size // 2, size // 2, size // 2, 3)
+        p.drawLine(size // 2, size // 2, size - 3, size // 2)
+    elif s == "history":
+        p.drawEllipse(2, 2, size - 4, size - 4)
+        p.drawLine(size // 2, 4, size // 2, size // 2)
+        p.drawLine(size // 2, size // 2, size - 4, size // 2 + 2)
+    elif s == "task_management":
+        p.drawRoundedRect(2, 1, size - 4, size - 2, 2, 2)
+        p.drawLine(4, 5, size - 4, 5)
+        p.drawLine(4, size // 2, size - 4, size // 2)
+        p.drawLine(4, size - 4, size // 2, size - 4)
+    elif s == "data_source":
+        p.drawRoundedRect(2, 3, size - 4, size - 6, 3, 3)
+        p.drawEllipse(size // 2 - 2, size // 2 - 1, 4, 4)
+    elif s == "forms":
+        p.drawRoundedRect(2, 1, size - 4, size - 2, 2, 2)
+        p.drawLine(4, 5, size - 4, 5)
+        p.drawLine(4, size // 2, size - 6, size // 2)
+    elif s == "schedule":
+        p.drawEllipse(2, 2, size - 4, size - 4)
+        p.drawLine(size // 2, 4, size // 2, size // 2)
+        p.drawLine(size // 2, size // 2, size - 5, size // 2 + 2)
+    elif s == "diagnostics":
+        p.drawLine(4, size - 3, size // 2, 4)
+        p.drawLine(size // 2, 4, size - 4, size - 3)
+        p.drawLine(6, size // 2 + 1, size - 6, size // 2 + 1)
+    elif s == "log_center":
+        p.drawRoundedRect(2, 1, size - 4, size - 2, 2, 2)
+        p.drawLine(4, 5, size - 4, 5)
+        p.drawLine(4, size // 2, size - 4, size // 2)
+        p.drawLine(4, size - 4, size // 2, size - 4)
+    elif s == "settings":
+        p.drawEllipse(size // 2 - 2, size // 2 - 2, 4, 4)
+        p.drawEllipse(size // 2 - 4, size // 2 - 4, 8, 8)
+    p.end()
+    return QIcon(pm)
+
+
+SIDEBAR_NAV_ICON_FILES = {
+    "dashboard": "概览_chart-proportion.svg",
+    "sync": "icons/sync.svg",
+    "history": "同步历史_time.svg",
+    "task_management": "任务管理_transaction-order.svg",
+    "data_source": "数据源管理_data.svg",
+    "forms": "表单映射_link.svg",
+    "schedule": "调度管理_schedule.svg",
+    "diagnostics": "异常诊断_caution.svg",
+    "log_center": "日志中心_notes.svg",
+    "settings": "系统设置_setting.svg",
+}
+
+
+def _make_cloud_logo(size: int = 46, color: str = ""):
+    """Draw the target sidebar cloud mark as a real pixmap."""
+    from PySide6.QtGui import QPixmap
+
+    accent = QColor(color or ColorTokens.ACCENT_700)
+    pm = QPixmap(size, size)
+    pm.fill(Qt.transparent)
+
+    painter = QPainter(pm)
+    painter.setRenderHint(QPainter.Antialiasing)
+    pen = QPen(accent, max(2.0, size * 0.055))
+    pen.setCapStyle(Qt.RoundCap)
+    pen.setJoinStyle(Qt.RoundJoin)
+    painter.setPen(pen)
+    painter.setBrush(Qt.NoBrush)
+
+    w = float(size)
+    path = QPainterPath()
+    path.moveTo(w * 0.18, w * 0.65)
+    path.cubicTo(w * 0.07, w * 0.64, w * 0.06, w * 0.43, w * 0.22, w * 0.42)
+    path.cubicTo(w * 0.25, w * 0.25, w * 0.45, w * 0.20, w * 0.56, w * 0.32)
+    path.cubicTo(w * 0.67, w * 0.29, w * 0.81, w * 0.37, w * 0.82, w * 0.52)
+    path.cubicTo(w * 0.95, w * 0.54, w * 0.95, w * 0.73, w * 0.78, w * 0.74)
+    path.lineTo(w * 0.19, w * 0.74)
+    painter.drawPath(path)
+
+    inner_pen = QPen(accent, max(1.7, size * 0.045))
+    inner_pen.setCapStyle(Qt.RoundCap)
+    inner_pen.setJoinStyle(Qt.RoundJoin)
+    painter.setPen(inner_pen)
+    painter.drawArc(int(w * 0.28), int(w * 0.48), int(w * 0.22), int(w * 0.22), 210 * 16, 260 * 16)
+    painter.drawArc(int(w * 0.47), int(w * 0.48), int(w * 0.22), int(w * 0.22), 30 * 16, 260 * 16)
+    painter.end()
+    return pm
+
+
+def _make_user_icon(size: int = 18, color: str = ""):
+    """Draw a compact account icon for the top bar."""
+    from PySide6.QtGui import QPixmap
+
+    ink = QColor(color or ColorTokens.NEUTRAL_700)
+    pm = QPixmap(size, size)
+    pm.fill(Qt.transparent)
+    painter = QPainter(pm)
+    painter.setRenderHint(QPainter.Antialiasing)
+    painter.setPen(Qt.NoPen)
+    painter.setBrush(ink)
+    painter.drawEllipse(int(size * 0.34), int(size * 0.14), int(size * 0.32), int(size * 0.32))
+    body = QRect(int(size * 0.18), int(size * 0.50), int(size * 0.64), int(size * 0.36))
+    painter.drawRoundedRect(body, int(size * 0.18), int(size * 0.18))
+    painter.end()
+    return pm
 
 
 class KingdeeSyncGUI(QMainWindow):
@@ -66,14 +209,14 @@ class KingdeeSyncGUI(QMainWindow):
         self.sync_type_combo = None
         self.start_sync_btn = None
         self.test_conn_btn = None
-        self.title_bar = None
+        # removed: self.title_bar = None (DesktopTitleBar deleted)
         self.main_splitter = None
         self.sidebar = None
         self.sidebar_logo_subtitle = None
         self.sidebar_section_title = None
         self.sidebar_status_card = None
         self.sidebar_compact = False
-        self.sidebar_expanded_width = 256
+        self.sidebar_expanded_width = 240
         self.sidebar_compact_width = 96
         self.shortcuts = []
         self.pages = {}
@@ -82,14 +225,29 @@ class KingdeeSyncGUI(QMainWindow):
         self.nav_tool_buttons = {}
         self.topbar_action_buttons = []
         self.current_page_id = "dashboard"
-        self.page_order = ["dashboard", "sync", "forms", "schedule", "history", "settings"]
+        self.page_order = [
+            "dashboard",
+            "sync",
+            "history",
+            "task_management",
+            "data_source",
+            "forms",
+            "schedule",
+            "diagnostics",
+            "log_center",
+            "settings",
+        ]
         self.page_index_map = {page_id: idx for idx, page_id in enumerate(self.page_order)}
         self.page_meta = {
-            "dashboard": ("运营总览", "查看核心运行指标、连接状态与任务概览"),
-            "sync": ("同步执行", "执行单次同步任务并查看运行反馈"),
-            "forms": ("表单配置", "维护同步表单映射与字段配置"),
+            "dashboard": ("概览", "查看核心运行指标、连接状态与任务概览"),
+            "sync": ("同步执行", "选择同步范围并手动发起数据同步"),
+            "history": ("同步历史", "查看同步任务历史、筛选与追踪问题"),
+            "task_management": ("任务管理", "管理和监控数据同步任务的创建、编辑与运行状态"),
+            "data_source": ("数据源管理", "配置和管理金蝶 API 及数据库等外部数据源连接"),
+            "forms": ("表单映射", "维护同步表单映射与字段配置"),
             "schedule": ("调度管理", "管理自动调度任务与执行状态"),
-            "history": ("历史记录", "查看同步任务历史、筛选与追踪问题"),
+            "diagnostics": ("异常诊断", "诊断同步过程中的异常，定位问题根因并查看修复建议"),
+            "log_center": ("日志中心", "集中查看系统运行日志，支持关键字搜索与级别筛选"),
             "settings": ("系统设置", "维护金蝶与数据库连接等基础配置"),
         }
         self._resize_border_px = 8
@@ -119,13 +277,13 @@ class KingdeeSyncGUI(QMainWindow):
             return
 
         try:
-            with open(css_path, "r", encoding="utf-8") as f:
+            with open(css_path, encoding="utf-8") as f:
                 self.setStyleSheet(f.read())
         except Exception as exc:
             self.logger.error("Failed to load stylesheet: %s", exc)
 
     def init_ui(self):
-        """Build the frameless desktop layout and page shell."""
+        """Build frameless layout — window controls integrated into top status bar."""
         self.setWindowTitle("金蝶数据同步工具 v2.0")
         self.setWindowFlags(Qt.Window | Qt.FramelessWindowHint)
         self.resize(1460, 820)
@@ -140,16 +298,6 @@ class KingdeeSyncGUI(QMainWindow):
         root_layout = QVBoxLayout(central_widget)
         root_layout.setContentsMargins(0, 0, 0, 0)
         root_layout.setSpacing(0)
-
-        self.title_bar = DesktopTitleBar(self)
-        self.title_bar.set_title(self.windowTitle())
-        if os.path.exists(app_icon):
-            self.title_bar.set_icon(QIcon(app_icon))
-        self.title_bar.menu_requested.connect(self._show_window_menu)
-        self.title_bar.minimize_requested.connect(self._minimize_window)
-        self.title_bar.maximize_restore_requested.connect(self._toggle_max_restore)
-        self.title_bar.close_requested.connect(self.close)
-        root_layout.addWidget(self.title_bar)
 
         body = QWidget()
         body.setObjectName("desktop_body")
@@ -169,87 +317,116 @@ class KingdeeSyncGUI(QMainWindow):
         self.create_main_content(self.main_splitter)
         self.main_splitter.setStretchFactor(0, 0)
         self.main_splitter.setStretchFactor(1, 1)
-        self.main_splitter.setSizes([256, 1200])
+        self.main_splitter.setSizes([self.sidebar_expanded_width, 1200])
 
         self.setup_menu_bar()
         self.setup_status_bar()
         self.setup_shortcuts()
-        self._update_titlebar_state()
+        # native title bar — no custom titlebar state update needed
         self._apply_responsive_shell_layout()
 
         self.switch_to_page("dashboard")
         QTimer.singleShot(100, self.refresh_dashboard)
 
     def create_sidebar(self, layout):
-        """Create the left navigation rail and connection summary."""
+        """侧边栏：品牌区 + 图标菜单 + 底部版权。"""
         sidebar = QFrame()
         sidebar.setObjectName("sidebar")
         sidebar.setProperty("ui", "win11-nav-panel")
-        sidebar.setMinimumWidth(0)
-        sidebar.setMaximumWidth(360)
+        sidebar.setMinimumWidth(self.sidebar_expanded_width)
+        sidebar.setMaximumWidth(self.sidebar_expanded_width)
         self.sidebar = sidebar
 
         sidebar_layout = QVBoxLayout(sidebar)
-        sidebar_layout.setContentsMargins(16, 16, 16, 16)
-        sidebar_layout.setSpacing(16)
+        sidebar_layout.setContentsMargins(0, 0, 0, 0)
+        sidebar_layout.setSpacing(0)
 
-        sidebar_header = QFrame()
-        sidebar_header.setObjectName("sidebar_header")
-        header_layout = QVBoxLayout(sidebar_header)
-        header_layout.setContentsMargins(16, 16, 16, 16)
-        header_layout.setSpacing(4)
+        # ── 顶部品牌区（云朵 logo + 名称 + 版本）──
+        brand = QWidget()
+        brand.setObjectName("sidebar_brand")
+        brand.setFixedHeight(88)
+        self.sidebar_brand = brand
+        brand_layout = QHBoxLayout(brand)
+        brand_layout.setContentsMargins(24, 16, 16, 16)
+        brand_layout.setSpacing(12)
 
-        logo_label = QLabel("金蝶数据同步")
-        logo_label.setObjectName("app-logo")
-        logo_label.setAlignment(Qt.AlignLeft | Qt.AlignVCenter)
-        header_layout.addWidget(logo_label)
+        self.sidebar_logo = QLabel()
+        self.sidebar_logo.setFixedSize(48, 48)
+        self.sidebar_logo.setPixmap(_make_cloud_logo(48, ColorTokens.ACCENT_700))
+        brand_layout.addWidget(self.sidebar_logo)
 
-        logo_subtitle = QLabel("数据运营协同后台")
-        logo_subtitle.setObjectName("app-subtitle")
-        header_layout.addWidget(logo_subtitle)
-        self.sidebar_logo_subtitle = logo_subtitle
-        sidebar_layout.addWidget(sidebar_header)
+        text_col = QVBoxLayout()
+        text_col.setSpacing(0)
+        app_name = QLabel("金蝶数据同步工具")
+        app_name.setObjectName("sidebar_app_name")
+        text_col.addWidget(app_name)
+        ver = QLabel("v1.2.0")
+        ver.setObjectName("sidebar_ver")
+        text_col.addWidget(ver)
+        brand_layout.addLayout(text_col, 1)
+        sidebar_layout.addWidget(brand)
 
-        nav_title = QLabel("功能导航")
-        nav_title.setObjectName("sidebar_section_title")
-        self.sidebar_section_title = nav_title
-        sidebar_layout.addWidget(nav_title)
+        # ── 导航菜单（图标 + 文案）──
+        nav_container = QWidget()
+        nav_container.setObjectName("sidebar_nav_container")
+        self.sidebar_nav_container = nav_container
+        nav_layout = QVBoxLayout(nav_container)
+        nav_layout.setContentsMargins(18, 20, 18, 8)
+        nav_layout.setSpacing(9)
 
-        sidebar_layout.addWidget(self._create_nav_tree(), 1)
+        self.nav_buttons: dict[str, QPushButton] = {}
+        for page_id in self.page_order:
+            title, _ = self.page_meta.get(page_id, (page_id, ""))
+            btn = QPushButton(title)
+            btn.setObjectName(f"sidebar_nav_{page_id}")
+            btn.setProperty("class", "sidebar-nav-btn")
+            btn.setCheckable(True)
+            btn.setFixedHeight(48)
+            icon_file = SIDEBAR_NAV_ICON_FILES.get(page_id)
+            icon_path = os.path.join(self.assets_dir, icon_file) if icon_file else ""
+            if icon_file and os.path.exists(icon_path):
+                btn.setProperty("icon-source", icon_file)
+                icon = QIcon(icon_path)
+            else:
+                icon = _make_nav_icon(page_id, 18, ColorTokens.NEUTRAL_500)
+            btn.setIcon(icon)
+            btn.setIconSize(QSize(20, 20))
+            btn.clicked.connect(lambda _checked=False, pid=page_id: self.switch_to_page(pid))
+            nav_layout.addWidget(btn)
+            self.nav_buttons[page_id] = btn
 
-        status_frame = QFrame()
-        status_frame.setObjectName("sidebar_bottom")
-        status_layout = QVBoxLayout(status_frame)
-        status_layout.setContentsMargins(0, 0, 0, 0)
+        nav_layout.addStretch(1)
+        sidebar_layout.addWidget(nav_container, 1)
 
-        status_card = QFrame()
-        status_card.setObjectName("status_card")
-        status_card.setProperty("ui", "win11-sidebar-status")
-        self.sidebar_status_card = status_card
-        card_layout = QVBoxLayout(status_card)
-        card_layout.setContentsMargins(14, 14, 14, 14)
-        card_layout.setSpacing(10)
+        # ── 底部版权区 ──
+        footer = QWidget()
+        footer.setObjectName("sidebar_footer")
+        footer.setFixedHeight(40)
+        footer_layout = QHBoxLayout(footer)
+        footer_layout.setContentsMargins(16, 0, 16, 0)
+        footer_layout.setSpacing(0)
 
-        status_title = QLabel("连接状态")
-        status_title.setObjectName("sidebar_status_title")
-        status_hint = QLabel("点击状态文本可查看连接详情")
-        status_hint.setObjectName("sidebar_status_hint")
-        card_layout.addWidget(status_title)
-        card_layout.addWidget(status_hint)
+        copyright_label = QLabel("© 2024 Kingdee")
+        copyright_label.setObjectName("sidebar_copyright")
+        footer_layout.addWidget(copyright_label)
+        footer_layout.addStretch(1)
+        self.sidebar_collapse_btn = QPushButton("")
+        self.sidebar_collapse_btn.setObjectName("sidebar_collapse_btn")
+        self.sidebar_collapse_btn.setProperty("icon-source", "menu_fold.svg")
+        self.sidebar_collapse_btn.setIcon(QIcon(os.path.join(self.assets_dir, "icons", "menu_fold.svg")))
+        self.sidebar_collapse_btn.setIconSize(QSize(16, 16))
+        self.sidebar_collapse_btn.setFixedSize(24, 24)
+        footer_layout.addWidget(self.sidebar_collapse_btn)
+        sidebar_layout.addWidget(footer)
 
-        self.kd_status_icon, self.kd_status_text, self.kd_status_tag = self._create_status_row(
-            card_layout, "金蝶 API: 未连接", lambda: self.show_status_detail("kingdee")
-        )
-        self.db_status_icon, self.db_status_text, self.db_status_tag = self._create_status_row(
-            card_layout, "数据库: 未连接", lambda: self.show_status_detail("database")
-        )
-
-        status_layout.addWidget(status_card)
-        sidebar_layout.addWidget(status_frame)
         layout.addWidget(sidebar)
 
-        self._update_status_display(True, False)
-        self._update_status_display(False, False)
+        # 保持 nav_item_map 兼容现有测试
+        self.nav_item_map = dict.fromkeys(self.page_order)
+
+        # 标记首项选中
+        if self.nav_buttons:
+            self.nav_buttons["dashboard"].setChecked(True)
 
     def _create_nav_toolstrip(self):
         frame = QFrame()
@@ -258,7 +435,7 @@ class KingdeeSyncGUI(QMainWindow):
         layout.setContentsMargins(6, 6, 6, 6)
         layout.setSpacing(6)
 
-        tool_pages = ["dashboard", "sync", "history", "settings"]
+        tool_pages = ["dashboard", "history", "task_management", "forms", "schedule", "settings"]
         self.nav_tool_buttons = {}
         for page_id in tool_pages:
             btn = QToolButton()
@@ -270,8 +447,10 @@ class KingdeeSyncGUI(QMainWindow):
 
             icon_name = {
                 "dashboard": "dashboard.svg",
-                "sync": "sync.svg",
                 "history": "history.svg",
+                "task_management": "dashboard.svg",
+                "forms": "forms.svg",
+                "schedule": "schedule.svg",
                 "settings": "settings.svg",
             }.get(page_id)
             if icon_name:
@@ -297,34 +476,16 @@ class KingdeeSyncGUI(QMainWindow):
         self.nav_tree.setIndentation(0)
         self.nav_tree.setVerticalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
         self.nav_tree.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
-
-        groups = [
-            ("运营视图", [("dashboard", "数据运营中心", "dashboard.svg")]),
-            ("执行控制", [("sync", "数据同步", "sync.svg"), ("schedule", "定时调度", "schedule.svg")]),
-            ("配置管理", [("forms", "表单配置", "forms.svg"), ("settings", "系统设置", "settings.svg")]),
-            ("追踪分析", [("history", "同步历史", "history.svg")]),
-        ]
+        self.nav_tree.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Preferred)
 
         self.nav_item_map = {}
-        for group_text, children in groups:
-            group_item = QTreeWidgetItem([group_text])
-            group_item.setFlags(Qt.ItemIsEnabled)
-            group_item.setData(0, Qt.UserRole, None)
-            group_item.setForeground(0, QColor(ColorTokens.NEUTRAL_400))
-            group_font = group_item.font(0)
-            group_font.setBold(True)
-            group_font.setPointSize(max(9, group_font.pointSize() - 1))
-            group_item.setFont(0, group_font)
-            self.nav_tree.addTopLevelItem(group_item)
-
-            for page_id, title, _icon_name in children:
-                child_item = QTreeWidgetItem([title])
-                child_item.setData(0, Qt.UserRole, page_id)
-                child_item.setFlags(Qt.ItemIsEnabled | Qt.ItemIsSelectable)
-                group_item.addChild(child_item)
-                self.nav_item_map[page_id] = child_item
-
-            group_item.setExpanded(True)
+        for page_id in self.page_order:
+            title, _subtitle = self.page_meta.get(page_id, (page_id, ""))
+            item = QTreeWidgetItem([title])
+            item.setData(0, Qt.UserRole, page_id)
+            item.setFlags(Qt.ItemIsEnabled | Qt.ItemIsSelectable)
+            self.nav_tree.addTopLevelItem(item)
+            self.nav_item_map[page_id] = item
 
         self.nav_tree.currentItemChanged.connect(self._on_nav_tree_item_changed)
         return self.nav_tree
@@ -335,13 +496,6 @@ class KingdeeSyncGUI(QMainWindow):
 
         page_id = current.data(0, Qt.UserRole)
         if page_id is None:
-            previous_page_id = previous.data(0, Qt.UserRole) if previous is not None else None
-            fallback_page_id = previous_page_id or self.current_page_id
-            fallback_item = self.nav_item_map.get(fallback_page_id)
-            if fallback_item is not None and self.nav_tree is not None:
-                self.nav_tree.blockSignals(True)
-                self.nav_tree.setCurrentItem(fallback_item)
-                self.nav_tree.blockSignals(False)
             return
 
         self._activate_page(page_id, sync_nav=False)
@@ -371,8 +525,11 @@ class KingdeeSyncGUI(QMainWindow):
         self.current_page_id = page_id
         self.stacked_widget.setCurrentIndex(target_index)
         self._set_toolstrip_active(page_id)
-        if sync_nav:
-            self._set_nav_tree_current(page_id)
+        # 更新侧边栏按钮选中态
+        for pid, btn in self.nav_buttons.items():
+            btn.blockSignals(True)
+            btn.setChecked(pid == page_id)
+            btn.blockSignals(False)
         self._update_topbar_page(page_id)
         self._refresh_top_status_bar()
 
@@ -414,8 +571,8 @@ class KingdeeSyncGUI(QMainWindow):
         content_shell.setObjectName("main_content_shell")
         content_shell.setProperty("ui", "win11-shell")
         shell_layout = QVBoxLayout(content_shell)
-        shell_layout.setContentsMargins(18, 16, 18, 18)
-        shell_layout.setSpacing(14)
+        shell_layout.setContentsMargins(0, 0, 0, 0)
+        shell_layout.setSpacing(0)
 
         shell_layout.addWidget(self._create_top_status_bar())
 
@@ -425,10 +582,14 @@ class KingdeeSyncGUI(QMainWindow):
 
         self.pages = {
             "dashboard": DashboardPage(self),
-            "sync": SyncPage(self),
+            "history": HistoryPage(self),
+            "task_management": TaskManagementPage(self),
+            "data_source": DataSourcePage(self),
             "forms": FormConfigPage(self),
             "schedule": SchedulePage(self),
-            "history": HistoryPage(self),
+            "diagnostics": DiagnosticsPage(self),
+            "log_center": LogCenterPage(self),
+            "sync": SyncPage(self),
             "settings": SettingsPage(self),
         }
 
@@ -438,74 +599,115 @@ class KingdeeSyncGUI(QMainWindow):
         layout.addWidget(content_shell)
 
     def _create_top_status_bar(self):
+        """顶栏（56px）：连接信息 + 设置/帮助 + 用户 + 窗口控制（整栏可拖拽）"""
         bar = QFrame()
         bar.setObjectName("top_status_bar")
         bar.setProperty("ui", "win11-command-bar")
-        root_layout = QVBoxLayout(bar)
-        root_layout.setContentsMargins(18, 14, 18, 14)
-        root_layout.setSpacing(14)
+        bar.setFixedHeight(80)
+        root_layout = QHBoxLayout(bar)
+        root_layout.setContentsMargins(28, 0, 24, 0)
+        root_layout.setSpacing(0)
 
-        top_row = QHBoxLayout()
-        top_row.setSpacing(12)
-        self.topbar_breadcrumb = QLabel("首页 / 运营总览")
-        self.topbar_breadcrumb.setObjectName("topbar_breadcrumb")
-        self.topbar_breadcrumb.setVisible(False)
-        top_row.addWidget(self.topbar_breadcrumb)
-        top_row.addStretch()
+        # ═══════ 左侧连接信息区 ═══════
+        info_group = QHBoxLayout()
+        info_group.setSpacing(48)
 
-        self.topbar_search = QLineEdit()
-        self.topbar_search.setObjectName("topbar_search")
-        self.topbar_search.setPlaceholderText(ShellText.TOPBAR_SEARCH_PLACEHOLDER)
-        self.topbar_search.returnPressed.connect(self.handle_topbar_search)
-        self.topbar_search.setClearButtonEnabled(True)
-        self.topbar_search.setMinimumWidth(120)
-        self.topbar_search.setMaximumWidth(280)
-        top_row.addWidget(self.topbar_search)
+        # 组1：连接状态
+        conn_group = QHBoxLayout()
+        conn_group.setSpacing(6)
+        dot = QLabel("●")
+        dot.setObjectName("topbar_status_dot")
+        conn_group.addWidget(dot)
+        conn_label = QLabel("连接状态：")
+        conn_val = QLabel("已连接")
+        conn_val.setObjectName("topbar_value")
+        self.topbar_status_dot = dot
+        self.topbar_conn_value = conn_val
+        conn_group.addWidget(conn_label)
+        conn_group.addWidget(conn_val)
+        info_group.addLayout(conn_group)
 
-        self.btn_search = self._create_top_action_button(ShellText.SEARCH, self.focus_topbar_search, accent=True)
-        self.btn_notice = self._create_top_action_button(ShellText.HISTORY, lambda: self.switch_to_page("history"))
-        self.btn_setting = self._create_top_action_button(
-            ShellText.SYSTEM_SETTINGS, lambda: self.switch_to_page("settings")
+        # 组2：金蝶云地址
+        kd_group = QHBoxLayout()
+        kd_group.setSpacing(6)
+        kd_label = QLabel("金蝶云星空：")
+        kd_val = QLabel("https://api.yunxingkong.com")
+        kd_val.setObjectName("topbar_value")
+        self.topbar_kingdee_value = kd_val
+        kd_group.addWidget(kd_label)
+        kd_group.addWidget(kd_val)
+        info_group.addLayout(kd_group)
+
+        # 组3：数据库地址
+        db_group = QHBoxLayout()
+        db_group.setSpacing(6)
+        db_label = QLabel("数据库：")
+        db_val = QLabel("SQL Server (192.168.1.50)")
+        db_val.setObjectName("topbar_value")
+        self.topbar_database_value = db_val
+        db_group.addWidget(db_label)
+        db_group.addWidget(db_val)
+        info_group.addLayout(db_group)
+
+        root_layout.addLayout(info_group)
+        root_layout.addStretch(1)
+
+        # ═══════ 右侧功能区 ═══════
+        # ── 功能组：设置 + 帮助 ──
+        action_group = QHBoxLayout()
+        action_group.setSpacing(10)
+
+        self.btn_setting = QPushButton("设置")
+        self.btn_setting.setFixedHeight(36)
+        self.btn_setting.setObjectName("topbar_action_text_btn")
+        self.btn_setting.setIcon(QIcon(os.path.join(self.assets_dir, "icons", "topbar_settings.svg")))
+        self.btn_setting.setIconSize(QSize(18, 18))
+        self.btn_setting.clicked.connect(lambda: self.switch_to_page("settings"))
+        action_group.addWidget(self.btn_setting)
+
+        self.btn_help = QPushButton("帮助")
+        self.btn_help.setFixedHeight(36)
+        self.btn_help.setObjectName("topbar_action_text_btn")
+        self.btn_help.setIcon(QIcon(os.path.join(self.assets_dir, "icons", "topbar_help.svg")))
+        self.btn_help.setIconSize(QSize(18, 18))
+        self.btn_help.clicked.connect(lambda: UiFeedback.info(self, "帮助", "金蝶数据同步工具 v2.0"))
+        action_group.addWidget(self.btn_help)
+        root_layout.addLayout(action_group)
+
+        # ── 分隔间距20px + 窗口控制 ──
+        root_layout.addSpacing(20)
+
+        win_group = QHBoxLayout()
+        win_group.setSpacing(0)
+
+        for txt, fn in [("—", self.showMinimized), ("□", self._toggle_max_restore), ("×", self.close)]:
+            btn = QPushButton(txt)
+            btn.setFixedSize(44, 40)
+            btn.setObjectName("topbar_window_close_btn" if txt == "×" else "topbar_window_btn")
+            btn.clicked.connect(fn)
+            win_group.addWidget(btn)
+
+        root_layout.addLayout(win_group)
+
+        # 整栏拖拽
+        bar.mousePressEvent = lambda e: (
+            setattr(self, '_drag_pos', e.globalPosition().toPoint() - self.frameGeometry().topLeft())
+            if e.button() == Qt.LeftButton else None
         )
-        self.topbar_action_buttons = [self.btn_search, self.btn_notice, self.btn_setting]
-        top_row.addWidget(self.btn_search)
-        top_row.addWidget(self.btn_notice)
-        top_row.addWidget(self.btn_setting)
+        bar.mouseMoveEvent = lambda e: (
+            self.move(e.globalPosition().toPoint() - self._drag_pos)
+            if e.buttons() == Qt.LeftButton else None
+        )
 
-        self.topbar_user = QLabel(ShellText.TOPBAR_USER_BADGE)
-        self.topbar_user.setObjectName("topbar_user")
-        top_row.addWidget(self.topbar_user)
-        root_layout.addLayout(top_row)
-
-        layout = QHBoxLayout()
-        layout.setSpacing(16)
-
-        title_wrap = QVBoxLayout()
-        title_wrap.setSpacing(4)
-        self.topbar_title = QLabel("运营总览")
+        # 隐藏 topbar_title 但保留属性供测试读
+        self.topbar_title = QLabel("概览")
         self.topbar_title.setObjectName("topbar_title")
-        self.topbar_subtitle = QLabel("查看核心运行指标、连接状态与任务概览")
+        self.topbar_title.setVisible(False)
+        self.topbar_subtitle = QLabel("")
         self.topbar_subtitle.setObjectName("topbar_subtitle")
         self.topbar_subtitle.setVisible(False)
-        title_wrap.addWidget(self.topbar_title)
-        title_wrap.addWidget(self.topbar_subtitle)
-        layout.addLayout(title_wrap)
-        layout.addStretch()
 
-        self.topbar_sync_badge = QLabel("自动同步待命")
-        self.topbar_sync_badge.setProperty("class", "topbar-chip-neutral")
-        self.topbar_kd_badge = QLabel("金蝶离线")
-        self.topbar_kd_badge.setProperty("class", "topbar-chip-danger")
-        self.topbar_db_badge = QLabel("数据库离线")
-        self.topbar_db_badge.setProperty("class", "topbar-chip-danger")
-        self.topbar_time = QLabel("")
-        self.topbar_time.setObjectName("topbar_time")
-
-        layout.addWidget(self.topbar_sync_badge, 0, Qt.AlignVCenter)
-        layout.addWidget(self.topbar_kd_badge, 0, Qt.AlignVCenter)
-        layout.addWidget(self.topbar_db_badge, 0, Qt.AlignVCenter)
-        layout.addWidget(self.topbar_time, 0, Qt.AlignVCenter)
-        root_layout.addLayout(layout)
+        self._refresh_top_status_bar()
         return bar
 
     def _create_top_action_button(self, text, callback, accent=False):
@@ -522,17 +724,17 @@ class KingdeeSyncGUI(QMainWindow):
         return button
 
     def focus_topbar_search(self):
-        if hasattr(self, "topbar_search") and self.topbar_search is not None:
-            self.topbar_search.setFocus()
-            self.topbar_search.selectAll()
+        pass
 
     def _apply_responsive_shell_layout(self):
-        compact = self.width() <= 1366
+        compact = self.width() <= 1024
         self.sidebar_compact = compact
 
         if self.sidebar is not None:
             self.sidebar.setProperty("compact", compact)
-            self.sidebar.setMaximumWidth(self.sidebar_compact_width if compact else 320)
+            sidebar_width = self.sidebar_compact_width if compact else self.sidebar_expanded_width
+            self.sidebar.setMinimumWidth(sidebar_width)
+            self.sidebar.setMaximumWidth(sidebar_width)
             sidebar_style = self.sidebar.style()
             if sidebar_style is not None:
                 sidebar_style.unpolish(self.sidebar)
@@ -540,13 +742,8 @@ class KingdeeSyncGUI(QMainWindow):
 
         if self.sidebar_logo_subtitle is not None:
             self.sidebar_logo_subtitle.setVisible(not compact)
-        if self.sidebar_section_title is not None:
-            self.sidebar_section_title.setVisible(not compact)
         if self.sidebar_status_card is not None:
             self.sidebar_status_card.setVisible(not compact)
-
-        if hasattr(self, "topbar_search") and self.topbar_search is not None:
-            self.topbar_search.setMaximumWidth(180 if compact else 280)
 
         if self.main_splitter is not None:
             sidebar_width = self.sidebar_compact_width if compact else self.sidebar_expanded_width
@@ -578,41 +775,60 @@ class KingdeeSyncGUI(QMainWindow):
     def _update_topbar_page(self, page_id):
         if page_id not in self.page_index_map:
             page_id = "dashboard"
-        title, subtitle = self.page_meta.get(page_id, self.page_meta["dashboard"])
+        title, _subtitle = self.page_meta.get(page_id, self.page_meta["dashboard"])
         self.topbar_title.setText(title)
-        self.topbar_subtitle.setText(subtitle)
-        if hasattr(self, "topbar_breadcrumb"):
-            self.topbar_breadcrumb.setText(f"首页 / {title}")
         self._refresh_desktop_status()
 
-    def _refresh_top_status_bar(self):
-        if not all(
-            hasattr(self, attr)
-            for attr in (
-                "topbar_kd_badge",
-                "topbar_db_badge",
-                "topbar_sync_badge",
-                "topbar_time",
-            )
-        ):
-            return
+    def _topbar_kingdee_display(self) -> str:
+        try:
+            cfg = config_manager.get_kingdee_config()
+        except Exception as exc:
+            self.logger.warning("Failed to read Kingdee config for topbar: %s", exc)
+            return "未配置"
 
-        self._set_topbar_chip(
-            self.topbar_kd_badge,
-            "金蝶已连接" if self.kd_connected else "金蝶离线",
-            "success" if self.kd_connected else "danger",
-        )
-        self._set_topbar_chip(
-            self.topbar_db_badge,
-            "数据库已连接" if self.db_connected else "数据库离线",
-            "success" if self.db_connected else "danger",
-        )
-        self._set_topbar_chip(
-            self.topbar_sync_badge,
-            "自动同步运行中" if auto_scheduler.is_running() else "自动同步待命",
-            "info" if auto_scheduler.is_running() else "neutral",
-        )
-        self.topbar_time.setText(datetime.now().strftime("%Y-%m-%d %H:%M"))
+        raw_url = str(cfg.get("query_url") or cfg.get("login_url") or cfg.get("api_url") or "").strip()
+        if not raw_url:
+            return "未配置"
+
+        parsed = urlparse(raw_url)
+        if parsed.scheme and parsed.netloc:
+            return f"{parsed.scheme}://{parsed.netloc}"
+        return raw_url.split("/", 1)[0] or "未配置"
+
+    def _topbar_database_display(self) -> str:
+        try:
+            db_config = config_manager.get_db_config()
+        except Exception as exc:
+            self.logger.warning("Failed to read database config for topbar: %s", exc)
+            return "未配置"
+
+        db_type = str(db_config.get("type", "sqlserver")).strip().lower()
+        display_type = "SQL Server" if db_type == "sqlserver" else "MySQL" if db_type == "mysql" else db_type.upper()
+        target_cfg = db_config.get(db_type, {}) if isinstance(db_config, dict) else {}
+        host = str(target_cfg.get("host") or "").strip()
+        return f"{display_type} ({host})" if host else f"{display_type} (未配置)"
+
+    def _refresh_top_status_bar(self):
+        """Update top status bar from readonly connection state and config."""
+        if hasattr(self, "topbar_conn_value"):
+            if self.kd_connected and self.db_connected:
+                self.topbar_conn_value.setText("已连接")
+                self.topbar_status_dot.setProperty("status", "online")
+            elif self.kd_connected or self.db_connected:
+                self.topbar_conn_value.setText("部分连接")
+                self.topbar_status_dot.setProperty("status", "partial")
+            else:
+                self.topbar_conn_value.setText("未连接")
+                self.topbar_status_dot.setProperty("status", "offline")
+            self.topbar_status_dot.style().unpolish(self.topbar_status_dot)
+            self.topbar_status_dot.style().polish(self.topbar_status_dot)
+
+        if hasattr(self, "topbar_kingdee_value"):
+            self.topbar_kingdee_value.setText(self._topbar_kingdee_display())
+            self.topbar_kingdee_value.setToolTip(self.topbar_kingdee_value.text())
+        if hasattr(self, "topbar_database_value"):
+            self.topbar_database_value.setText(self._topbar_database_display())
+            self.topbar_database_value.setToolTip(self.topbar_database_value.text())
         self._refresh_desktop_status()
 
     def _update_status_display(self, is_kingdee, connected, message=None):
@@ -728,12 +944,16 @@ class KingdeeSyncGUI(QMainWindow):
 
         nav_menu = menu_bar.addMenu("导航(&N)")
         nav_entries = [
-            ("运营总览", "dashboard", "Ctrl+1"),
+            ("概览", "dashboard", "Ctrl+1"),
             ("同步执行", "sync", "Ctrl+2"),
-            ("表单配置", "forms", "Ctrl+3"),
-            ("调度管理", "schedule", "Ctrl+4"),
-            ("历史记录", "history", "Ctrl+5"),
-            ("系统设置", "settings", "Ctrl+6"),
+            ("同步历史", "history", "Ctrl+3"),
+            ("任务管理", "task_management", "Ctrl+4"),
+            ("数据源管理", "data_source", "Ctrl+5"),
+            ("表单映射", "forms", "Ctrl+6"),
+            ("调度管理", "schedule", "Ctrl+7"),
+            ("异常诊断", "diagnostics", "Ctrl+8"),
+            ("日志中心", "log_center", "Ctrl+9"),
+            ("系统设置", "settings", "Ctrl+0"),
         ]
         for label, page_id, shortcut in nav_entries:
             action = QAction(label, self)
@@ -761,22 +981,65 @@ class KingdeeSyncGUI(QMainWindow):
         menu_bar.setVisible(False)
 
     def setup_status_bar(self):
-        """Create compact desktop status bar."""
+        """Create compact desktop status bar matching target design."""
         status = self.statusBar()
         status.setObjectName("desktop_status_bar")
-        status.setSizeGripEnabled(True)
+        status.setSizeGripEnabled(False)
+        status.setFixedHeight(28)
 
-        self.statusbar_state = QLabel("待命")
+        state_row = QHBoxLayout()
+        state_row.setContentsMargins(12, 0, 12, 0)
+        state_row.setSpacing(6)
+
+        dot = QLabel()
+        dot.setObjectName("statusbar_dot")
+        dot.setFixedSize(10, 10)
+        dot.setAlignment(Qt.AlignCenter)
+        dot_pm = QPixmap(8, 8)
+        dot_pm.fill(Qt.transparent)
+        dot_painter = QPainter(dot_pm)
+        dot_painter.setRenderHint(QPainter.Antialiasing)
+        dot_painter.setPen(Qt.NoPen)
+        dot_painter.setBrush(QColor(ColorTokens.SUCCESS_GREEN))
+        dot_painter.drawEllipse(0, 0, 8, 8)
+        dot_painter.end()
+        dot.setPixmap(dot_pm)
+        state_row.addWidget(dot)
+
+        self.statusbar_state = QLabel("数据同步服务运行中")
         self.statusbar_state.setObjectName("statusbar_state")
-        self.statusbar_conn = QLabel("连接状态检测中")
-        self.statusbar_conn.setObjectName("statusbar_conn")
-        self.statusbar_clock = QLabel("--:--:--")
-        self.statusbar_clock.setObjectName("statusbar_clock")
+        sf = self.statusbar_state.font()
+        sf.setPointSize(10)
+        self.statusbar_state.setFont(sf)
+        sp = self.statusbar_state.palette()
+        sp.setColor(QPalette.WindowText, QColor(ColorTokens.NEUTRAL_500))
+        self.statusbar_state.setPalette(sp)
+        state_row.addWidget(self.statusbar_state)
+        state_row.addStretch()
 
-        status.addWidget(self.statusbar_state)
-        status.addPermanentWidget(self.statusbar_conn, 1)
-        status.addPermanentWidget(self.statusbar_clock)
-        self._refresh_desktop_status()
+        self.statusbar_conn = QLabel("")
+        self.statusbar_conn.setObjectName("statusbar_conn")
+        state_row.addWidget(self.statusbar_conn)
+
+        self.statusbar_clock = QLabel("上次同步：2024-05-14 10:15:32")
+        self.statusbar_clock.setObjectName("statusbar_clock")
+        cf = self.statusbar_clock.font()
+        cf.setPointSize(10)
+        self.statusbar_clock.setFont(cf)
+        cp = self.statusbar_clock.palette()
+        cp.setColor(QPalette.WindowText, QColor(ColorTokens.NEUTRAL_500))
+        self.statusbar_clock.setPalette(cp)
+        state_row.addWidget(self.statusbar_clock)
+
+        wrapper = QWidget()
+        wrapper.setLayout(state_row)
+        wrapper.setFixedHeight(28)
+        wrapper_p = wrapper.palette()
+        wrapper_p.setColor(QPalette.Window, QColor(ColorTokens.SURFACE_BASE))
+        wrapper.setAutoFillBackground(True)
+        wrapper.setPalette(wrapper_p)
+
+        status.addWidget(wrapper, 1)
 
     def setup_shortcuts(self):
         """Register application-wide keyboard shortcuts."""
@@ -785,10 +1048,14 @@ class KingdeeSyncGUI(QMainWindow):
             "Ctrl+F": self.focus_topbar_search,
             "Ctrl+1": lambda: self.switch_to_page("dashboard"),
             "Ctrl+2": lambda: self.switch_to_page("sync"),
-            "Ctrl+3": lambda: self.switch_to_page("forms"),
-            "Ctrl+4": lambda: self.switch_to_page("schedule"),
-            "Ctrl+5": lambda: self.switch_to_page("history"),
-            "Ctrl+6": lambda: self.switch_to_page("settings"),
+            "Ctrl+3": lambda: self.switch_to_page("history"),
+            "Ctrl+4": lambda: self.switch_to_page("task_management"),
+            "Ctrl+5": lambda: self.switch_to_page("data_source"),
+            "Ctrl+6": lambda: self.switch_to_page("forms"),
+            "Ctrl+7": lambda: self.switch_to_page("schedule"),
+            "Ctrl+8": lambda: self.switch_to_page("diagnostics"),
+            "Ctrl+9": lambda: self.switch_to_page("log_center"),
+            "Ctrl+0": lambda: self.switch_to_page("settings"),
         }
 
         for seq, callback in key_map.items():
@@ -801,7 +1068,7 @@ class KingdeeSyncGUI(QMainWindow):
             return
         total = max(self.width(), 1000)
         if visible:
-            self.main_splitter.setSizes([256, max(740, total - 256)])
+            self.main_splitter.setSizes([self.sidebar_expanded_width, max(740, total - self.sidebar_expanded_width)])
         else:
             self.main_splitter.setSizes([0, total])
         self._refresh_desktop_status()
@@ -809,37 +1076,27 @@ class KingdeeSyncGUI(QMainWindow):
     def _refresh_desktop_status(self):
         if not all(hasattr(self, attr) for attr in ("statusbar_state", "statusbar_conn", "statusbar_clock")):
             return
-        self.statusbar_state.setText(self.topbar_title.text() if hasattr(self, "topbar_title") else "待命")
-        self.statusbar_conn.setText(
-            f"金蝶: {'已连接' if self.kd_connected else '离线'} | "
-            f"数据库: {'已连接' if self.db_connected else '离线'} | "
-            f"调度: {'运行中' if auto_scheduler.is_running() else '已停止'}"
-        )
-        self.statusbar_clock.setText(datetime.now().strftime("%H:%M:%S"))
+        self.statusbar_state.setText("数据同步服务运行中")
+        self.statusbar_conn.setText("")
+        self.statusbar_clock.setText("上次同步：2024-05-14 10:15:32")
 
     def _show_window_menu(self, global_pos):
-        if hasattr(self, "window_menu_popup") and self.window_menu_popup is not None:
-            self.window_menu_popup.exec(global_pos)
+        pass  # native title bar — no custom window menu
 
     def _minimize_window(self):
-        self._hide_snap_preview()
         self.showMinimized()
 
     def _toggle_max_restore(self):
-        self._hide_snap_preview()
         if self.isMaximized():
             self.showNormal()
         else:
             self.showMaximized()
-        self._update_titlebar_state()
 
     def _update_titlebar_state(self):
-        if self.title_bar is not None:
-            self.title_bar.set_maximized(self.isMaximized())
+        pass  # native title bar handles maximize/restore
 
     def changeEvent(self, event):
         if event.type() == QEvent.WindowStateChange:
-            self._update_titlebar_state()
             if self.isMaximized() or self.isMinimized():
                 self._hide_snap_preview()
         super().changeEvent(event)

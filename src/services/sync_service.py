@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import logging
-from typing import Callable, Optional
+from typing import Callable
 
 from src.config.config_manager import config_manager
 from src.core.data_sync import SyncType, sync_manager
@@ -28,23 +28,23 @@ class SyncService:
 
     @staticmethod
     def sync_type_to_config_value(sync_type: SyncType) -> str:
-        if sync_type == SyncType.FULL:
-            return "full"
         if sync_type in (SyncType.COMPLETE, SyncType.RESET):
+            return "complete"
+        if sync_type == SyncType.FULL:
             return "complete"
         return "incremental"
 
-    def save_sync_preferences(self, forms: Optional[list[str]], sync_type: SyncType) -> None:
+    def save_sync_preferences(self, forms: list[str] | None, sync_type: SyncType) -> None:
         mode_str = self.sync_type_to_config_value(sync_type)
         config_manager.save_sync_preferences(forms or [], mode_str)
         config_manager.update_config("SYNC", "sync_type", mode_str)
 
     def sync_data(
         self,
-        forms: Optional[list[str]],
+        forms: list[str] | None,
         sync_type: SyncType,
         *,
-        progress_callback: Optional[ProgressCallback] = None,
+        progress_callback: ProgressCallback | None = None,
     ) -> dict:
         if progress_callback is not None:
             sync_manager.add_sync_callback(progress_callback)

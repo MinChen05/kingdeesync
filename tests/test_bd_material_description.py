@@ -246,6 +246,109 @@ class BdMaterialDescriptionTests(unittest.TestCase):
 
         self.assertFalse(manager.cursor.fast_executemany)
 
+    def test_bd_material_staging_enables_fast_executemany_when_whitelisted(self) -> None:
+        from tests.test_upsert_engine_sqlserver import FakeSqlServerManager
+
+        manager = FakeSqlServerManager()
+        manager.config["force_staging_tables"] = "bd_material"
+        manager.config["fast_executemany_tables"] = "bd_material"
+        manager.cursor._fetchone_queue = [(1,)]
+        manager._parse_insert_sql = lambda sql: ("bd_material", ["FMATERIALID", "FNUMBER", "FNAME"])
+        manager._get_table_columns_info = lambda table: {
+            "FMATERIALID": "bigint",
+            "FNUMBER": "nvarchar",
+            "FNAME": "nvarchar",
+            "SYNC_TIME": "datetime",
+        }
+        manager._get_primary_key = lambda table: "FMATERIALID"
+
+        from src.core.upsert_engine_sqlserver import UpsertEngineSqlServer
+
+        engine = UpsertEngineSqlServer(manager)
+
+        with self.assertLogs("src.core.upsert_engine_sqlserver", level="INFO") as captured:
+            engine.execute(
+                sql="INSERT INTO bd_material (FMATERIALID, FNUMBER, FNAME) VALUES (%s, %s, %s)",
+                values=[[1, "MAT-001", "Test"]],
+                batch_size=10000,
+                commit_every_n_batches=0,
+            )
+
+        self.assertTrue(manager.cursor.fast_executemany)
+        self.assertIn("fast_executemany=True", "\n".join(captured.output))
+
+    def test_bd_material_staging_whitelist_overrides_driver18_default_disable(self) -> None:
+        from tests.test_upsert_engine_sqlserver import FakeSqlServerManager
+
+        manager = FakeSqlServerManager()
+        manager.config["driver"] = "ODBC Driver 18 for SQL Server"
+        manager.config["force_staging_tables"] = "bd_material"
+        manager.config["fast_executemany_tables"] = "bd_material"
+        manager.cursor._fetchone_queue = [(1,)]
+        manager._parse_insert_sql = lambda sql: ("bd_material", ["FMATERIALID", "FNUMBER", "FNAME"])
+        manager._get_table_columns_info = lambda table: {
+            "FMATERIALID": "bigint",
+            "FNUMBER": "nvarchar",
+            "FNAME": "nvarchar",
+            "SYNC_TIME": "datetime",
+        }
+        manager._get_primary_key = lambda table: "FMATERIALID"
+
+        from src.core.upsert_engine_sqlserver import UpsertEngineSqlServer
+
+        engine = UpsertEngineSqlServer(manager)
+
+        with self.assertLogs("src.core.upsert_engine_sqlserver", level="INFO") as captured:
+            engine.execute(
+                sql="INSERT INTO bd_material (FMATERIALID, FNUMBER, FNAME) VALUES (%s, %s, %s)",
+                values=[[1, "MAT-001", "Test"]],
+                batch_size=10000,
+                commit_every_n_batches=0,
+            )
+
+        log_text = "\n".join(captured.output)
+        self.assertTrue(manager.cursor.fast_executemany)
+        self.assertIn("driver=ODBC Driver 18 for SQL Server", log_text)
+        self.assertIn("fast_executemany=True", log_text)
+
+    def test_bd_material_staging_logs_load_diagnostics(self) -> None:
+        from tests.test_upsert_engine_sqlserver import FakeSqlServerManager
+
+        manager = FakeSqlServerManager()
+        manager.config["force_staging_tables"] = "bd_material"
+        manager.cursor._fetchone_queue = [(1,)]
+        manager._parse_insert_sql = lambda sql: ("bd_material", ["FMATERIALID", "FNUMBER", "FNAME"])
+        manager._get_table_columns_info = lambda table: {
+            "FMATERIALID": "bigint",
+            "FNUMBER": "nvarchar",
+            "FNAME": "nvarchar",
+            "SYNC_TIME": "datetime",
+        }
+        manager._get_primary_key = lambda table: "FMATERIALID"
+
+        from src.core.upsert_engine_sqlserver import UpsertEngineSqlServer
+
+        engine = UpsertEngineSqlServer(manager)
+
+        with self.assertLogs("src.core.upsert_engine_sqlserver", level="INFO") as captured:
+            engine.execute(
+                sql="INSERT INTO bd_material (FMATERIALID, FNUMBER, FNAME) VALUES (%s, %s, %s)",
+                values=[[1, "MAT-001", "Test"]],
+                batch_size=10000,
+                commit_every_n_batches=0,
+            )
+
+        log_text = "\n".join(captured.output)
+        self.assertIn("[PERF][STAGE][bd_material] load_start", log_text)
+        self.assertIn("staging=True", log_text)
+        self.assertIn("driver=ODBC Driver 17 for SQL Server", log_text)
+        self.assertIn("fast_executemany=False", log_text)
+        self.assertIn("batch_size=2000", log_text)
+        self.assertIn("columns=3", log_text)
+        self.assertIn("rows=1", log_text)
+        self.assertIn("batch 1/1 rows=1", log_text)
+        self.assertIn("load_finish rows=1", log_text)
+
     def test_ensure_fdescription_adds_column_when_missing(self) -> None:
         class FakeCursor:
             def __init__(self):
@@ -319,6 +422,53 @@ class BdMaterialDescriptionTests(unittest.TestCase):
         self.assertTrue(
             any("ALTER TABLE bd_material ALTER COLUMN FDESCRIPTION NVARCHAR(MAX) NULL" in sql for sql in executed)
         )
+
+    def test_ensure_fdescription_drops_and_recreates_default_constraint_before_widening(self) -> None:
+        class FakeCursor:
+            def __init__(self):
+                self.execute_calls = []
+                self._fetchone_results = [("nvarchar", 255)]
+
+            def execute(self, sql, params=None):
+                self.execute_calls.append((sql, params))
+
+            def fetchone(self):
+                return self._fetchone_results.pop(0)
+
+            def fetchall(self):
+                return [("DF____reorder__FDESC__02963F58", "('')")]
+
+        class FakeConnection:
+            def __init__(self):
+                self.commit_count = 0
+
+            def commit(self):
+                self.commit_count += 1
+
+        manager = MySQLManager.__new__(MySQLManager)
+        manager.db_type = "sqlserver"
+        cursor = FakeCursor()
+        manager.cursor = cursor
+        manager.connection = FakeConnection()
+        manager._invalidate_table_metadata_cache = Mock()
+
+        manager._ensure_bd_material_fdescription_column()
+
+        executed = [sql for sql, _ in cursor.execute_calls]
+        default_query_index = next(
+            i for i, sql in enumerate(executed) if "FROM sys.default_constraints dc" in sql
+        )
+        drop_index = executed.index(
+            "ALTER TABLE bd_material DROP CONSTRAINT DF____reorder__FDESC__02963F58"
+        )
+        alter_index = executed.index("ALTER TABLE bd_material ALTER COLUMN FDESCRIPTION NVARCHAR(MAX) NULL")
+        recreate_index = executed.index(
+            "ALTER TABLE bd_material ADD CONSTRAINT DF_bd_material_FDESCRIPTION DEFAULT ('') FOR FDESCRIPTION"
+        )
+
+        self.assertLess(default_query_index, drop_index)
+        self.assertLess(drop_index, alter_index)
+        self.assertLess(alter_index, recreate_index)
 
     def test_ensure_fdescription_skips_when_already_max(self) -> None:
         class FakeCursor:

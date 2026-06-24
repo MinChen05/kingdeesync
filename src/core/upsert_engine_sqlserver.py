@@ -47,8 +47,16 @@ class UpsertEngineSqlServer:
         self.dedup_strategy = DeduplicationStrategy(manager)
 
     def _is_driver18(self, manager: MySQLManager) -> bool:
-        drv = getattr(manager, "config", {}).get("driver", "ODBC Driver 17 for SQL Server")
+        drv = getattr(manager, "config", {}).get("driver", "ODBC Driver 18 for SQL Server")
         return "ODBC Driver 18" in str(drv)
+
+    def _is_fast_executemany_whitelisted(self, manager: MySQLManager, table_name: str) -> bool:
+        configured = str(getattr(manager, "config", {}).get("fast_executemany_tables", "") or "")
+        names = {item.strip().lower() for item in configured.split(",") if item.strip()}
+        if not names:
+            return False
+        normalized = table_name.strip().lower()
+        return normalized in names or "*" in names
 
     def _normalize_column_name(self, column: Any) -> str:
         return str(column).strip().upper()
@@ -444,7 +452,20 @@ class UpsertEngineSqlServer:
                         try:
                             # 对于 eng_bomchild 等表，fast_executemany 可能会导致 8114 (varchar to numeric) 转换错误
                             # 因此针对该表显式禁用 fast_executemany，以兼容模式插入
-                            if base_name.strip().lower() in ("eng_bomchild", "prd_ppbomentry", "sub_subreqorder", "bd_material"):
+                            fast_executemany_whitelisted = self._is_fast_executemany_whitelisted(manager, base_name)
+                            if fast_executemany_whitelisted and hasattr(manager.cursor, "fast_executemany"):
+                                manager.cursor.fast_executemany = True
+                                logger.info(
+                                    "[STAGE] fast_executemany 白名单启用: table=%s driver=%s",
+                                    base_name,
+                                    getattr(manager, "config", {}).get("driver", "--"),
+                                )
+                            elif base_name.strip().lower() in (
+                                "eng_bomchild",
+                                "prd_ppbomentry",
+                                "sub_subreqorder",
+                                "bd_material",
+                            ):
                                 manager.cursor.fast_executemany = False
                                 logger.debug(
                                     f"[STAGE] 针对表 {base_name} 禁用 fast_executemany 以避免驱动类型转换错误"
@@ -454,6 +475,8 @@ class UpsertEngineSqlServer:
                                 logger.debug("[STAGE] fast_executemany=%s (ODBC Driver 18 compat)", not is_d18)
                         except Exception:
                             pass
+                        configured_driver = str(getattr(manager, "config", {}).get("driver", ""))
+                        fast_executemany_value = getattr(manager.cursor, "fast_executemany", None)
                         identity_insert_enabled = False
                         # 将数据加载到临时表
                         identity_col = None
@@ -604,10 +627,24 @@ class UpsertEngineSqlServer:
                                 pass
                         total_batches = (len(values) - 1) // batch_size + 1
                         loaded = 0
+                        stage_load_started_at = time.perf_counter()
+                        logger.info(
+                            "[PERF][STAGE][%s] load_start staging=True driver=%s "
+                            "fast_executemany=%s batch_size=%s columns=%s rows=%s batches=%s stage_ref=%s",
+                            base_name,
+                            configured_driver or "--",
+                            fast_executemany_value,
+                            batch_size,
+                            len(columns),
+                            len(values),
+                            total_batches,
+                            stage_ref,
+                        )
                         for b_idx, i in enumerate(range(0, len(values), batch_size), start=1):
                             batch = values[i : i + batch_size]
                             batch_exec_seconds = 0.0
                             logger.info(f"[STAGE] 加载批次 {b_idx}/{total_batches}，记录数: {len(batch)}")
+                            batch_started_at = time.perf_counter()
                             try:
                                 manager.cursor.executemany(insert_stage_sql, batch)
                             except Exception as load_err:
@@ -646,8 +683,28 @@ class UpsertEngineSqlServer:
                                     logger.warning(f"[STAGE] 批量加载失败，切换为逐行插入：{load_err}")
                                     for r in batch:
                                         manager.cursor.execute(insert_stage_sql, r)
+                            batch_exec_seconds = time.perf_counter() - batch_started_at
                             loaded += len(batch)
+                            logger.info(
+                                "[PERF][STAGE][%s] batch %s/%s rows=%s executemany=%.3f "
+                                "fast_executemany=%s",
+                                base_name,
+                                b_idx,
+                                total_batches,
+                                len(batch),
+                                batch_exec_seconds,
+                                getattr(manager.cursor, "fast_executemany", None),
+                            )
+                        stage_load_seconds = time.perf_counter() - stage_load_started_at
                         logger.info(f"[STAGE] 临时表加载完成，记录数: {loaded}")
+                        logger.info(
+                            "[PERF][STAGE][%s] load_finish rows=%s seconds=%.3f "
+                            "fast_executemany=%s",
+                            base_name,
+                            loaded,
+                            stage_load_seconds,
+                            getattr(manager.cursor, "fast_executemany", None),
+                        )
                         # 关闭临时表的 IDENTITY_INSERT（如前面已开启）
                         try:
                             if identity_insert_enabled:

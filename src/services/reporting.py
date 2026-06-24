@@ -56,23 +56,35 @@ def _safe_close(cur, conn):
         pass
 
 
-def get_dashboard_today_stats() -> Dict[str, Any]:
+def _empty_dashboard_stats() -> dict[str, Any]:
+    return {
+        "sync_count": 0,
+        "sync_records": 0,
+        "success_rate": 0.0,
+        "fail_count": 0,
+        "pending_count": 0,
+        "avg_duration": None,
+        "last_sync_time": None,
+        "yday_count": 0,
+        "yday_records": 0,
+        "yday_rate": 0.0,
+        "yday_fail_count": 0,
+        "yday_pending_count": 0,
+        "yday_avg_duration": None,
+    }
+
+
+def get_dashboard_today_stats() -> dict[str, Any]:
     """Get today's dashboard stats with yesterday comparison."""
     _log_debug("get_dashboard_today_stats start")
     if not _ensure_pool():
-        return {
-            "sync_count": 0,
-            "sync_records": 0,
-            "success_rate": 0.0,
-            "yday_count": 0,
-            "yday_records": 0,
-            "yday_rate": 0.0,
-        }
+        return _empty_dashboard_stats()
 
     is_sqlserver = getattr(mysql_manager, "db_type", "mysql") == "sqlserver"
     use_sync_runs = mysql_manager.table_exists("sync_runs")
     base_table = "sync_runs" if use_sync_runs else "sync_logs"
     count_field = "total_records" if use_sync_runs else "record_count"
+    abnormal_statuses = ("failed", "partial", "failed_abnormal_exit")
 
     today = datetime.now().strftime("%Y-%m-%d")
     yesterday = (datetime.now() - timedelta(days=1)).strftime("%Y-%m-%d")
@@ -100,6 +112,24 @@ def get_dashboard_today_stats() -> Dict[str, Any]:
             f"SELECT SUM(CASE WHEN status='success' THEN 1 ELSE 0 END), COUNT(*) "
             f"FROM {base_table} WHERE {{clause}}"
         )
+        sql_avg_duration = f"SELECT AVG(duration_seconds) FROM {base_table} WHERE {{clause}} AND status='success'"
+        sql_last_sync = f"SELECT MAX(start_time) FROM {base_table} WHERE {{clause}}"
+
+        if is_sqlserver:
+            sql_fail = (
+                f"SELECT COUNT(*) FROM {base_table} WHERE {{clause}} "
+                "AND status IN (?, ?, ?)"
+            )
+        else:
+            sql_fail = (
+                f"SELECT COUNT(*) FROM {base_table} WHERE {{clause}} "
+                "AND status IN (%s, %s, %s)"
+            )
+
+        if use_sync_runs:
+            sql_pending = f"SELECT COALESCE(SUM(failure_count), 0) FROM {base_table} WHERE {{clause}}"
+        else:
+            sql_pending = sql_fail
 
         cur.execute(sql_count.format(clause=clause_today), params_today)
         sync_count = int(_safe_scalar(cur.fetchone(), 0, 0) or 0)
@@ -113,6 +143,19 @@ def get_dashboard_today_stats() -> Dict[str, Any]:
         total_cnt = int(_safe_scalar(row, 1, 0) or 0)
         success_rate = round((succ_cnt / total_cnt) * 100, 1) if total_cnt > 0 else 0.0
 
+        cur.execute(sql_fail.format(clause=clause_today), params_today + abnormal_statuses)
+        fail_count = int(_safe_scalar(cur.fetchone(), 0, 0) or 0)
+
+        pending_params = params_today if use_sync_runs else params_today + abnormal_statuses
+        cur.execute(sql_pending.format(clause=clause_today), pending_params)
+        pending_count = int(_safe_scalar(cur.fetchone(), 0, 0) or 0)
+
+        cur.execute(sql_avg_duration.format(clause=clause_today), params_today)
+        avg_duration = _safe_scalar(cur.fetchone(), 0, None)
+
+        cur.execute(sql_last_sync.format(clause=clause_today), params_today)
+        last_sync_time = _safe_scalar(cur.fetchone(), 0, None)
+
         cur.execute(sql_count.format(clause=clause_yday), params_yday)
         yday_count = int(_safe_scalar(cur.fetchone(), 0, 0) or 0)
 
@@ -125,30 +168,40 @@ def get_dashboard_today_stats() -> Dict[str, Any]:
         yday_total = int(_safe_scalar(yday_row, 1, 0) or 0)
         yday_rate = round((yday_succ / yday_total) * 100, 1) if yday_total > 0 else 0.0
 
+        cur.execute(sql_fail.format(clause=clause_yday), params_yday + abnormal_statuses)
+        yday_fail_count = int(_safe_scalar(cur.fetchone(), 0, 0) or 0)
+
+        yday_pending_params = params_yday if use_sync_runs else params_yday + abnormal_statuses
+        cur.execute(sql_pending.format(clause=clause_yday), yday_pending_params)
+        yday_pending_count = int(_safe_scalar(cur.fetchone(), 0, 0) or 0)
+
+        cur.execute(sql_avg_duration.format(clause=clause_yday), params_yday)
+        yday_avg_duration = _safe_scalar(cur.fetchone(), 0, None)
+
         return {
             "sync_count": sync_count,
             "sync_records": sync_records,
             "success_rate": success_rate,
+            "fail_count": fail_count,
+            "pending_count": pending_count,
+            "avg_duration": avg_duration,
+            "last_sync_time": last_sync_time,
             "yday_count": yday_count,
             "yday_records": yday_records,
             "yday_rate": yday_rate,
+            "yday_fail_count": yday_fail_count,
+            "yday_pending_count": yday_pending_count,
+            "yday_avg_duration": yday_avg_duration,
         }
     except Exception as e:
         _log_debug(f"get_dashboard_today_stats error: {e}")
         logger.error(f"Failed to load dashboard stats: {e}")
-        return {
-            "sync_count": 0,
-            "sync_records": 0,
-            "success_rate": 0.0,
-            "yday_count": 0,
-            "yday_records": 0,
-            "yday_rate": 0.0,
-        }
+        return _empty_dashboard_stats()
     finally:
         _safe_close(cur, conn)
 
 
-def get_trend_days(days: int = 7) -> List[Dict[str, Any]]:
+def get_trend_days(days: int = 7) -> list[dict[str, Any]]:
     """Get trend data in the last N days."""
     days = max(int(days or 0), 1)
     if not _ensure_pool():
@@ -190,7 +243,7 @@ def get_trend_days(days: int = 7) -> List[Dict[str, Any]]:
         cur.execute(sql, params)
         rows = cur.fetchall() or []
 
-        day_map: Dict[str, Dict[str, Any]] = {}
+        day_map: dict[str, dict[str, Any]] = {}
         for row in rows:
             if isinstance(row, dict):
                 day = row.get("day")
@@ -210,7 +263,7 @@ def get_trend_days(days: int = 7) -> List[Dict[str, Any]]:
                 "rate": rate,
             }
 
-        result: List[Dict[str, Any]] = []
+        result: list[dict[str, Any]] = []
         start_dt = (datetime.now() - timedelta(days=days - 1)).date()
         for offset in range(days):
             cur_day = (start_dt + timedelta(days=offset)).isoformat()
@@ -223,12 +276,12 @@ def get_trend_days(days: int = 7) -> List[Dict[str, Any]]:
         _safe_close(cur, conn)
 
 
-def get_trend_7d() -> List[Dict[str, Any]]:
+def get_trend_7d() -> list[dict[str, Any]]:
     """Backward-compatible API for 7-day trend."""
     return get_trend_days(7)
 
 
-def get_top_forms_days(limit: int = 5, days: int = 7) -> List[Dict[str, Any]]:
+def get_top_forms_days(limit: int = 5, days: int = 7) -> list[dict[str, Any]]:
     """Get top forms in the last N days."""
     limit = max(int(limit or 0), 1)
     days = max(int(days or 0), 1)
@@ -269,7 +322,7 @@ def get_top_forms_days(limit: int = 5, days: int = 7) -> List[Dict[str, Any]]:
             cur.execute(sql, (start_date, limit))
 
         rows = cur.fetchall() or []
-        result: List[Dict[str, Any]] = []
+        result: list[dict[str, Any]] = []
         for row in rows:
             if isinstance(row, dict):
                 name = row.get("table_name")
@@ -293,7 +346,7 @@ def get_top_forms_days(limit: int = 5, days: int = 7) -> List[Dict[str, Any]]:
         _safe_close(cur, conn)
 
 
-def get_top_forms_7d(limit: int = 5) -> List[Dict[str, Any]]:
+def get_top_forms_7d(limit: int = 5) -> list[dict[str, Any]]:
     """Backward-compatible API for 7-day top forms."""
     return get_top_forms_days(limit=limit, days=7)
 

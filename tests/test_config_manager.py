@@ -115,7 +115,7 @@ class ConfigManagerTests(unittest.TestCase):
                             "password = plain",
                             "database = kingdee",
                             "port = 1433",
-                            "driver = ODBC Driver 17 for SQL Server",
+                            "driver = ODBC Driver 18 for SQL Server",
                             "",
                             "[SYNC]",
                             "auto_sync = false",
@@ -151,7 +151,7 @@ class ConfigManagerTests(unittest.TestCase):
 
                 db_config = manager.get_db_config()
                 self.assertEqual(db_config["type"], "sqlserver")
-                self.assertEqual(db_config["sqlserver"]["driver"], "ODBC Driver 17 for SQL Server")
+                self.assertEqual(db_config["sqlserver"]["driver"], "ODBC Driver 18 for SQL Server")
                 self.assertEqual(db_config["mysql"]["database"], "kingdee")
 
                 sync_config = manager.get_sync_config()
@@ -162,6 +162,54 @@ class ConfigManagerTests(unittest.TestCase):
                 queries = manager.get_form_queries()
                 self.assertEqual(queries[sales_order]["FormId"], "SAL_SaleOrder")
                 self.assertEqual(queries[sales_order]["FilterString"], "FBillNo = 'OVERRIDE'")
+
+    def test_default_config_path_materializes_local_config_when_no_file_exists(self) -> None:
+        with _load_config_manager() as config_manager_module:
+            config_cls = config_manager_module.ConfigManager
+            with tempfile.TemporaryDirectory() as tmp_dir:
+                tmp_path = Path(tmp_dir)
+                requested_path = tmp_path / "config.ini"
+                local_path = tmp_path / "config.local.ini"
+
+                manager = config_cls(str(requested_path))
+
+                self.assertEqual(Path(manager.config_file), local_path)
+                self.assertTrue(local_path.exists())
+                self.assertFalse(requested_path.exists())
+
+    def test_existing_legacy_config_ini_remains_read_compatible(self) -> None:
+        with _load_config_manager() as config_manager_module:
+            config_cls = config_manager_module.ConfigManager
+            with tempfile.TemporaryDirectory() as tmp_dir:
+                tmp_path = Path(tmp_dir)
+                legacy_path = tmp_path / "config.ini"
+                legacy_path.write_text(
+                    "\n".join(
+                        [
+                            "[KINGDEE]",
+                            "username = legacy-user",
+                            "password = legacy-password",
+                            "",
+                            "[DATABASE]",
+                            "type = sqlserver",
+                            "",
+                            "[SQLSERVER]",
+                            "host = legacy-host",
+                            "password = legacy-db-password",
+                            "",
+                            "[SYNC]",
+                            "auto_sync = false",
+                            "sync_interval = 60",
+                        ]
+                    ),
+                    encoding="utf-8",
+                )
+
+                manager = config_cls(str(legacy_path))
+
+                self.assertEqual(Path(manager.config_file), legacy_path)
+                self.assertFalse((tmp_path / "config.local.ini").exists())
+                self.assertEqual(manager.get_kingdee_config()["username"], "legacy-user")
 
     def test_sync_config_exposes_circuit_breaker_defaults(self) -> None:
         with _load_config_manager() as config_manager_module:
@@ -185,6 +233,31 @@ class ConfigManagerTests(unittest.TestCase):
         self.assertTrue(sync_config["circuit_breaker_enabled"])
         self.assertEqual(sync_config["circuit_breaker_threshold"], 3)
         self.assertEqual(sync_config["circuit_breaker_cooldown_secs"], 30)
+
+    def test_sync_config_migrates_legacy_full_sync_type_to_complete(self) -> None:
+        with _load_config_manager() as config_manager_module:
+            config_cls = config_manager_module.ConfigManager
+            with tempfile.TemporaryDirectory() as tmp_dir:
+                config_path = Path(tmp_dir) / "config.ini"
+                config_path.write_text(
+                    "\n".join(
+                        [
+                            "[SYNC]",
+                            "auto_sync = false",
+                            "sync_interval = 60",
+                            "default_forms = 物料",
+                            "sync_type = full",
+                        ]
+                    ),
+                    encoding="utf-8",
+                )
+                manager = config_cls(str(config_path))
+
+                sync_config = manager.get_sync_config()
+                disk_text = config_path.read_text(encoding="utf-8")
+
+        self.assertEqual(sync_config["sync_type"], "complete")
+        self.assertIn("sync_type = complete", disk_text)
 
     def test_get_field_mappings_reads_json_from_config_directory(self) -> None:
         with _load_config_manager() as config_manager_module:

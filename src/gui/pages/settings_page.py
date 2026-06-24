@@ -1,4 +1,4 @@
-"""Settings page built on the shared Windows 11 page scaffold."""
+"""Settings page with real config reading and saving."""
 
 from __future__ import annotations
 
@@ -6,20 +6,20 @@ import logging
 
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
-    QBoxLayout,
-    QFrame,
     QHBoxLayout,
     QLabel,
     QLineEdit,
+    QPushButton,
     QScrollArea,
-    QSizePolicy,
     QSpinBox,
     QVBoxLayout,
     QWidget,
 )
 
 from src.gui.components.buttons import LoadingButton
-from src.gui.components.page_shell import Win11PageScaffold, Win11SectionCard, Win11SummaryCard
+from src.gui.components.common import FieldRow, SvgIconLabel
+from src.gui.components.page_shell import Win11PageScaffold, Win11SectionCard
+from src.gui.design_tokens import ColorTokens, SizeTokens, SpacingTokens, qcolor
 from src.gui.feedback import UiFeedback
 from src.gui.ui_text import ButtonText, LoadingText
 from src.services.settings_service import settings_service
@@ -27,125 +27,146 @@ from src.services.settings_service import settings_service
 logger = logging.getLogger(__name__)
 
 
-class SettingsSummaryCard(Win11SummaryCard):
-    """Compact summary card used by the settings overview row."""
-
-    def __init__(self, title: str, value: str = "--", subtitle: str = "", parent=None):
-        super().__init__(title=title, value=value, subtitle=subtitle, parent=parent)
-        self.subtitle_label.setProperty("ui", "win11-helper-text")
-
-    def set_data(self, value: str, subtitle: str | None = None) -> None:
-        self.set_value(value)
-        if subtitle is not None:
-            self.set_subtitle(subtitle)
-
-
 class SettingsPage(Win11PageScaffold):
-    """System connection settings page."""
+    """System settings page with real config reading and saving."""
 
     def __init__(self, parent_gui, parent=None):
         self.gui = parent_gui
-        self._setting_rows: list[tuple[QFrame, QBoxLayout, QWidget]] = []
         super().__init__(
             title="系统设置",
-            eyebrow="设置",
-            subtitle="在统一的 Windows 11 页面结构中维护金蝶与 SQL Server 连接参数。",
+            eyebrow="",
+            subtitle="管理金蝶 API 与 SQL Server 的连接配置",
             parent=parent,
         )
         self.setProperty("page", "settings")
-        self.setup_ui()
+        self.set_hero_visible(False)
+        self.hero_card.setVisible(False)
+        self.primary_action_host.setVisible(False)
+        self.summary_strip.setVisible(False)
+        self._build_ui()
         self.load_config()
 
-    def setup_ui(self) -> None:
+    def _build_ui(self) -> None:
         self._init_editors()
-        self._build_hero()
-        self._build_summary_strip()
-        self.add_primary_action(self.btn_test)
-        self.add_primary_action(self.btn_save)
-        self.set_content(self._create_scroll_content())
-        self._apply_responsive_rows()
 
-    def _build_hero(self) -> None:
-        meta_widget = QWidget()
-        meta_layout = QVBoxLayout(meta_widget)
-        meta_layout.setContentsMargins(0, 0, 0, 0)
-        meta_layout.setSpacing(6)
+        content_widget = QWidget()
+        content_layout = QVBoxLayout(content_widget)
+        content_layout.setContentsMargins(0, 0, 0, 0)
+        content_layout.setSpacing(16)
 
-        self.hero_badge = QLabel("连接配置")
-        self.hero_badge.setProperty("ui", "win11-status-chip")
-        self.hero_badge.setProperty("tone", "info")
+        title_row = QWidget()
+        title_layout = QHBoxLayout(title_row)
+        title_layout.setContentsMargins(0, 0, 0, 0)
+        title_layout.setSpacing(12)
 
-        self.hero_source = QLabel("配置来源：加载中...")
-        self.hero_source.setProperty("ui", "win11-meta-text")
-        self.hero_source.setWordWrap(True)
+        self.page_title = QLabel("系统设置")
+        self.page_title.setProperty("ui", "st-page-title")
+        title_layout.addWidget(self.page_title)
+        title_layout.addStretch()
 
-        meta_layout.addWidget(self.hero_badge, 0, Qt.AlignmentFlag.AlignLeft)
-        meta_layout.addWidget(self.hero_source)
-
-        self.btn_test = LoadingButton(ButtonText.TEST_CONNECTION)
+        self.btn_test = LoadingButton("测试连接")
         self.btn_test.setProperty("class", "secondary")
-        self.btn_test.setFixedHeight(36)
+        self.btn_test.setFixedHeight(38)
         self.btn_test.clicked.connect(self.test_connections)
+        title_layout.addWidget(self.btn_test)
 
-        self.btn_save = LoadingButton(ButtonText.SAVE_SETTINGS)
+        self.btn_save = LoadingButton("保存设置")
         self.btn_save.setProperty("class", "primary")
-        self.btn_save.setFixedHeight(36)
+        self.btn_save.setFixedHeight(38)
         self.btn_save.clicked.connect(self.save_settings)
+        title_layout.addWidget(self.btn_save)
+        content_layout.addWidget(title_row)
 
-        self.add_hero_widget(meta_widget)
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        scroll.setFrameShape(QScrollArea.Shape.NoFrame)
+        scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        scroll.setProperty("ui", "settings-scroll")
 
-    def _build_summary_strip(self) -> None:
-        self.summary_source = SettingsSummaryCard("配置来源", "--", "当前正在使用的配置文件来源。")
-        self.summary_db = SettingsSummaryCard("目标数据库", "--", "当前保存的目标数据库类型。")
-        self.summary_flow = SettingsSummaryCard("推荐流程", "先保存后测试", "执行同步前请先验证两个连接。")
+        scroll_body = QWidget()
+        scroll_layout = QVBoxLayout(scroll_body)
+        scroll_layout.setContentsMargins(0, 0, 0, 0)
+        scroll_layout.setSpacing(16)
 
-        for card in (self.summary_source, self.summary_db, self.summary_flow):
-            self.add_summary_card(card)
+        main_row = QWidget()
+        main_layout = QHBoxLayout(main_row)
+        main_layout.setContentsMargins(0, 0, 0, 0)
+        main_layout.setSpacing(16)
 
-    def _create_scroll_content(self) -> QScrollArea:
-        scroll = self.create_scroll_container("settings_scroll")
+        left_col = QVBoxLayout()
+        left_col.setSpacing(16)
 
-        page = QWidget()
-        layout = QVBoxLayout(page)
-        layout.setContentsMargins(0, 0, 0, 0)
-        layout.setSpacing(16)
+        basic_card = Win11SectionCard("基础设置", "用于识别当前客户端与配置来源")
+        basic_rows = [
+            self._create_setting_row("系统名称", "用于标识本系统的名称", self._make_info_label("金蝶数据同步工具")),
+            self._create_setting_row("配置来源", "当前读写的配置文件", self._make_info_label(settings_service.get_config_source_name())),
+            self._create_setting_row("数据库类型", "当前同步使用的数据库类型", self._make_info_label(settings_service.get_database_type())),
+        ]
+        for row in basic_rows:
+            basic_card.content_layout.addWidget(row)
+        left_col.addWidget(basic_card)
 
-        layout.addWidget(
-            self._create_group_card(
-                "金蝶 API",
-                "维护用于 WebAPI 访问的登录地址、查询地址与账号凭据。",
-                [
-                    self._create_setting_row("登录地址", "用于身份认证的接口地址。", self.login_url),
-                    self._create_setting_row("查询地址", "用于业务数据查询的接口地址。", self.query_url),
-                    self._create_setting_row("账套 ID", "金蝶账套标识。", self.acct_id),
-                    self._create_setting_row("用户名", "用于金蝶 WebAPI 登录的账号。", self.username),
-                    self._create_setting_row("密码", "留空将保持已保存密码不变。", self.password, last=True),
-                ],
-            )
-        )
-        layout.addWidget(
-            self._create_group_card(
-                "SQL Server 数据库",
-                "维护同步流程使用的目标数据库连接信息。",
-                [
-                    self._create_setting_row("主机", "数据库主机地址或实例名。", self.db_host),
-                    self._create_setting_row("端口", "SQL Server 默认端口为 1433。", self.db_port),
-                    self._create_setting_row("数据库名", "目标业务数据库名称。", self.db_name),
-                    self._create_setting_row("用户名", "数据库登录账号。", self.db_user),
-                    self._create_setting_row(
-                        "密码",
-                        "留空将保持已保存数据库密码不变。",
-                        self.db_password,
-                        last=True,
-                    ),
-                ],
-            )
-        )
-        layout.addWidget(self._create_note_card())
-        layout.addStretch(1)
+        db_card = Win11SectionCard("SQL Server 连接", "同步写入时使用的目标数据库")
+        db_rows = [
+            self._create_setting_row("服务器地址", "SQL Server 服务器地址", self.db_host),
+            self._create_setting_row("端口", "SQL Server 连接端口", self.db_port),
+            self._create_setting_row("数据库名", "要连接的数据库名称", self.db_name),
+            self._create_setting_row("用户名", "SQL Server 用户名", self.db_user),
+            self._create_setting_row("密码", "SQL Server 密码", self.db_password),
+        ]
+        for row in db_rows:
+            db_card.content_layout.addWidget(row)
+        left_col.addWidget(db_card)
+        left_col.addStretch()
 
-        scroll.setWidget(page)
-        return scroll
+        main_layout.addLayout(left_col, 1)
+
+        right_col = QVBoxLayout()
+        right_col.setSpacing(16)
+
+        api_card = Win11SectionCard("金蝶 API 连接", "同步拉取时使用的接口地址与账号")
+        api_rows = [
+            self._create_setting_row("登录地址", "金蝶云星空登录接口地址", self.login_url),
+            self._create_setting_row("查询地址", "金蝶云星空查询接口地址", self.query_url),
+            self._create_setting_row("账套 ID", "金蝶云星空账套 ID", self.acct_id),
+            self._create_setting_row("用户名", "金蝶云星空 API 用户名", self.username),
+            self._create_setting_row("密码", "金蝶云星空 API 密码", self.password),
+        ]
+        for row in api_rows:
+            api_card.content_layout.addWidget(row)
+        right_col.addWidget(api_card)
+
+        security_card = Win11SectionCard("日志与安全", "密码不会回显，留空保存时保留原值")
+        sec_rows = [
+            self._create_setting_row("密码显示", "加载配置时不会显示已保存的明文密码", self._make_info_label("已脱敏")),
+            self._create_setting_row("空密码策略", "密码框留空保存时继续使用原配置", self._make_info_label("保留原值")),
+            self._create_setting_row("连接测试", "仅测试当前输入，不会自动保存配置", self._make_info_label("不保存")),
+        ]
+        for row in sec_rows:
+            security_card.content_layout.addWidget(row)
+        right_col.addWidget(security_card)
+        right_col.addStretch()
+
+        main_layout.addLayout(right_col, 1)
+        scroll_layout.addWidget(main_row)
+
+        tip_widget = QWidget()
+        tip_layout = QHBoxLayout(tip_widget)
+        tip_layout.setContentsMargins(16, 12, 16, 12)
+        tip_layout.setSpacing(8)
+        tip_icon = SvgIconLabel("info.svg", size=20, icon_size=18, color=ColorTokens.ACCENT_600)
+        tip_icon.setProperty("ui", "st-tip-icon")
+        tip_layout.addWidget(tip_icon)
+        tip_text = QLabel("安全提示：密码和密钥会按配置进行脱敏处理，不会在界面或日志中展示明文。")
+        tip_text.setProperty("ui", "st-tip-text")
+        tip_text.setWordWrap(True)
+        tip_layout.addWidget(tip_text, 1)
+        scroll_layout.addWidget(tip_widget)
+        scroll_layout.addStretch()
+        scroll.setWidget(scroll_body)
+        content_layout.addWidget(scroll, 1)
+
+        self.set_content(content_widget)
 
     def _init_editors(self) -> None:
         self.login_url = QLineEdit()
@@ -163,101 +184,54 @@ class SettingsPage(Win11PageScaffold):
         self.db_password = QLineEdit()
         self.db_password.setEchoMode(QLineEdit.EchoMode.Password)
 
-        self.login_url.setPlaceholderText("例如：https://api.example.com/K3Cloud/Kingdee.BOS.WebApi.ServicesStub.AuthService.ValidateUser.common.kdsvc")
-        self.query_url.setPlaceholderText("例如：https://api.example.com/K3Cloud/Kingdee.BOS.WebApi.ServicesStub.DynamicFormService.ExecuteBillQuery.common.kdsvc")
+        self.login_url.setPlaceholderText("填写金蝶 API 登录地址")
+        self.query_url.setPlaceholderText("填写金蝶 API 查询地址")
         self.acct_id.setPlaceholderText("请输入账套 ID")
         self.username.setPlaceholderText("请输入 WebAPI 用户名")
-        self.password.setPlaceholderText("如需更新密码请填写；留空则保持不变")
-        self.db_host.setPlaceholderText("例如：127.0.0.1 或 localhost\\SQLEXPRESS")
+        self.password.setPlaceholderText("留空保留原密码")
+        self.db_host.setPlaceholderText("例如：192.168.1.50")
         self.db_name.setPlaceholderText("请输入数据库名")
         self.db_user.setPlaceholderText("请输入数据库用户名")
-        self.db_password.setPlaceholderText("如需更新数据库密码请填写；留空则保持不变")
+        self.db_password.setPlaceholderText("留空保留原密码")
 
-        widgets: tuple[QWidget, ...] = (
-            self.login_url,
-            self.query_url,
-            self.acct_id,
-            self.username,
-            self.password,
-            self.db_host,
-            self.db_port,
-            self.db_name,
-            self.db_user,
-            self.db_password,
-        )
-        for widget in widgets:
+        for widget in (self.login_url, self.query_url, self.acct_id, self.username,
+                       self.password, self.db_host, self.db_name, self.db_user, self.db_password):
             widget.setProperty("td", "win11-input")
 
-    def _create_group_card(self, title_text: str, subtitle_text: str, rows: list[QWidget]) -> Win11SectionCard:
-        card = Win11SectionCard(title_text, subtitle_text)
-        for row in rows:
-            card.content_layout.addWidget(row)
-        return card
+    def _make_info_label(self, text: str) -> QLabel:
+        label = QLabel(text)
+        label.setProperty("ui", "st-info-label")
+        return label
 
-    def _create_setting_row(self, title_text: str, note_text: str, editor: QWidget, *, last: bool = False) -> QFrame:
-        row = QFrame()
-        row.setProperty("ui", "win11-setting-row")
-        row.setProperty("last", last)
+    def _make_spinbox(self, value: int, min_val: int, max_val: int) -> QSpinBox:
+        spin = QSpinBox()
+        spin.setRange(min_val, max_val)
+        spin.setValue(value)
+        spin.setFixedHeight(34)
+        spin.setProperty("td", "win11-input")
+        return spin
 
-        layout = QBoxLayout(QBoxLayout.Direction.LeftToRight, row)
-        layout.setContentsMargins(0, 12, 0, 12)
-        layout.setSpacing(14)
+    def _create_setting_row(self, title_text: str, note_text: str, editor: QWidget) -> QWidget:
+        row = QWidget()
+        row.setProperty("ui", "st-setting-row")
+        layout = QHBoxLayout(row)
+        layout.setContentsMargins(0, 8, 0, 8)
+        layout.setSpacing(12)
 
-        text_wrap = QVBoxLayout()
-        text_wrap.setSpacing(3)
-
+        text_col = QVBoxLayout()
+        text_col.setSpacing(2)
         title = QLabel(title_text)
-        title.setProperty("ui", "win11-row-title")
-
+        title.setProperty("ui", "st-setting-title")
         note = QLabel(note_text)
-        note.setProperty("ui", "win11-row-note")
-        note.setWordWrap(True)
+        note.setProperty("ui", "st-setting-note")
+        text_col.addWidget(title)
+        text_col.addWidget(note)
+        layout.addLayout(text_col, 1)
 
-        text_wrap.addWidget(title)
-        text_wrap.addWidget(note)
+        editor.setFixedHeight(34)
+        layout.addWidget(editor)
 
-        layout.addLayout(text_wrap, 1)
-
-        editor.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
-        if isinstance(editor, QSpinBox):
-            editor.setFixedWidth(140)
-        else:
-            editor.setMinimumWidth(0)
-        layout.addWidget(editor, 1, Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
-        self._setting_rows.append((row, layout, editor))
         return row
-
-    def _create_note_card(self) -> Win11SectionCard:
-        card = Win11SectionCard(
-            "操作说明",
-            "请先保存设置，再测试两个连接，最后到“同步”页面发起任务。",
-        )
-        note = QLabel(
-            "本页仅更新界面文案与布局呈现，配置加载、保存与连接测试行为保持不变。"
-        )
-        note.setProperty("ui", "win11-helper-text")
-        note.setWordWrap(True)
-        card.content_layout.addWidget(note)
-        return card
-
-    def _apply_responsive_rows(self) -> None:
-        compact = self.width() <= 1366
-        self.setProperty("layoutMode", "compact" if compact else "wide")
-        for row, layout, editor in self._setting_rows:
-            layout.setDirection(QBoxLayout.Direction.TopToBottom if compact else QBoxLayout.Direction.LeftToRight)
-            if isinstance(editor, QSpinBox):
-                editor.setFixedWidth(120 if compact else 140)
-            else:
-                editor.setMinimumWidth(0)
-                editor.setMaximumWidth(16777215 if compact else 420)
-            row_style = row.style()
-            if row_style is not None:
-                row_style.unpolish(row)
-                row_style.polish(row)
-
-    def resizeEvent(self, event) -> None:  # noqa: N802 - Qt API
-        self._apply_responsive_rows()
-        super().resizeEvent(event)
 
     def _collect_payload(self):
         return {
@@ -286,7 +260,7 @@ class SettingsPage(Win11PageScaffold):
             self.acct_id.setText(str(kd_cfg.get("acct_id", "")))
             self.username.setText(str(kd_cfg.get("username", "")))
             self.password.clear()
-            self.password.setPlaceholderText("如需更新密码请填写；留空则保持不变")
+            self.password.setPlaceholderText("留空保留原密码")
 
             db_cfg = snapshot.get("database", {})
             self.db_host.setText(str(db_cfg.get("host", "")))
@@ -294,15 +268,7 @@ class SettingsPage(Win11PageScaffold):
             self.db_name.setText(str(db_cfg.get("database", "")))
             self.db_user.setText(str(db_cfg.get("user", "")))
             self.db_password.clear()
-            self.db_password.setPlaceholderText("如需更新数据库密码请填写；留空则保持不变")
-
-            config_source_name = settings_service.get_config_source_name()
-            config_source = settings_service.get_config_source()
-            database_type = settings_service.get_database_type()
-
-            self.hero_source.setText(f"配置来源：{config_source}")
-            self.summary_source.set_data(config_source_name, f"当前来源路径：{config_source}")
-            self.summary_db.set_data(database_type, "当前默认业务数据库仍为 SQL Server。")
+            self.db_password.setPlaceholderText("留空保留原密码")
         except Exception as exc:
             logger.error("Load settings failed: %s", exc)
             UiFeedback.error(self, "加载失败", f"无法加载设置：\n{exc}")
@@ -317,11 +283,11 @@ class SettingsPage(Win11PageScaffold):
             settings_service.save_settings(self._collect_payload())
             self.load_config()
             if show_feedback:
-                UiFeedback.success(self, "保存成功", "系统设置已成功保存。")
+                UiFeedback.success(self, "保存成功", "系统设置已保存。")
         except Exception as exc:
             logger.error("Save settings failed: %s", exc)
             if show_feedback:
-                UiFeedback.error(self, "保存失败", f"无法保存设置：\n{exc}")
+                UiFeedback.error(self, "保存失败", f"系统设置保存失败：\n{exc}")
                 return
             raise
         finally:
@@ -330,25 +296,15 @@ class SettingsPage(Win11PageScaffold):
     def test_connections(self) -> None:
         self.btn_test.set_loading(True, LoadingText.TEST)
         try:
-            kd_ok, db_ok, message = settings_service.test_connections(self._collect_payload())
+            kd_ok, db_ok, message = settings_service.test_connections(self._collect_payload(), persist=False)
 
             if hasattr(self.gui, "_update_status_display"):
                 self.gui._update_status_display(True, kd_ok)
                 self.gui._update_status_display(False, db_ok)
 
-            self.summary_flow.set_data(
-                "连接就绪" if kd_ok and db_ok else "需要处理",
-                "两个连接测试均通过。" if kd_ok and db_ok else "请先修复失败连接，再执行同步。",
-            )
-            self.hero_badge.setText("连接正常" if kd_ok and db_ok else "连接异常")
-            self.hero_badge.setProperty("tone", "success" if kd_ok and db_ok else "danger")
-            style = self.hero_badge.style()
-            if style is not None:
-                style.unpolish(self.hero_badge)
-                style.polish(self.hero_badge)
             UiFeedback.info(self, "连接测试结果", message)
         except Exception as exc:
             logger.error("Test connections failed: %s", exc)
-            UiFeedback.error(self, "测试失败", f"无法测试连接：\n{exc}")
+            UiFeedback.error(self, "测试失败", f"连接测试未完成：\n{exc}")
         finally:
             self.btn_test.set_loading(False)

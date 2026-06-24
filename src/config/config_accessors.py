@@ -105,6 +105,15 @@ def _as_int(value: Any, default: int) -> int:
         return default
 
 
+def _normalize_sync_type(value: Any) -> str:
+    normalized = str(value or "incremental").strip().lower()
+    if normalized in {"full", "complete", "reset"}:
+        return "complete"
+    if normalized == "incremental":
+        return "incremental"
+    return "incremental"
+
+
 def _as_float(value: Any, default: float) -> float:
     try:
         return float(str(value).strip())
@@ -224,7 +233,7 @@ class ConfigAccessors:
                     "password": "your_password",
                     "database": "kingdee",
                     "port": "1433",
-                    "driver": "ODBC Driver 17 for SQL Server",
+                    "driver": "ODBC Driver 18 for SQL Server",
                 }
         except Exception:
             sqlserver_cfg = {
@@ -233,13 +242,22 @@ class ConfigAccessors:
                 "password": "your_password",
                 "database": "kingdee",
                 "port": "1433",
-                "driver": "ODBC Driver 17 for SQL Server",
+                "driver": "ODBC Driver 18 for SQL Server",
             }
 
         return {"type": db_type, "mysql": mysql_cfg, "sqlserver": sqlserver_cfg}
 
     def get_sync_config(self) -> dict[str, Any]:
         sync_config: dict[str, Any] = dict(self.config["SYNC"])
+        raw_sync_type = sync_config.get("sync_type", "incremental")
+        sync_config["sync_type"] = _normalize_sync_type(raw_sync_type)
+        if str(raw_sync_type or "").strip().lower() != sync_config["sync_type"]:
+            try:
+                self.reader.ensure_section("SYNC")
+                self.config["SYNC"]["sync_type"] = sync_config["sync_type"]
+                self.reader.save()
+            except Exception as err:
+                self.logger.error("Failed to migrate legacy sync_type: %s", err)
         sync_config["auto_sync"] = _as_bool(sync_config["auto_sync"], False)
         sync_config["sync_interval"] = _as_int(sync_config["sync_interval"], 60)
 
@@ -287,7 +305,7 @@ class ConfigAccessors:
         try:
             self.reader.ensure_section("SYNC")
             self.config["SYNC"]["default_forms"] = ",".join(forms)
-            self.config["SYNC"]["sync_type"] = mode
+            self.config["SYNC"]["sync_type"] = _normalize_sync_type(mode)
             self.reader.save()
         except Exception as err:
             self.logger.error("Failed to save sync preferences: %s", err)

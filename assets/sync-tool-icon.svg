@@ -1,0 +1,70 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024" role="img" aria-labelledby="title desc">
+  <title id="title">Sync Tool Desktop Icon</title>
+  <desc id="desc">A desktop sync tool icon with paired devices, a cloud, and circular transfer arrows.</desc>
+  <defs>
+    <linearGradient id="bg" x1="148" y1="108" x2="884" y2="914" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#126D7A"/>
+      <stop offset="0.52" stop-color="#164D80"/>
+      <stop offset="1" stop-color="#2D385F"/>
+    </linearGradient>
+    <linearGradient id="inner-glow" x1="232" y1="190" x2="806" y2="836" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#37D7B4" stop-opacity="0.36"/>
+      <stop offset="1" stop-color="#91B4FF" stop-opacity="0.16"/>
+    </linearGradient>
+    <linearGradient id="device" x1="264" y1="300" x2="750" y2="744" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#FFFFFF"/>
+      <stop offset="1" stop-color="#DDECF1"/>
+    </linearGradient>
+    <linearGradient id="screen" x1="314" y1="350" x2="710" y2="650" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#123C58"/>
+      <stop offset="1" stop-color="#0C263E"/>
+    </linearGradient>
+    <linearGradient id="accent" x1="318" y1="310" x2="742" y2="700" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#25D6B4"/>
+      <stop offset="0.58" stop-color="#60E29B"/>
+      <stop offset="1" stop-color="#F1D568"/>
+    </linearGradient>
+    <filter id="shadow" x="-20%" y="-20%" width="140%" height="150%" color-interpolation-filters="sRGB">
+      <feDropShadow dx="0" dy="38" stdDeviation="34" flood-color="#06172B" flood-opacity="0.32"/>
+    </filter>
+    <filter id="small-shadow" x="-20%" y="-20%" width="140%" height="150%" color-interpolation-filters="sRGB">
+      <feDropShadow dx="0" dy="18" stdDeviation="18" flood-color="#06172B" flood-opacity="0.24"/>
+    </filter>
+    <clipPath id="clip">
+      <rect x="80" y="80" width="864" height="864" rx="204"/>
+    </clipPath>
+  </defs>
+
+  <rect x="80" y="80" width="864" height="864" rx="204" fill="url(#bg)"/>
+  <g clip-path="url(#clip)">
+    <circle cx="216" cy="214" r="178" fill="#31D9C0" opacity="0.20"/>
+    <circle cx="836" cy="816" r="228" fill="#8AA3FF" opacity="0.18"/>
+    <path d="M112 716C254 655 374 668 512 733C648 798 772 806 944 708V944H112V716Z" fill="#06172B" opacity="0.22"/>
+    <rect x="174" y="156" width="676" height="702" rx="154" fill="url(#inner-glow)"/>
+  </g>
+
+  <g filter="url(#shadow)">
+    <rect x="228" y="296" width="568" height="414" rx="64" fill="url(#device)"/>
+    <rect x="284" y="348" width="456" height="280" rx="34" fill="url(#screen)"/>
+    <rect x="426" y="694" width="172" height="42" rx="21" fill="#C7DAE2"/>
+    <rect x="362" y="748" width="300" height="40" rx="20" fill="#EAF3F6"/>
+  </g>
+
+  <g filter="url(#small-shadow)">
+    <path d="M388 474C401 416 453 376 512 376C555 376 595 398 619 432C675 436 720 482 720 539C720 600 670 650 608 650H416C360 650 314 604 314 548C314 510 344 478 382 474H388Z" fill="#F8FCFD"/>
+    <path d="M388 474C401 416 453 376 512 376C555 376 595 398 619 432C675 436 720 482 720 539C720 600 670 650 608 650H416C360 650 314 604 314 548C314 510 344 478 382 474H388Z" fill="#DFF8F3" opacity="0.46"/>
+  </g>
+
+  <g fill="none" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M350 510C386 430 485 398 562 436C590 450 613 472 628 498" stroke="url(#accent)" stroke-width="44"/>
+    <path d="M627 498L646 426L692 482" stroke="#68E4A2" stroke-width="42"/>
+    <path d="M674 570C638 650 539 682 462 644C434 630 411 608 396 582" stroke="url(#accent)" stroke-width="44"/>
+    <path d="M397 582L378 654L332 598" stroke="#25D6B4" stroke-width="42"/>
+  </g>
+
+  <g opacity="0.94">
+    <rect x="406" y="530" width="42" height="42" rx="12" fill="#1B7E92"/>
+    <rect x="488" y="530" width="42" height="42" rx="12" fill="#1B7E92"/>
+    <rect x="570" y="530" width="42" height="42" rx="12" fill="#1B7E92"/>
+  </g>
+</svg>

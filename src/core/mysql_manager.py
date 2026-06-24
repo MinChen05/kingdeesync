@@ -147,15 +147,15 @@ class MySQLManager:
                 trust_cert_cfg = str(self.config.get("trust_server_certificate", "true")).lower() == "true"
                 login_timeout = int(self.config.get("login_timeout", "15"))
                 # 选择可用的 ODBC 驱动
-                configured_driver = self.config.get("driver", "ODBC Driver 17 for SQL Server")
+                configured_driver = self.config.get("driver", "ODBC Driver 18 for SQL Server")
                 available_drivers = []
                 try:
                     available_drivers = [d for d in pyodbc.drivers() if "SQL Server" in d]
                 except Exception:
                     available_drivers = []
                 preferred = [
-                    "ODBC Driver 17 for SQL Server",
                     "ODBC Driver 18 for SQL Server",
+                    "ODBC Driver 17 for SQL Server",
                     "ODBC Driver 13 for SQL Server",
                     "SQL Server",
                 ]
@@ -491,7 +491,7 @@ class MySQLManager:
                 batch_size = 100
             if self.db_type == "sqlserver" and hasattr(self.cursor, "fast_executemany"):
                 # ODBC Driver 18 的 fast_executemany 在并发/大批量场景下会触发驱动崩溃，改为禁用
-                configured_driver = self.config.get("driver", "ODBC Driver 17 for SQL Server")
+                configured_driver = self.config.get("driver", "ODBC Driver 18 for SQL Server")
                 if "ODBC Driver 18" in configured_driver:
                     self.cursor.fast_executemany = False
                     logger.warning("检测到 ODBC Driver 18，已禁用 fast_executemany 以避免驱动崩溃")
@@ -2621,7 +2621,50 @@ class MySQLManager:
 
             # 需要扩宽：转为 NVARCHAR(MAX)
             if is_sqlserver:
+                default_constraints = []
+                try:
+                    self.cursor.execute(
+                        """
+                        SELECT dc.name, dc.definition
+                        FROM sys.default_constraints dc
+                        JOIN sys.columns c
+                          ON dc.parent_object_id = c.object_id
+                         AND dc.parent_column_id = c.column_id
+                        WHERE dc.parent_object_id = OBJECT_ID(?)
+                          AND c.name = ?
+                        """,
+                        (table, column),
+                    )
+                    default_constraints = self.cursor.fetchall() or []
+                    for dc_row in default_constraints:
+                        if isinstance(dc_row, dict):
+                            dc_name = dc_row.get("name")
+                        else:
+                            dc_name = dc_row[0] if dc_row else None
+                        if dc_name:
+                            self.cursor.execute(f"ALTER TABLE {table} DROP CONSTRAINT {dc_name}")
+                    if default_constraints:
+                        try:
+                            self.connection.commit()
+                        except Exception:
+                            pass
+                except Exception as e:
+                    logger.warning(f"清理 {table}.{column} 默认约束失败: {e}")
                 self.cursor.execute(f"ALTER TABLE {table} ALTER COLUMN {column} NVARCHAR(MAX) NULL")
+                for dc_row in default_constraints:
+                    if isinstance(dc_row, dict):
+                        default_definition = dc_row.get("definition")
+                    else:
+                        default_definition = dc_row[1] if len(dc_row) > 1 else None
+                    if not default_definition:
+                        continue
+                    try:
+                        self.cursor.execute(
+                            f"ALTER TABLE {table} ADD CONSTRAINT DF_bd_material_FDESCRIPTION "
+                            f"DEFAULT {default_definition} FOR {column}"
+                        )
+                    except Exception as e:
+                        logger.warning(f"重建 {table}.{column} 默认约束失败: {e}")
             else:
                 self.cursor.execute(f"ALTER TABLE {table} MODIFY COLUMN {column} TEXT NULL")
             try:

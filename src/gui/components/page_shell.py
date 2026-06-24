@@ -19,6 +19,8 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from src.gui.design_tokens import SizeTokens, SpacingTokens
+
 EXPLANATION_LABEL_UIS = {
     "win11-hero-subtitle",
     "win11-summary-subtitle",
@@ -52,8 +54,8 @@ class Win11SummaryCard(QFrame):
         self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
 
         layout = QVBoxLayout(self)
-        layout.setContentsMargins(14, 12, 14, 12)
-        layout.setSpacing(4)
+        layout.setContentsMargins(SpacingTokens.WORKSPACE_COLUMN_GAP, SpacingTokens.MD, SpacingTokens.WORKSPACE_COLUMN_GAP, SpacingTokens.MD)
+        layout.setSpacing(SpacingTokens.XS)
 
         self.title_label = QLabel(title)
         self.title_label.setProperty("ui", "win11-summary-title")
@@ -91,8 +93,8 @@ class Win11SectionCard(QFrame):
         self.setProperty("ui", "win11-section-card")
 
         root = QVBoxLayout(self)
-        root.setContentsMargins(18, 16, 18, 16)
-        root.setSpacing(12)
+        root.setContentsMargins(SpacingTokens.SHELL_CARD_PADDING, SpacingTokens.LG, SpacingTokens.SHELL_CARD_PADDING, SpacingTokens.LG)
+        root.setSpacing(SpacingTokens.MD)
 
         self.title_label = QLabel(title)
         self.title_label.setProperty("ui", "win11-section-title")
@@ -109,8 +111,8 @@ class Win11SectionCard(QFrame):
         self.body.setProperty("ui", "win11-section-body")
 
         self.content_layout = QVBoxLayout(self.body)
-        self.content_layout.setContentsMargins(0, 0, 0, 0)
-        self.content_layout.setSpacing(12)
+        self.content_layout.setContentsMargins(SpacingTokens.NONE, SpacingTokens.NONE, SpacingTokens.NONE, SpacingTokens.NONE)
+        self.content_layout.setSpacing(SpacingTokens.MD)
 
         root.addWidget(self.body)
 
@@ -143,8 +145,8 @@ class Win11PageScaffold(QWidget):
         self.setProperty("ui", "win11-page")
 
         root = QVBoxLayout(self)
-        root.setContentsMargins(18, 16, 18, 18)
-        root.setSpacing(12)
+        root.setContentsMargins(SpacingTokens.SHELL_CARD_PADDING, SpacingTokens.LG, SpacingTokens.SHELL_CARD_PADDING, SpacingTokens.SHELL_CARD_PADDING)
+        root.setSpacing(SpacingTokens.MD)
 
         self.hero_card = QFrame(self)
         self.hero_card.setObjectName("page_hero_card")
@@ -152,14 +154,14 @@ class Win11PageScaffold(QWidget):
         self.hero_card.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Maximum)
 
         hero_layout = QHBoxLayout(self.hero_card)
-        hero_layout.setContentsMargins(18, 16, 18, 16)
-        hero_layout.setSpacing(16)
+        hero_layout.setContentsMargins(SpacingTokens.SHELL_CARD_PADDING, SpacingTokens.LG, SpacingTokens.SHELL_CARD_PADDING, SpacingTokens.LG)
+        hero_layout.setSpacing(SpacingTokens.LG)
 
         hero_text_host = QWidget(self.hero_card)
         hero_text_host.setProperty("ui", "win11-hero-copy")
         hero_text_layout = QVBoxLayout(hero_text_host)
-        hero_text_layout.setContentsMargins(0, 0, 0, 0)
-        hero_text_layout.setSpacing(4)
+        hero_text_layout.setContentsMargins(SpacingTokens.NONE, SpacingTokens.NONE, SpacingTokens.NONE, SpacingTokens.NONE)
+        hero_text_layout.setSpacing(SpacingTokens.XS)
 
         self.hero_eyebrow = QLabel("", hero_text_host)
         self.hero_eyebrow.setObjectName("page_hero_eyebrow")
@@ -189,8 +191,8 @@ class Win11PageScaffold(QWidget):
         self.hero_actions_host.setVisible(False)
 
         self.hero_actions_layout = QHBoxLayout(self.hero_actions_host)
-        self.hero_actions_layout.setContentsMargins(0, 0, 0, 0)
-        self.hero_actions_layout.setSpacing(12)
+        self.hero_actions_layout.setContentsMargins(SpacingTokens.NONE, SpacingTokens.NONE, SpacingTokens.NONE, SpacingTokens.NONE)
+        self.hero_actions_layout.setSpacing(SpacingTokens.MD)
         self.hero_actions_layout.setAlignment(Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignRight)
 
         hero_layout.addWidget(self.hero_actions_host, 0, Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignRight)
@@ -201,16 +203,16 @@ class Win11PageScaffold(QWidget):
         self.primary_action_host.setVisible(False)
 
         self.primary_action_layout = QHBoxLayout(self.primary_action_host)
-        self.primary_action_layout.setContentsMargins(14, 12, 14, 12)
-        self.primary_action_layout.setSpacing(10)
+        self.primary_action_layout.setContentsMargins(SpacingTokens.WORKSPACE_COLUMN_GAP, SpacingTokens.MD, SpacingTokens.WORKSPACE_COLUMN_GAP, SpacingTokens.MD)
+        self.primary_action_layout.setSpacing(SpacingTokens.ACTION_BAR_GAP)
 
         self.summary_strip = QWidget(self)
         self.summary_strip.setObjectName("page_summary_strip")
         self.summary_strip.setProperty("ui", "win11-summary-strip")
 
         summary_layout = QHBoxLayout(self.summary_strip)
-        summary_layout.setContentsMargins(0, 0, 0, 0)
-        summary_layout.setSpacing(10)
+        summary_layout.setContentsMargins(SpacingTokens.NONE, SpacingTokens.NONE, SpacingTokens.NONE, SpacingTokens.NONE)
+        summary_layout.setSpacing(SpacingTokens.ACTION_BAR_GAP)
         summary_layout.setAlignment(Qt.AlignmentFlag.AlignLeft)
 
         self.content_host = QWidget(self)
@@ -219,8 +221,8 @@ class Win11PageScaffold(QWidget):
         self.content_host.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
 
         content_layout = QVBoxLayout(self.content_host)
-        content_layout.setContentsMargins(0, 0, 0, 0)
-        content_layout.setSpacing(0)
+        content_layout.setContentsMargins(SpacingTokens.NONE, SpacingTokens.NONE, SpacingTokens.NONE, SpacingTokens.NONE)
+        content_layout.setSpacing(SpacingTokens.NONE)
 
         root.addWidget(self.hero_card)
         root.addWidget(self.primary_action_host)

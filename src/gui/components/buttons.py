@@ -7,7 +7,7 @@ from PySide6.QtCore import Property, QEasingCurve, QPropertyAnimation, Qt, QTime
 from PySide6.QtGui import QColor, QPainter, QPainterPath, QPen
 from PySide6.QtWidgets import QGraphicsDropShadowEffect, QLabel, QPushButton, QWidget
 
-from src.gui.design_tokens import ColorTokens, qcolor
+from src.gui.design_tokens import ColorTokens, SizeTokens, qcolor
 from src.gui.ui_text import LoadingText
 
 
@@ -39,7 +39,7 @@ class SwitchButton(QWidget):
         super().__init__(parent)
         from PySide6.QtCore import Qt
 
-        self.setFixedSize(44, 24)
+        self.setFixedSize(SizeTokens.TOGGLE_WIDTH, SizeTokens.TOGGLE_HEIGHT)
         self.setCursor(Qt.PointingHandCursor)
         self._checked = False
         self._bg_color = qcolor(ColorTokens.TEXT_DISABLED)
@@ -85,7 +85,7 @@ class SwitchButton(QWidget):
 
         # Background
         path = QPainterPath()
-        path.addRoundedRect(0, 0, 44, 24, 12, 12)
+        path.addRoundedRect(0, 0, SizeTokens.TOGGLE_WIDTH, SizeTokens.TOGGLE_HEIGHT, 12, 12)
         p.fillPath(path, self._bg_color)
 
         # Circle

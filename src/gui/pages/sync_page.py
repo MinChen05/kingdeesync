@@ -1,22 +1,19 @@
-﻿"""Sync execution page built on the shared Windows 11 page scaffold."""
+"""Sync execution page built on the shared Windows 11 page scaffold."""
 
 from __future__ import annotations
 
-import html
 import logging
 import os
 from datetime import datetime
+from types import MethodType
 
 from PySide6.QtCore import Qt, QTimer
 from PySide6.QtWidgets import (
     QApplication,
-    QCheckBox,
     QFrame,
     QHBoxLayout,
     QLabel,
-    QProgressBar,
-    QSplitter,
-    QTextEdit,
+    QPushButton,
     QVBoxLayout,
     QWidget,
 )
@@ -24,9 +21,12 @@ from PySide6.QtWidgets import (
 from src.config.config_manager import config_manager
 from src.gui.components.buttons import LoadingButton
 from src.gui.components.combobox import SearchableComboBox
+from src.gui.components.common import SvgIconLabel
+from src.gui.components.data_table import DataTable
 from src.gui.components.page_shell import Win11PageScaffold, Win11SectionCard, Win11SummaryCard
-from src.gui.design_tokens import ColorTokens
+from src.gui.design_tokens import ColorTokens, SizeTokens, SpacingTokens
 from src.gui.feedback import UiFeedback
+from src.gui.pages._sync_progress_card import SyncProgressCard
 from src.gui.ui_text import ButtonText, LoadingText
 from src.gui.workers import SyncWorker, TestWorker
 from src.services.sync_service import SyncType, sync_service
@@ -35,59 +35,71 @@ from src.utils import logger as app_logger
 logger = logging.getLogger(__name__)
 
 FORM_ALL_TEXT = "同步全部表单"
-FORM_DEFAULT_TEXT = "使用默认表单集合..."
+FORM_DEFAULT_TEXT = "默认表单集合"
 FORM_ALL_DATA = "__ALL__"
 FORM_DEFAULT_DATA = "__DEFAULT__"
 SYNC_UI_SCOPE_KEY = "ui_manual_scope"
 SYNC_UI_FORM_KEY = "ui_manual_form"
 SYNC_UI_MODE_KEY = "ui_manual_mode"
+SYNC_TONE_COLORS = {
+    "blue": ColorTokens.SYNC_TONE_BLUE,
+    "green": ColorTokens.SYNC_TONE_GREEN,
+    "slate": ColorTokens.SYNC_TONE_SLATE,
+}
 
 
 class SyncOverviewCard(Win11SummaryCard):
     """Compact overview card for the sync workspace."""
 
-    def __init__(self, title: str, value: str = "--", subtitle: str = "", parent=None):
-        super().__init__(title=title, value=value, subtitle=subtitle, parent=parent)
+    def __init__(
+        self,
+        title: str,
+        value: str = "--",
+        subtitle: str = "",
+        *,
+        icon_file: str,
+        tone: str,
+        parent=None,
+    ):
+        QFrame.__init__(self, parent)
+        self.setProperty("ui", "win11-summary-card")
+        self.setProperty("sync-summary-tone", tone)
+
+        layout = QHBoxLayout(self)
+        layout.setContentsMargins(20, 18, 20, 18)
+        layout.setSpacing(16)
+
+        self.icon_wrap = QFrame(self)
+        self.icon_wrap.setProperty("ui", "sync-summary-icon-wrap")
+        self.icon_wrap.setProperty("tone", tone)
+        self.icon_wrap.setFixedSize(52, 52)
+        icon_layout = QHBoxLayout(self.icon_wrap)
+        icon_layout.setContentsMargins(0, 0, 0, 0)
+        icon_layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.icon_label = SvgIconLabel(icon_file, size=28, icon_size=24, color=SYNC_TONE_COLORS.get(tone, SYNC_TONE_COLORS["blue"]))
+        icon_layout.addWidget(self.icon_label)
+
+        text_layout = QVBoxLayout()
+        text_layout.setContentsMargins(0, 0, 0, 0)
+        text_layout.setSpacing(6)
+
+        self.title_label = QLabel(title)
+        self.title_label.setProperty("ui", "win11-summary-title")
+        self.value_label = QLabel(value)
+        self.value_label.setProperty("ui", "win11-summary-value")
+        self.subtitle_label = QLabel(subtitle)
         self.subtitle_label.setProperty("ui", "win11-helper-text")
+        self.subtitle_label.setVisible(False)
+
+        text_layout.addWidget(self.title_label)
+        text_layout.addWidget(self.value_label)
+        layout.addWidget(self.icon_wrap, 0, Qt.AlignmentFlag.AlignVCenter)
+        layout.addLayout(text_layout, 1)
 
     def set_data(self, value: str, subtitle: str | None = None) -> None:
         self.set_value(value)
         if subtitle is not None:
             self.set_subtitle(subtitle)
-
-
-class SyncExecutionMetricCard(QFrame):
-    """Compact metric card for the execution-state panel."""
-
-    def __init__(self, title: str, value: str = "--", note: str = "", parent=None):
-        super().__init__(parent)
-        self.setProperty("ui", "win11-execution-metric-card")
-        self.setMinimumHeight(84)
-
-        layout = QVBoxLayout(self)
-        layout.setContentsMargins(16, 12, 16, 12)
-        layout.setSpacing(4)
-
-        self.title_label = QLabel(title)
-        self.title_label.setProperty("ui", "win11-inline-title")
-
-        self.value_label = QLabel(value)
-        self.value_label.setProperty("ui", "win11-inline-value")
-
-        self.note_label = QLabel(note)
-        self.note_label.setProperty("ui", "win11-helper-text")
-        self.note_label.setWordWrap(True)
-        self.note_label.setVisible(bool(note))
-
-        layout.addWidget(self.title_label)
-        layout.addWidget(self.value_label)
-        layout.addWidget(self.note_label)
-
-    def set_data(self, value: str, note: str | None = None) -> None:
-        self.value_label.setText(value)
-        if note is not None:
-            self.note_label.setText(note)
-            self.note_label.setVisible(bool(note))
 
 
 class SyncPage(Win11PageScaffold):
@@ -99,14 +111,17 @@ class SyncPage(Win11PageScaffold):
         self.fail_count = 0
         self.sync_worker = None
         self.test_worker = None
+        self._last_test_message = ""
         self._loading_defaults = False
+        self.log_entries: list[str] = []
         super().__init__(
             title="同步执行",
             eyebrow="同步",
-            subtitle="选择范围、测试连接，并在同一工作区内监控执行进度。",
+            subtitle="选择同步范围，检查连接后手动发起本次同步。",
             parent=parent,
         )
         self.setProperty("page", "sync")
+        self.setObjectName("sync_execution_page")
         self.sync_timer = QTimer(self)
         self.sync_timer.timeout.connect(self._update_time_elapsed)
         self.setup_ui()
@@ -114,9 +129,18 @@ class SyncPage(Win11PageScaffold):
 
     def setup_ui(self) -> None:
         self._build_hero()
+        self.set_hero_visible(True)
+        self.hero_card.setMinimumHeight(82)
+        self.hero_card.setMaximumHeight(88)
+        self.hero_title.setMinimumHeight(42)
         self._build_summary_strip()
+        self.primary_action_layout.addStretch(1)
         self.add_primary_action(self.test_conn_btn)
         self.add_primary_action(self.start_sync_btn)
+        self.add_primary_action(self.cancel_sync_btn)
+        self.primary_action_layout.setContentsMargins(0, 0, 0, 12)
+        self.primary_action_host.setMinimumHeight(58)
+        self.primary_action_host.setMaximumHeight(60)
         self.set_content(self._create_workspace())
         self._apply_workspace_layout()
 
@@ -144,64 +168,86 @@ class SyncPage(Win11PageScaffold):
 
     def _build_hero(self) -> None:
         meta_widget = QWidget()
-        meta_layout = QVBoxLayout(meta_widget)
-        meta_layout.setContentsMargins(0, 0, 0, 0)
-        meta_layout.setSpacing(6)
+        meta_layout = QHBoxLayout(meta_widget)
+        meta_layout.setContentsMargins(SpacingTokens.NONE, SpacingTokens.NONE, SpacingTokens.NONE, SpacingTokens.NONE)
+        meta_layout.setSpacing(SpacingTokens.SM)
 
+        status_title = QLabel("状态：")
+        status_title.setProperty("ui", "sync-hero-status-title")
         self.hero_status = QLabel("空闲")
-        self.hero_status.setProperty("ui", "win11-status-chip")
+        self.hero_status.setProperty("ui", "sync-hero-status-value")
         self.hero_status.setProperty("tone", "neutral")
 
-        self.hero_hint = QLabel("尚未开始同步。可先测试连接，确认后再开始同步。")
+        self.hero_hint = QLabel("准备一次从金蝶到 SQL Server 的手动同步。")
         self.hero_hint.setProperty("ui", "win11-meta-text")
         self.hero_hint.setProperty("tone", "neutral")
         self.hero_hint.setWordWrap(True)
+        self.hero_hint.setVisible(False)
 
-        meta_layout.addWidget(self.hero_status, 0, Qt.AlignmentFlag.AlignLeft)
-        meta_layout.addWidget(self.hero_hint)
+        meta_layout.addWidget(status_title)
+        meta_layout.addWidget(self.hero_status)
 
         self.start_sync_btn = LoadingButton(ButtonText.START_SYNC)
         self.start_sync_btn.setProperty("class", "primary")
-        self.start_sync_btn.setFixedHeight(36)
+        self.start_sync_btn.setFixedWidth(136)
+        self.start_sync_btn.setFixedHeight(38)
         self.start_sync_btn.clicked.connect(self.start_sync)
         self.gui.start_sync_btn = self.start_sync_btn
 
         self.test_conn_btn = LoadingButton(ButtonText.TEST_CONNECTION)
         self.test_conn_btn.setProperty("class", "secondary")
-        self.test_conn_btn.setFixedHeight(36)
+        self.test_conn_btn.setFixedWidth(136)
+        self.test_conn_btn.setFixedHeight(38)
         self.test_conn_btn.clicked.connect(self.test_connection)
         self.gui.test_conn_btn = self.test_conn_btn
+
+        self.cancel_sync_btn = QPushButton("取消说明")
+        self.cancel_sync_btn.setProperty("class", "secondary")
+        self.cancel_sync_btn.setFixedWidth(136)
+        self.cancel_sync_btn.setFixedHeight(38)
+        self.cancel_sync_btn.setEnabled(False)
+        self.cancel_sync_btn.clicked.connect(self.cancel_sync)
 
         self.add_hero_widget(meta_widget)
 
     def _build_summary_strip(self) -> None:
-        self.summary_mode = SyncOverviewCard("同步模式", "--", "日常运行建议使用增量同步。")
-        self.summary_target = SyncOverviewCard("目标范围", "--", "可选择全部表单、单个表单或默认表单集合。")
-        self.summary_progress = SyncOverviewCard("进度", "0%", "任务尚未开始。")
-        self.summary_result = SyncOverviewCard("最近结果", "--", "同步完成后将汇总插入与更新数量。")
+        self.summary_mode = SyncOverviewCard("同步模式", "--", "日常运行建议使用增量同步。", icon_file="sync_mode.svg", tone="blue")
+        self.summary_target = SyncOverviewCard("目标范围", "--", "可选择全部表单、单个表单或默认表单集合。", icon_file="sync_target.svg", tone="green")
+        self.summary_progress = SyncOverviewCard("进度", "0%", "任务尚未开始。", icon_file="sync_progress.svg", tone="blue")
+        self.summary_result = SyncOverviewCard("最近结果", "--", "同步完成后将汇总插入与更新数量。", icon_file="sync_result.svg", tone="slate")
 
-        for card in (self.summary_mode, self.summary_target, self.summary_progress, self.summary_result):
+        for idx, card in enumerate((self.summary_mode, self.summary_target, self.summary_progress, self.summary_result), start=1):
+            card.setProperty("sync-card-index", idx)
+            card.setMinimumHeight(136)
+            card.setMaximumHeight(140)
             self.add_summary_card(card)
+        self.summary_strip.setMinimumHeight(138)
+        self.summary_strip.setMaximumHeight(142)
 
     def _create_workspace(self) -> QWidget:
         root = QWidget()
         root_layout = QVBoxLayout(root)
-        root_layout.setContentsMargins(0, 0, 0, 0)
-        root_layout.setSpacing(0)
+        root_layout.setContentsMargins(SpacingTokens.NONE, SpacingTokens.NONE, SpacingTokens.NONE, SpacingTokens.NONE)
+        root_layout.setSpacing(SpacingTokens.MD)
 
-        self.workspace_splitter = QSplitter(Qt.Orientation.Horizontal)
-        self.workspace_splitter.setProperty("ui", "win11-page-splitter")
-        self.workspace_splitter.setChildrenCollapsible(False)
-        self.workspace_splitter.setHandleWidth(6)
-        root_layout.addWidget(self.workspace_splitter, 1)
+        self.stepper_strip = self._create_stepper_strip()
+        root_layout.addWidget(self.stepper_strip)
+
+        self.launchpad_core = QFrame()
+        self.launchpad_core.setProperty("ui", "sync-launchpad-core")
+        self.launchpad_core.setMaximumHeight(376)
+        core_layout = QHBoxLayout(self.launchpad_core)
+        core_layout.setContentsMargins(SpacingTokens.NONE, SpacingTokens.NONE, SpacingTokens.NONE, SpacingTokens.NONE)
+        core_layout.setSpacing(SpacingTokens.MD)
+        root_layout.addWidget(self.launchpad_core)
 
         self.config_container = QWidget()
         self.config_container.setProperty("ui", "win11-workspace-column")
-        self.config_container.setMinimumWidth(420)
-        self.config_container.setMaximumWidth(420)
+        self.config_container.setObjectName("sync_config_column")
+        self.config_container.setMinimumWidth(300)
         config_layout = QVBoxLayout(self.config_container)
-        config_layout.setContentsMargins(0, 0, 0, 0)
-        config_layout.setSpacing(14)
+        config_layout.setContentsMargins(SpacingTokens.NONE, SpacingTokens.NONE, SpacingTokens.NONE, SpacingTokens.NONE)
+        config_layout.setSpacing(SpacingTokens.MD)
         config_layout.addWidget(
             self._create_group_card(
                 "同步配置",
@@ -214,7 +260,7 @@ class SyncPage(Win11PageScaffold):
                     ),
                     self._create_setting_row(
                         "同步模式",
-                        "增量适合日常；全量与完整同步更适合修复或重建场景。",
+                        "增量适合日常；完全同步更适合修复或重建场景。",
                         self._create_mode_selector(),
                         last=True,
                     ),
@@ -222,66 +268,135 @@ class SyncPage(Win11PageScaffold):
             )
         )
 
-        self.ops_strip = QLabel("流程：选择范围 -> 测试连接 -> 开始同步")
+        self.ops_strip = QLabel("流程：选择范围 -> 检查连接 -> 开始同步")
         self.ops_strip.setProperty("ui", "win11-inline-banner")
         self.ops_strip.setWordWrap(True)
         config_layout.addWidget(self.ops_strip)
 
-        self.test_status_lbl = QLabel("连接状态将在测试后显示。")
+        self.test_status_lbl = QLabel("")
         self.test_status_lbl.setProperty("ui", "win11-helper-text")
         self.test_status_lbl.setWordWrap(True)
         config_layout.addWidget(self.test_status_lbl)
 
         config_layout.addStretch(1)
-        self.workspace_splitter.addWidget(self.config_container)
+        core_layout.addWidget(self.config_container, 1)
 
         self.monitor_container = QWidget()
         self.monitor_container.setProperty("ui", "win11-workspace-column")
+        self.monitor_container.setObjectName("sync_monitor_column")
         monitor_layout = QVBoxLayout(self.monitor_container)
-        monitor_layout.setContentsMargins(0, 0, 0, 0)
-        monitor_layout.setSpacing(14)
+        monitor_layout.setContentsMargins(SpacingTokens.NONE, SpacingTokens.NONE, SpacingTokens.NONE, SpacingTokens.NONE)
+        monitor_layout.setSpacing(SpacingTokens.MD)
         self.execution_card = self._create_execution_card()
-        self.log_card = self._create_log_card()
         monitor_layout.addWidget(self.execution_card)
-        monitor_layout.addWidget(self.log_card, 1)
-        self.workspace_splitter.addWidget(self.monitor_container)
-        self.workspace_splitter.setStretchFactor(0, 2)
-        self.workspace_splitter.setStretchFactor(1, 3)
-        self.workspace_splitter.setSizes([540, 980])
+        monitor_layout.addStretch(1)
+        core_layout.addWidget(self.monitor_container, 2)
+
+        self.preflight_card = self._create_preflight_card()
+        core_layout.addWidget(self.preflight_card, 1)
+
+        root_layout.addStretch(1)
 
         return root
 
+    def _create_stepper_strip(self) -> QFrame:
+        strip = QFrame()
+        strip.setObjectName("sync_launchpad_steps")
+        strip.setProperty("ui", "sync-stepper-strip")
+        layout = QHBoxLayout(strip)
+        layout.setContentsMargins(90, 16, 90, 16)
+        layout.setSpacing(0)
+
+        steps = [
+            ("1", "选择范围"),
+            ("2", "连接预检"),
+            ("3", "执行同步"),
+            ("4", "完成结果"),
+        ]
+        self.step_labels = []
+        for index, (number, label) in enumerate(steps):
+            item = QFrame()
+            item.setProperty("ui", "sync-step-item")
+            item.setProperty("active", index == 0)
+            item_layout = QHBoxLayout(item)
+            item_layout.setContentsMargins(SpacingTokens.MD, SpacingTokens.XS, SpacingTokens.MD, SpacingTokens.XS)
+            item_layout.setSpacing(SpacingTokens.SM)
+
+            badge = QLabel(number)
+            badge.setProperty("ui", "sync-step-badge")
+            badge.setProperty("active", index == 0)
+            badge.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            badge.setFixedSize(22, 22)
+            text = QLabel(label)
+            text.setProperty("ui", "sync-step-text")
+            text.setProperty("active", index == 0)
+            item_layout.addWidget(badge)
+            item_layout.addWidget(text)
+            layout.addWidget(item, 1)
+            self.step_labels.append((item, badge, text))
+            if index < len(steps) - 1:
+                arrow = QLabel("›")
+                arrow.setProperty("ui", "sync-step-arrow")
+                arrow.setAlignment(Qt.AlignmentFlag.AlignCenter)
+                layout.addWidget(arrow)
+
+        return strip
+
+    def _create_preflight_card(self) -> Win11SectionCard:
+        card = Win11SectionCard("运行前检查", "")
+        card.setProperty("sync-section", "preflight")
+        card.setMinimumHeight(376)
+        card.setMaximumHeight(376)
+        self.preflight_api_value = self._add_preflight_item(card.content_layout, "金蝶 API", "未检测", "neutral")
+        self.preflight_db_value = self._add_preflight_item(card.content_layout, "SQL Server", "未检测", "neutral")
+        self.preflight_test_time_value = self._add_preflight_item(card.content_layout, "最近检测", "--", "neutral")
+        self.preflight_scope_value = self._add_preflight_item(card.content_layout, "表单范围", "--", "neutral")
+        self.preflight_mode_value = self._add_preflight_item(card.content_layout, "同步模式", "--", "neutral")
+        return card
+
+    def _add_preflight_item(self, layout, title: str, value: str, tone: str) -> QLabel:
+        item = QFrame()
+        item.setProperty("ui", "sync-preflight-item")
+        item_layout = QHBoxLayout(item)
+        item_layout.setContentsMargins(SpacingTokens.MD, SpacingTokens.SM, SpacingTokens.MD, SpacingTokens.SM)
+        item_layout.setSpacing(SpacingTokens.SM)
+
+        title_label = QLabel(title)
+        title_label.setProperty("ui", "sync-preflight-title")
+        value_label = QLabel(value)
+        value_label.setProperty("ui", "sync-preflight-value")
+        value_label.setProperty("tone", tone)
+        value_label.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+        value_label.setMinimumWidth(84)
+
+        item_layout.addWidget(title_label)
+        item_layout.addStretch(1)
+        item_layout.addWidget(value_label)
+        layout.addWidget(item)
+        return value_label
+
     def _create_group_card(self, title_text: str, subtitle_text: str, rows: list[QWidget]) -> Win11SectionCard:
-        card = Win11SectionCard(title_text, subtitle_text)
+        card = Win11SectionCard(title_text, "")
+        card.setProperty("sync-section", "config")
+        card.setMinimumHeight(376)
+        card.setMaximumHeight(376)
         for row in rows:
             card.content_layout.addWidget(row)
         return card
 
     def _create_setting_row(self, title_text: str, note_text: str, editor: QWidget, *, last: bool = False) -> QFrame:
+        editor.setMinimumWidth(220)
+        editor.setProperty("td", "win11-input")
         row = QFrame()
         row.setProperty("ui", "win11-setting-row")
         row.setProperty("last", last)
-
-        layout = QHBoxLayout(row)
-        layout.setContentsMargins(0, 12, 0, 12)
+        layout = QVBoxLayout(row)
+        layout.setContentsMargins(0, 14, 0, 14)
         layout.setSpacing(14)
-
-        text_wrap = QVBoxLayout()
-        text_wrap.setSpacing(3)
-
         title = QLabel(title_text)
         title.setProperty("ui", "win11-row-title")
-        note = QLabel(note_text)
-        note.setProperty("ui", "win11-row-note")
-        note.setWordWrap(True)
-
-        text_wrap.addWidget(title)
-        text_wrap.addWidget(note)
-
-        layout.addLayout(text_wrap, 1)
-        editor.setMinimumWidth(320)
-        editor.setProperty("td", "win11-input")
-        layout.addWidget(editor, 0, Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+        layout.addWidget(title)
+        layout.addWidget(editor)
         return row
 
     def _create_strategy_card(self) -> Win11SectionCard:
@@ -292,15 +407,15 @@ class SyncPage(Win11PageScaffold):
 
         tips = [
             "日常建议使用增量同步，避免 API 压力与数据库写入峰值过高。",
-            "完整同步建议在低峰时段执行，并保持实时日志可见以便观察。",
+            "完整同步建议在低峰时段执行，详细日志可在日志中心查看。",
             "若连接测试失败，请先修正配置，再发起新的同步尝试。",
         ]
         for idx, text in enumerate(tips, start=1):
             item = QFrame()
             item.setProperty("ui", "win11-inline-card")
             row = QHBoxLayout(item)
-            row.setContentsMargins(12, 12, 12, 12)
-            row.setSpacing(10)
+            row.setContentsMargins(SpacingTokens.MD, SpacingTokens.MD, SpacingTokens.MD, SpacingTokens.MD)
+            row.setSpacing(SpacingTokens.ACTION_BAR_GAP)
 
             badge = QLabel(str(idx))
             badge.setProperty("ui", "win11-inline-badge")
@@ -314,7 +429,10 @@ class SyncPage(Win11PageScaffold):
         return card
 
     def _create_execution_card(self) -> Win11SectionCard:
-        card = Win11SectionCard("执行状态", "同步任务运行时会在此更新实时指标。")
+        card = Win11SectionCard("执行状态", "")
+        card.setProperty("sync-section", "execution")
+        card.setMinimumHeight(376)
+        card.setMaximumHeight(376)
 
         header = QHBoxLayout()
         header.addStretch(1)
@@ -324,129 +442,65 @@ class SyncPage(Win11PageScaffold):
         self.run_state_badge.setProperty("tone", "neutral")
         header.addWidget(self.run_state_badge)
         card.content_layout.addLayout(header)
+        card.content_layout.addStretch(1)
 
         metrics = QHBoxLayout()
-        metrics.setSpacing(12)
-        self.exec_count_card = SyncOverviewCard("已同步记录", "0", "累计插入与更新的行数。")
-        self.exec_time_card = SyncOverviewCard("已用时间", "00:00:00", "本次运行的实时计时。")
-        self.exec_rate_card = SyncOverviewCard("运行状态", "空闲", "任务状态会随工作线程事件自动更新。")
+        metrics.setSpacing(36)
+        self.exec_count_card = self._create_execution_metric("已同步记录", "0", "sync_record.svg", "blue")
+        self.exec_time_card = self._create_execution_metric("已用时间", "00:00:00", "sync_runtime.svg", "green")
+        self.exec_rate_card = self._create_execution_metric("运行状态", "空闲", "sync_status.svg", "blue")
         for card_item in (self.exec_count_card, self.exec_time_card, self.exec_rate_card):
             metrics.addWidget(card_item)
         card.content_layout.addLayout(metrics)
+        card.content_layout.addStretch(1)
 
-        progress_wrap = QFrame()
-        progress_wrap.setProperty("ui", "win11-progress-card")
-        progress_layout = QVBoxLayout(progress_wrap)
-        progress_layout.setContentsMargins(14, 14, 14, 14)
-        progress_layout.setSpacing(8)
-
-        row = QHBoxLayout()
-        label = QLabel("任务进度")
-        label.setProperty("ui", "win11-row-title")
-        row.addWidget(label)
-        row.addStretch(1)
-
-        self.progress_status_lbl = QLabel("等待中")
-        self.progress_status_lbl.setProperty("ui", "win11-inline-title")
-        row.addWidget(self.progress_status_lbl)
-
-        progress_layout.addLayout(row)
-
-        self.progress_bar = QProgressBar()
-        self.progress_bar.setRange(0, 100)
-        self.progress_bar.setValue(0)
-        self.progress_bar.setTextVisible(False)
-        self.progress_bar.setFixedHeight(10)
-        progress_layout.addWidget(self.progress_bar)
-
-        card.content_layout.addWidget(progress_wrap)
+        self._progress_card = SyncProgressCard()
+        self.progress_bar = self._progress_card.progress_bar
+        self.progress_status_lbl = self._progress_card.progress_status_lbl
+        card.content_layout.addWidget(self._progress_card)
         return card
 
-    def _create_log_card(self) -> Win11SectionCard:
-        card = Win11SectionCard("实时日志", "终端风格日志会持续更新，但不会占满整个页面。")
+    def _create_execution_metric(self, title: str, value: str, icon_file: str, tone: str) -> QFrame:
+        card = QFrame()
+        card.setProperty("ui", "win11-metric-card")
+        card.setProperty("tone", tone)
+        card.setMinimumHeight(126)
+        layout = QVBoxLayout(card)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(8)
+        layout.setAlignment(Qt.AlignmentFlag.AlignHCenter | Qt.AlignmentFlag.AlignVCenter)
 
-        toolbar_host = QFrame()
-        toolbar_host.setProperty("ui", "win11-log-toolbar")
-        toolbar = QHBoxLayout(toolbar_host)
-        toolbar.setContentsMargins(10, 8, 10, 8)
-        toolbar.setSpacing(8)
+        icon_wrap = QFrame(card)
+        icon_wrap.setProperty("ui", "sync-exec-icon-wrap")
+        icon_wrap.setProperty("tone", tone)
+        icon_wrap.setFixedSize(52, 52)
+        icon_layout = QHBoxLayout(icon_wrap)
+        icon_layout.setContentsMargins(0, 0, 0, 0)
+        icon_layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        icon_layout.addWidget(
+            SvgIconLabel(icon_file, size=28, icon_size=24, color=SYNC_TONE_COLORS.get(tone, SYNC_TONE_COLORS["blue"]))
+        )
 
-        self.auto_scroll_cb = QCheckBox("自动滚动")
-        self.auto_scroll_cb.setChecked(True)
-        toolbar.addWidget(self.auto_scroll_cb)
-        toolbar.addStretch(1)
+        card.title_label = QLabel(title)
+        card.title_label.setProperty("ui", "win11-inline-title")
+        card.title_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        card.value_label = QLabel(value)
+        card.value_label.setProperty("ui", "win11-inline-value")
+        card.value_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        card.note_label = QLabel("", card)
+        card.note_label.setVisible(False)
 
-        clear_btn = LoadingButton(ButtonText.CLEAR)
-        clear_btn.setProperty("class", "secondary")
-        clear_btn.clicked.connect(self.clear_log)
+        layout.addWidget(icon_wrap, 0, Qt.AlignmentFlag.AlignHCenter)
+        layout.addWidget(card.title_label)
+        layout.addWidget(card.value_label)
 
-        copy_btn = LoadingButton(ButtonText.COPY)
-        copy_btn.setProperty("class", "secondary")
-        copy_btn.clicked.connect(self.copy_log)
+        def set_data(metric_card, metric_value: str, note: str | None = None) -> None:
+            metric_card.value_label.setText(metric_value)
+            if note is not None:
+                metric_card.note_label.setText(note)
+                metric_card.note_label.setVisible(False)
 
-        export_btn = LoadingButton(ButtonText.EXPORT)
-        export_btn.setProperty("class", "secondary")
-        export_btn.clicked.connect(self.export_log)
-
-        toolbar.addWidget(clear_btn)
-        toolbar.addWidget(copy_btn)
-        toolbar.addWidget(export_btn)
-        card.content_layout.addWidget(toolbar_host)
-
-        self.log_text = QTextEdit()
-        self.log_text.setReadOnly(True)
-        self.log_text.setProperty("class", "win11-log")
-        self.log_text.setMinimumHeight(220)
-        card.content_layout.addWidget(self.log_text, 1)
-        return card
-
-    def _create_execution_card(self) -> Win11SectionCard:
-        card = Win11SectionCard("执行状态", "同步任务运行时会在此更新实时指标。")
-
-        header = QHBoxLayout()
-        header.addStretch(1)
-
-        self.run_state_badge = QLabel("空闲")
-        self.run_state_badge.setProperty("ui", "win11-status-chip")
-        self.run_state_badge.setProperty("tone", "neutral")
-        header.addWidget(self.run_state_badge)
-        card.content_layout.addLayout(header)
-
-        metrics = QHBoxLayout()
-        metrics.setSpacing(12)
-        self.exec_count_card = SyncExecutionMetricCard("已同步记录", "0", "累计插入与更新的行数。")
-        self.exec_time_card = SyncExecutionMetricCard("已用时间", "00:00:00", "本次运行的实时计时。")
-        self.exec_rate_card = SyncExecutionMetricCard("运行状态", "空闲", "任务状态会随工作线程事件自动更新。")
-        for card_item in (self.exec_count_card, self.exec_time_card, self.exec_rate_card):
-            metrics.addWidget(card_item)
-        card.content_layout.addLayout(metrics)
-
-        progress_wrap = QFrame()
-        progress_wrap.setProperty("ui", "win11-progress-card")
-        progress_layout = QVBoxLayout(progress_wrap)
-        progress_layout.setContentsMargins(14, 14, 14, 14)
-        progress_layout.setSpacing(8)
-
-        row = QHBoxLayout()
-        label = QLabel("任务进度")
-        label.setProperty("ui", "win11-row-title")
-        row.addWidget(label)
-        row.addStretch(1)
-
-        self.progress_status_lbl = QLabel("等待中")
-        self.progress_status_lbl.setProperty("ui", "win11-inline-title")
-        row.addWidget(self.progress_status_lbl)
-
-        progress_layout.addLayout(row)
-
-        self.progress_bar = QProgressBar()
-        self.progress_bar.setRange(0, 100)
-        self.progress_bar.setValue(0)
-        self.progress_bar.setTextVisible(False)
-        self.progress_bar.setFixedHeight(10)
-        progress_layout.addWidget(self.progress_bar)
-
-        card.content_layout.addWidget(progress_wrap)
+        card.set_data = MethodType(set_data, card)
         return card
 
     def _create_form_selector(self) -> SearchableComboBox:
@@ -455,7 +509,7 @@ class SyncPage(Win11PageScaffold):
         items.extend((name, "", name) for name in available)
         items.append((FORM_DEFAULT_TEXT, "", FORM_DEFAULT_DATA))
         self.form_selector = SearchableComboBox(placeholder="请选择同步范围", searchable=True, items=items)
-        self.form_selector.setMinimumHeight(40)
+        self.form_selector.setMinimumHeight(SizeTokens.CONTROL_HEIGHT)
         self.form_selector.setCurrentIndex(0)
         self.form_selector.currentIndexChanged.connect(self._on_manual_selection_changed)
         self.gui.form_selector = self.form_selector
@@ -464,11 +518,10 @@ class SyncPage(Win11PageScaffold):
     def _create_mode_selector(self) -> SearchableComboBox:
         mode_items = [
             ("增量（推荐）", "", "incremental"),
-            ("全量", "", "full"),
-            ("完整同步", "", "complete"),
+            ("完全同步", "", "complete"),
         ]
         self.sync_type_combo = SearchableComboBox(placeholder="请选择同步模式", searchable=False, items=mode_items)
-        self.sync_type_combo.setMinimumHeight(40)
+        self.sync_type_combo.setMinimumHeight(SizeTokens.CONTROL_HEIGHT)
         self.sync_type_combo.setCurrentIndex(0)
         self.sync_type_combo.currentIndexChanged.connect(self._on_manual_selection_changed)
         self.gui.sync_type_combo = self.sync_type_combo
@@ -489,7 +542,9 @@ class SyncPage(Win11PageScaffold):
             selected_form = str(form_data)
 
         normalized_mode = str(mode_data or "incremental").strip().lower()
-        if normalized_mode not in {"incremental", "full", "complete"}:
+        if normalized_mode == "full":
+            normalized_mode = "complete"
+        if normalized_mode not in {"incremental", "complete"}:
             normalized_mode = "incremental"
         return scope, selected_form, normalized_mode
 
@@ -510,6 +565,10 @@ class SyncPage(Win11PageScaffold):
         form_text = self.form_selector.currentText() or FORM_ALL_TEXT
         self.summary_mode.set_data(mode_text, "当前保存的同步模式。")
         self.summary_target.set_data(form_text, "当前保存的同步范围。")
+        if hasattr(self, "preflight_scope_value"):
+            self.preflight_scope_value.setText(form_text)
+        if hasattr(self, "preflight_mode_value"):
+            self.preflight_mode_value.setText("完全同步" if self._combo_selected_data(self.sync_type_combo) == "complete" else "增量同步")
 
     def _on_manual_selection_changed(self, *_args) -> None:
         if self._loading_defaults:
@@ -519,7 +578,7 @@ class SyncPage(Win11PageScaffold):
 
     def start_sync(self) -> None:
         if self.sync_worker is not None and self.sync_worker.isRunning():
-            UiFeedback.warning(self, "任务正在运行", "请等待当前同步结束后再启动新的任务。")
+            UiFeedback.warning(self, "任务正在运行", "请等待当前同步完成后再启动新的任务。")
             return
 
         form_selection = self.form_selector.currentText() or FORM_ALL_TEXT
@@ -533,16 +592,14 @@ class SyncPage(Win11PageScaffold):
                 UiFeedback.info(
                     self,
                     "未配置默认表单",
-                    "请先在“表单配置”页设置默认表单列表后再使用该快捷方式。",
+                    "请先在“表单映射”页确认默认表单范围，再使用该快捷方式。",
                 )
                 return
             forms = default_forms
         elif form_data != FORM_ALL_DATA:
             forms = [str(form_data)]
 
-        if mode_data == "full":
-            sync_type = SyncType.FULL
-        elif mode_data == "complete":
+        if mode_data in {"full", "complete"}:
             sync_type = SyncType.COMPLETE
         else:
             sync_type = SyncType.INCREMENTAL
@@ -558,11 +615,12 @@ class SyncPage(Win11PageScaffold):
         self.summary_result.set_data("--", "工作线程完成后将汇总插入与更新数量。")
 
         self.start_sync_btn.set_loading(True, LoadingText.SYNC)
+        self.cancel_sync_btn.setEnabled(True)
         self.progress_bar.setValue(0)
         self._set_run_state("info", "运行中")
         self._set_hero_hint("同步任务已提交，正在运行。", "info")
         self.reset_stats()
-        self.log_text.clear()
+        self.clear_log()
         self.append_log("开始同步任务。", "INFO")
         self.append_log(f"目标范围：{form_selection}", "INFO")
         self.append_log(f"同步模式：{sync_mode_text}", "INFO")
@@ -572,6 +630,12 @@ class SyncPage(Win11PageScaffold):
         self.sync_worker.progress.connect(self.on_sync_progress)
         self.sync_worker.finished.connect(self.on_sync_finished)
         self.sync_worker.start()
+
+    def cancel_sync(self) -> None:
+        message = "当前同步任务暂不支持中途取消"
+        self.append_log(message, "WARNING")
+        self._set_hero_hint(message, "info")
+        UiFeedback.info(self, "取消说明", "当前同步任务暂不支持中途取消，请等待本次运行完成。")
 
     def on_sync_progress(self, msg, val) -> None:
         self.append_log(msg)
@@ -583,6 +647,7 @@ class SyncPage(Win11PageScaffold):
 
     def on_sync_finished(self, result) -> None:
         self.start_sync_btn.set_loading(False)
+        self.cancel_sync_btn.setEnabled(False)
         self.sync_timer.stop()
         QTimer.singleShot(3000, lambda: self.start_sync_btn.setText(ButtonText.START_SYNC))
         self.append_log("-" * 40, "INFO")
@@ -593,6 +658,7 @@ class SyncPage(Win11PageScaffold):
         failed_forms = []
         total_inserted = 0
         total_updated = 0
+        total_records_fallback = int(result.get("total_records", 0) or 0)
         if isinstance(details, dict):
             for form_name, stats in details.items():
                 if isinstance(stats, dict):
@@ -604,9 +670,17 @@ class SyncPage(Win11PageScaffold):
                         failed_forms.append(form_name)
 
         self.synced_count = total_inserted + total_updated
+        if self.synced_count <= 0 and total_records_fallback > 0:
+            self.synced_count = total_records_fallback
         self.exec_count_card.set_data(str(self.synced_count), "最终插入与更新的记录总数。")
         result_message = result.get("message") or "执行结束。"
-        self.summary_result.set_data(f"插入 {total_inserted} / 更新 {total_updated}", result_message)
+        if total_inserted or total_updated:
+            result_value = f"插入 {total_inserted} / 更新 {total_updated}"
+        elif total_records_fallback > 0:
+            result_value = f"共 {total_records_fallback} 条"
+        else:
+            result_value = "--"
+        self.summary_result.set_data(result_value, result_message)
         self.summary_progress.set_data("100%", "同步工作线程已完成。")
         self.progress_bar.setValue(100)
         button_text = "同步完成"
@@ -632,8 +706,8 @@ class SyncPage(Win11PageScaffold):
             if failed_forms:
                 self.append_log(f"失败表单：{', '.join(failed_forms)}", "ERROR")
             self._set_run_state("danger", "失败")
-            self._set_hero_hint("同步任务失败，请查看实时日志获取详情。", "danger")
-            self.exec_rate_card.set_data("失败", "请查看实时日志与返回的错误信息。")
+            self._set_hero_hint("同步任务失败，请查看日志中心获取详情。", "danger")
+            self.exec_rate_card.set_data("失败", "请查看日志中心与返回的错误信息。")
 
         self.start_sync_btn.setText(button_text)
 
@@ -663,14 +737,17 @@ class SyncPage(Win11PageScaffold):
 
     def on_test_finished(self, api_ok, db_ok, msg) -> None:
         self.test_conn_btn.set_loading(False)
+        self._last_test_message = msg or ""
+        self._update_preflight_connection_status(api_ok, db_ok)
         if api_ok and db_ok:
             self._set_hero_hint("连接测试通过，工作区已就绪。", "success")
             self.update_test_status("连接正常，可以开始同步。", False)
         else:
             self._set_hero_hint("连接测试失败，请先修正配置再运行同步。", "danger")
-            self.update_test_status("连接测试失败，请检查 API 与数据库配置。", True)
+            detail = f"连接测试失败，请检查 API 与数据库配置。{msg}" if msg else "连接测试失败，请检查 API 与数据库配置。"
+            self.update_test_status(detail, True)
             if msg:
-                UiFeedback.warning(self, "连接测试失败", f"连接测试未通过：\n{msg}")
+                UiFeedback.warning(self, "连接测试未通过", f"请检查金蝶 API 与 SQL Server 配置：\n{msg}")
 
     def load_smart_defaults(self) -> None:
         config = sync_service.get_sync_config()
@@ -699,7 +776,9 @@ class SyncPage(Win11PageScaffold):
                 self._set_combo_selected_by_data(self.form_selector, FORM_ALL_DATA)
 
             sync_type = str(config.get(SYNC_UI_MODE_KEY, config.get("sync_type", "incremental"))).strip().lower()
-            if sync_type not in ("incremental", "full", "complete"):
+            if sync_type == "full":
+                sync_type = "complete"
+            if sync_type not in ("incremental", "complete"):
                 sync_type = "incremental"
             self._set_combo_selected_by_data(self.sync_type_combo, sync_type)
         finally:
@@ -710,6 +789,22 @@ class SyncPage(Win11PageScaffold):
         self._refresh_selection_summary()
         self.summary_result.set_data("--", "等待下一次同步结果。")
         self._persist_manual_selection()
+        self._refresh_selection_summary()
+
+    def _update_preflight_connection_status(self, api_ok: bool, db_ok: bool) -> None:
+        if not hasattr(self, "preflight_api_value"):
+            return
+        self._set_preflight_value(self.preflight_api_value, "正常" if api_ok else "异常", "success" if api_ok else "danger")
+        self._set_preflight_value(self.preflight_db_value, "正常" if db_ok else "异常", "success" if db_ok else "danger")
+        self._set_preflight_value(self.preflight_test_time_value, datetime.now().strftime("%H:%M:%S"), "neutral")
+
+    def _set_preflight_value(self, label: QLabel, text: str, tone: str) -> None:
+        label.setText(text)
+        label.setProperty("tone", tone)
+        style = label.style()
+        if style is not None:
+            style.unpolish(label)
+            style.polish(label)
 
     def reset_stats(self) -> None:
         self.synced_count = 0
@@ -759,82 +854,72 @@ class SyncPage(Win11PageScaffold):
             style.polish(self.test_status_lbl)
 
     def _apply_workspace_layout(self) -> None:
-        if hasattr(self, "workspace_splitter") and self.workspace_splitter is not None:
-            if self.width() <= 1366:
-                self.workspace_splitter.setOrientation(Qt.Orientation.Vertical)
-                self.config_container.setMinimumWidth(0)
-                self.config_container.setMaximumWidth(16777215)
-                if hasattr(self, "execution_card"):
-                    self.execution_card.setMaximumHeight(320)
-                self.log_text.setMinimumHeight(180)
-                top_height = max(320, int(self.height() * 0.44))
-                bottom_height = max(360, self.height() - top_height)
-                self.workspace_splitter.setSizes([top_height, bottom_height])
-            else:
-                self.workspace_splitter.setOrientation(Qt.Orientation.Horizontal)
-                self.config_container.setMinimumWidth(420)
-                self.config_container.setMaximumWidth(420)
-                if hasattr(self, "execution_card"):
-                    self.execution_card.setMaximumHeight(16777215)
-                self.log_text.setMinimumHeight(220)
-                self.workspace_splitter.setSizes([540, 980])
+        if not hasattr(self, "launchpad_core"):
+            return
+
+        layout = self.launchpad_core.layout()
+        if layout is None:
+            return
+
+        if self.width() < 960:
+            layout.setDirection(QHBoxLayout.Direction.TopToBottom)
+            self.config_container.setMinimumWidth(0)
+            self.monitor_container.setMinimumWidth(0)
+            self.preflight_card.setMinimumWidth(0)
+            if hasattr(self, "execution_card"):
+                self.execution_card.setMaximumHeight(SizeTokens.SYNC_EXECUTION_CARD_MAX_HEIGHT_COMPACT)
+        else:
+            layout.setDirection(QHBoxLayout.Direction.LeftToRight)
+            self.config_container.setMinimumWidth(300)
+            self.monitor_container.setMinimumWidth(460)
+            self.preflight_card.setMinimumWidth(320)
+            if hasattr(self, "execution_card"):
+                self.execution_card.setMaximumHeight(376)
 
     def resizeEvent(self, event) -> None:  # noqa: N802 - Qt API
         self._apply_workspace_layout()
         super().resizeEvent(event)
 
     def clear_log(self) -> None:
-        self.log_text.clear()
+        self.log_entries.clear()
 
     def copy_log(self) -> None:
-        content = self.log_text.toPlainText().strip()
+        content = "\n".join(self.log_entries).strip()
         if not content:
-            UiFeedback.info(self, "无内容可复制", "实时日志当前为空。")
+            UiFeedback.info(self, "暂无可复制内容", "本次同步还没有可复制的日志。")
             return
         QApplication.clipboard().setText(content)
-        UiFeedback.success(self, "已复制", "已将实时日志复制到剪贴板。")
+        UiFeedback.success(self, "复制完成", "本次同步日志已复制到剪贴板。")
 
     def export_log(self) -> None:
-        content = self.log_text.toPlainText()
+        content = "\n".join(self.log_entries)
         if not content:
-            UiFeedback.info(self, "无日志可导出", "实时日志当前为空。")
+            UiFeedback.info(self, "暂无可导出日志", "本次同步还没有可导出的日志。")
             return
         try:
             log_dir = app_logger.get_log_dir()
             path = os.path.join(log_dir, f"sync_export_{datetime.now().strftime('%Y%m%d%H%M%S')}.txt")
             with open(path, "w", encoding="utf-8") as handle:
                 handle.write(content)
-            UiFeedback.success(self, "导出完成", f"日志已导出到：\n{path}")
+            UiFeedback.success(self, "导出完成", f"本次同步日志已导出：\n{path}")
         except Exception as exc:  # pragma: no cover - filesystem guard
-            UiFeedback.error(self, "导出失败", f"无法导出实时日志：\n{exc}")
+            UiFeedback.error(self, "导出失败", f"本次同步日志导出失败：\n{exc}")
 
     def append_log(self, msg, level="INFO") -> None:
-        color = ColorTokens.TEXT_SECONDARY
         message = str(msg)
         upper_msg = message.upper()
         if level == "ERROR":
-            color = ColorTokens.DANGER
             self.fail_count += 1
         elif level == "WARNING":
-            color = ColorTokens.WARNING
+            pass
         elif level == "SUCCESS":
-            color = ColorTokens.SUCCESS
             self.success_count += 1
         elif "FAILED" in upper_msg:
-            color = ColorTokens.DANGER
             self.fail_count += 1
         elif "ERROR" in upper_msg or "EXCEPTION" in upper_msg:
-            color = ColorTokens.WARNING
+            pass
         elif "SUCCESS" in upper_msg:
-            color = ColorTokens.SUCCESS
             self.success_count += 1
 
         time_str = datetime.now().strftime("%H:%M:%S")
-        html_text = (
-            f'<span style="color: {ColorTokens.TEXT_DISABLED};">[{time_str}]</span> '
-            f'<span style="color: {color};">{html.escape(message)}</span>'
-        )
-        self.log_text.append(html_text)
-        if self.auto_scroll_cb.isChecked():
-            sb = self.log_text.verticalScrollBar()
-            sb.setValue(sb.maximum())
+        self.log_entries.append(f"[{time_str}] [{level}] {message}")

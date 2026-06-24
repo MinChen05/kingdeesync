@@ -15,11 +15,13 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from src.gui.design_tokens import SizeTokens, SpacingTokens
+
 
 class ComboPopup(QWidget):
     """下拉弹出框"""
 
-    itemClicked = Signal(str, object)
+    itemClicked = Signal(str, object)  # noqa: N815
 
     def __init__(self, parent, items, searchable=True):
         super().__init__(parent, Qt.Popup)
@@ -41,12 +43,12 @@ class ComboPopup(QWidget):
         self.container.setGraphicsEffect(shadow)
 
         layout = QVBoxLayout(self)
-        layout.setContentsMargins(10, 10, 10, 10)
+        layout.setContentsMargins(SpacingTokens.ACTION_BAR_GAP, SpacingTokens.ACTION_BAR_GAP, SpacingTokens.ACTION_BAR_GAP, SpacingTokens.ACTION_BAR_GAP)
         layout.addWidget(self.container)
 
         popup_layout = QVBoxLayout(self.container)
-        popup_layout.setContentsMargins(8, 8, 8, 8)
-        popup_layout.setSpacing(0)
+        popup_layout.setContentsMargins(SpacingTokens.SM, SpacingTokens.SM, SpacingTokens.SM, SpacingTokens.SM)
+        popup_layout.setSpacing(SpacingTokens.NONE)
 
         # 搜索框
         if searchable:
@@ -92,8 +94,8 @@ class ComboPopup(QWidget):
 class SearchableComboBox(QWidget):
     """可搜索的卡片式下拉框"""
 
-    currentTextChanged = Signal(str)
-    currentIndexChanged = Signal(int)
+    currentTextChanged = Signal(str)  # noqa: N815
+    currentIndexChanged = Signal(int)  # noqa: N815
 
     def __init__(self, parent=None, placeholder="请选择", items=None, searchable=True):
         super().__init__(parent)
@@ -107,7 +109,7 @@ class SearchableComboBox(QWidget):
 
     def setup_ui(self):
         layout = QVBoxLayout(self)
-        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setContentsMargins(SpacingTokens.NONE, SpacingTokens.NONE, SpacingTokens.NONE, SpacingTokens.NONE)
 
         # Main Button
         self.btn = QPushButton(self.placeholder)
@@ -131,11 +133,11 @@ class SearchableComboBox(QWidget):
 
         # Calculate position
         pos = self.mapToGlobal(QPoint(0, self.height()))
-        self.popup.move(pos.x() - 10, pos.y() - 10)
-        self.popup.setFixedWidth(self.width() + 20)
+        self.popup.move(pos.x() - SpacingTokens.ACTION_BAR_GAP, pos.y() - SpacingTokens.ACTION_BAR_GAP)
+        self.popup.setFixedWidth(self.width() + SpacingTokens.XL)
 
         # Height limit
-        content_height = min(len(self.items_data) * 40 + 60, 300)
+        content_height = min(len(self.items_data) * SizeTokens.COMBO_POPUP_ITEM_HEIGHT + SizeTokens.COMBO_POPUP_EXTRA_HEIGHT, SizeTokens.COMBO_POPUP_MAX_HEIGHT)
         self.popup.setFixedHeight(content_height)
 
         self.popup.show()
@@ -146,7 +148,7 @@ class SearchableComboBox(QWidget):
 
         # Find icon
         icon = ""
-        for t, i, d in self.items_data:
+        for t, i, _d in self.items_data:
             if t == text:
                 icon = i
                 break
@@ -174,7 +176,7 @@ class SearchableComboBox(QWidget):
                 icon = "配"
             elif "增量" in t:
                 icon = "增"
-            elif "全量" in t:
+            elif "完全" in t:
                 icon = "全"
             elif "重置" in t:
                 icon = "重"
@@ -206,7 +208,7 @@ class SearchableComboBox(QWidget):
         return ""
 
     def setCurrentText(self, text):
-        for i, (t, _, d) in enumerate(self.items_data):
+        for _i, (t, _, d) in enumerate(self.items_data):
             if t == text:
                 self.on_item_selected(t, d)
                 return

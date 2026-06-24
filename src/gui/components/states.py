@@ -6,6 +6,8 @@
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import QLabel, QVBoxLayout, QWidget
 
+from src.gui.design_tokens import SpacingTokens
+
 
 class StateWidget(QWidget):
     """统一状态面板"""
@@ -21,8 +23,8 @@ class StateWidget(QWidget):
         self._mode = mode
 
         layout = QVBoxLayout(self)
-        layout.setContentsMargins(24, 24, 24, 24)
-        layout.setSpacing(8)
+        layout.setContentsMargins(SpacingTokens.XXL, SpacingTokens.XXL, SpacingTokens.XXL, SpacingTokens.XXL)
+        layout.setSpacing(SpacingTokens.SM)
         layout.setAlignment(Qt.AlignCenter)
 
         self.icon_label = QLabel()

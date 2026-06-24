@@ -1,4 +1,4 @@
-@echo off
+﻿@echo off
 chcp 65001 >nul
 echo ========================================
 echo 金蝶数据同步工具 - 打包脚本
@@ -49,10 +49,18 @@ echo 输出目录: dist\金蝶数据同步工具
 echo ========================================
 echo.
 
-REM 只复制配置模板，禁止把本机配置打进发布包
+REM 局域网配置版：复制模板和本机完整配置，目标机器无需重新配置
 if exist "config.example.ini" (
     echo [信息] 复制配置模板...
     copy "config.example.ini" "dist\金蝶数据同步工具\" >nul
+)
+if exist "config.ini" (
+    echo [信息] 复制主配置...
+    copy "config.ini" "dist\金蝶数据同步工具\" >nul
+)
+if exist "config.local.ini" (
+    echo [信息] 复制本机配置...
+    copy "config.local.ini" "dist\金蝶数据同步工具\" >nul
 )
 
 REM 创建快捷方式说明

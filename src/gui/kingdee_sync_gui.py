@@ -834,17 +834,21 @@ class KingdeeSyncGUI(QMainWindow):
     def _update_status_display(self, is_kingdee, connected, message=None):
         """Update sidebar status rows and top badges."""
         if is_kingdee:
-            icon_label = self.kd_status_icon
-            text_label = self.kd_status_text
-            tag_label = self.kd_status_tag
             prefix = "金蝶 API"
             self.kd_connected = connected
+            icon_label = getattr(self, "kd_status_icon", None)
+            text_label = getattr(self, "kd_status_text", None)
+            tag_label = getattr(self, "kd_status_tag", None)
         else:
-            icon_label = self.db_status_icon
-            text_label = self.db_status_text
-            tag_label = self.db_status_tag
             prefix = "数据库"
             self.db_connected = connected
+            icon_label = getattr(self, "db_status_icon", None)
+            text_label = getattr(self, "db_status_text", None)
+            tag_label = getattr(self, "db_status_tag", None)
+
+        if icon_label is None or text_label is None or tag_label is None:
+            self._refresh_top_status_bar()
+            return
 
         icon_name = "status_ok.svg" if connected else "status_err.svg"
         icon_path = os.path.join(self.assets_dir, "icons", icon_name)
@@ -863,22 +867,32 @@ class KingdeeSyncGUI(QMainWindow):
         if target == "kingdee":
             config = config_manager.get_kingdee_config()
             title = "金蝶连接详情"
+            status_text = getattr(
+                getattr(self, "kd_status_text", None),
+                "text",
+                lambda: "已连接" if self.kd_connected else "未连接",
+            )()
             message = (
                 f"登录地址: {config.get('login_url', '未配置')}\n"
                 f"查询地址: {config.get('query_url', '未配置')}\n"
                 f"账套 ID: {config.get('acct_id', '未配置')}\n\n"
-                f"状态: {self.kd_status_text.text()}"
+                f"状态: {status_text}"
             )
         else:
             db_config = config_manager.get_db_config()
             db_type = db_config.get("type", "mysql")
             target_cfg = db_config.get(db_type, {}) if isinstance(db_config, dict) else {}
             title = "数据库连接详情"
+            status_text = getattr(
+                getattr(self, "db_status_text", None),
+                "text",
+                lambda: "已连接" if self.db_connected else "未连接",
+            )()
             message = (
                 f"类型: {db_type}\n"
                 f"主机: {target_cfg.get('host', '未配置')}\n"
                 f"数据库: {target_cfg.get('database', '未配置')}\n\n"
-                f"状态: {self.db_status_text.text()}"
+                f"状态: {status_text}"
             )
 
         UiFeedback.info(self, title, message)

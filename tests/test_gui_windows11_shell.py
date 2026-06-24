@@ -525,6 +525,28 @@ class Win11SettingsAndFormsResponsiveTests(QtAppTestCase):
         test_connections.assert_called_once_with(page._collect_payload(), persist=False)
         save_settings.assert_not_called()
 
+    def test_settings_page_test_connection_updates_shell_without_legacy_status_widgets(self) -> None:
+        from src.gui.kingdee_sync_gui import KingdeeSyncGUI
+
+        window = KingdeeSyncGUI()
+        self.addCleanup(cleanup_widget, window)
+        page = window.pages["settings"]
+
+        self.assertFalse(hasattr(window, "kd_status_icon"))
+        with (
+            patch(
+                "src.gui.pages.settings_page.settings_service.test_connections",
+                return_value=(True, False, "金蝶连接成功，数据库连接失败"),
+            ),
+            patch("src.gui.pages.settings_page.UiFeedback.info"),
+        ):
+            page.test_connections()
+
+        self.assertTrue(window.kd_connected)
+        self.assertFalse(window.db_connected)
+        self.assertEqual(window.topbar_conn_value.text(), "部分连接")
+        self.assertTrue(page.btn_test.isEnabled())
+
     def test_forms_page_prioritizes_list_height_and_top_actions_at_1366x768(self) -> None:
         from src.gui.pages.forms_page import FormConfigPage
 

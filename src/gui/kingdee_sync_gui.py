@@ -125,16 +125,16 @@ def _make_nav_icon(icon_id: str, size: int = 18, color: str = "#41607B") -> QIco
 
 
 SIDEBAR_NAV_ICON_FILES = {
-    "dashboard": "概览_chart-proportion.svg",
+    "dashboard": "icons/dashboard.svg",
     "sync": "icons/sync.svg",
-    "history": "同步历史_time.svg",
-    "task_management": "任务管理_transaction-order.svg",
-    "data_source": "数据源管理_data.svg",
-    "forms": "表单映射_link.svg",
-    "schedule": "调度管理_schedule.svg",
-    "diagnostics": "异常诊断_caution.svg",
-    "log_center": "日志中心_notes.svg",
-    "settings": "系统设置_setting.svg",
+    "history": "icons/history.svg",
+    "task_management": "icons/task_management.svg",
+    "data_source": "icons/data_source.svg",
+    "forms": "icons/forms.svg",
+    "schedule": "icons/schedule.svg",
+    "diagnostics": "icons/diagnostics.svg",
+    "log_center": "icons/log_center.svg",
+    "settings": "icons/settings.svg",
 }
 
 

@@ -4199,10 +4199,10 @@ class Win11TaskManagementPageTests(QtAppTestCase):
 
         for card in (page.card_enabled, page.card_paused, page.card_executed, page.card_retry):
             self.assertIsInstance(card, TaskMetricCard)
-        self.assertEqual(page.card_enabled.icon.property("icon-source"), "播放_play.svg")
-        self.assertEqual(page.card_paused.icon.property("icon-source"), "暂停_pause-one.svg")
-        self.assertEqual(page.card_executed.icon.property("icon-source"), "数据看板_data-screen.svg")
-        self.assertEqual(page.card_retry.icon.property("icon-source"), "报错_caution.svg")
+        self.assertEqual(page.card_enabled.icon.property("icon-source"), "icons/schedule_running.svg")
+        self.assertEqual(page.card_paused.icon.property("icon-source"), "icons/schedule_status.svg")
+        self.assertEqual(page.card_executed.icon.property("icon-source"), "icons/data_source_database.svg")
+        self.assertEqual(page.card_retry.icon.property("icon-source"), "icons/metric_pending_warning.svg")
         self.assertEqual(page.card_enabled.value_label.text(), "12")
         self.assertEqual(page.card_paused.value_label.text(), "3")
         self.assertEqual(page.card_executed.value_label.text(), "28")
@@ -4561,9 +4561,9 @@ class Win11TaskManagementPageTests(QtAppTestCase):
         self.assertEqual(action_cell.btn_pause.toolTip(), "暂停任务")
         self.assertEqual(action_cell.btn_edit.toolTip(), "编辑任务")
         self.assertEqual(action_cell.btn_more.toolTip(), "更多操作")
-        self.assertEqual(action_cell.btn_run.property("icon-source"), "播放_play-one.svg")
-        self.assertEqual(action_cell.btn_pause.property("icon-source"), "暂停_pause.svg")
-        self.assertEqual(action_cell.btn_edit.property("icon-source"), "编辑_edit.svg")
+        self.assertEqual(action_cell.btn_run.property("icon-source"), "icons/schedule_running.svg")
+        self.assertEqual(action_cell.btn_pause.property("icon-source"), "icons/schedule_status.svg")
+        self.assertEqual(action_cell.btn_edit.property("icon-source"), "icons/settings.svg")
         self.assertFalse(action_cell.btn_run.icon().isNull())
         self.assertFalse(action_cell.btn_pause.icon().isNull())
         self.assertFalse(action_cell.btn_edit.icon().isNull())
@@ -5966,16 +5966,16 @@ class Win11TenPageNavigationTests(QtAppTestCase):
         ("settings", "系统设置"),
     ]
     EXPECTED_ICON_FILES = {
-        "dashboard": "概览_chart-proportion.svg",
+        "dashboard": "icons/dashboard.svg",
         "sync": "icons/sync.svg",
-        "history": "同步历史_time.svg",
-        "task_management": "任务管理_transaction-order.svg",
-        "data_source": "数据源管理_data.svg",
-        "forms": "表单映射_link.svg",
-        "schedule": "调度管理_schedule.svg",
-        "diagnostics": "异常诊断_caution.svg",
-        "log_center": "日志中心_notes.svg",
-        "settings": "系统设置_setting.svg",
+        "history": "icons/history.svg",
+        "task_management": "icons/task_management.svg",
+        "data_source": "icons/data_source.svg",
+        "forms": "icons/forms.svg",
+        "schedule": "icons/schedule.svg",
+        "diagnostics": "icons/diagnostics.svg",
+        "log_center": "icons/log_center.svg",
+        "settings": "icons/settings.svg",
     }
 
     def test_page_order_contains_ten_pages(self) -> None:

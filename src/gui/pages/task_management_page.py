@@ -118,10 +118,10 @@ class TaskMetricIcon(QLabel):
     """Asset-backed icon for task metric cards."""
 
     _ICON_FILES = {
-        "play": "播放_play.svg",
-        "pause": "暂停_pause-one.svg",
-        "chart": "数据看板_data-screen.svg",
-        "warning": "报错_caution.svg",
+        "play": "icons/schedule_running.svg",
+        "pause": "icons/schedule_status.svg",
+        "chart": "icons/data_source_database.svg",
+        "warning": "icons/metric_pending_warning.svg",
     }
     _ASSETS_DIR = Path(__file__).resolve().parents[3] / "assets"
 
@@ -234,9 +234,9 @@ class TaskActionButton(QPushButton):
     """Small painter-only action button used in the task table."""
 
     _ICON_FILES = {
-        "run": "播放_play-one.svg",
-        "pause": "暂停_pause.svg",
-        "edit": "编辑_edit.svg",
+        "run": "icons/schedule_running.svg",
+        "pause": "icons/schedule_status.svg",
+        "edit": "icons/settings.svg",
         "more": "icons/more_horizontal.svg",
     }
     _ASSETS_DIR = Path(__file__).resolve().parents[3] / "assets"

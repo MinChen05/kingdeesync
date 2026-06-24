@@ -106,9 +106,9 @@ sql_script.append("PRINT '所有字段优化完成！';")
 sql_script.append("GO")
 
 # 写入文件
-with open('D:/Kingdee/optimize_decimal_fields.sql', 'w', encoding='utf-8') as f:
+with open('scripts/sql/optimize_decimal_fields.sql', 'w', encoding='utf-8') as f:
     f.write('\n'.join(sql_script))
 
-print("SQL 脚本已生成: D:/Kingdee/optimize_decimal_fields.sql")
+print("SQL 脚本已生成: scripts/sql/optimize_decimal_fields.sql")
 print(f"涉及 {len(FIELD_OPTIMIZATION_MAP)} 个表")
 print(f"涉及 {sum(len(fields) for fields in FIELD_OPTIMIZATION_MAP.values())} 个字段")

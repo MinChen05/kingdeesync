@@ -34,7 +34,7 @@
 ## 执行步骤
 
 ### 步骤 1: 备份数据库
-### 步骤 2: 执行 optimize_decimal_fields.sql
+### 步骤 2: 执行 `scripts/sql/optimize_decimal_fields.sql`
 ### 步骤 3: 验证数据完整性
 ### 步骤 4: 重建索引
 ### 步骤 5: 更新统计信息

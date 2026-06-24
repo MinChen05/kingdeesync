@@ -50,3 +50,17 @@ docs/screenshots/*_crop.png
 docs/screenshots/*_before_*.png
 docs/screenshots/*_after_*.png
 docs/screenshots/dashboard_pixel_final_v*.png
+docs/screenshots/*_1366x768.png
+docs/screenshots/*_1920x1080.png
+docs/screenshots/iconpark_round2_*.png
+docs/screenshots/dashboard_*.png
+docs/screenshots/final_dashboard_*.png
+docs/screenshots/final_history_*.png
+
+# 本地设计源素材 / 下载过程素材
+assets/*.png
+assets/*.icns
+assets/*_*.svg
+assets/*_*.SVG
+assets/*-*.svg
+assets/*-*.SVG

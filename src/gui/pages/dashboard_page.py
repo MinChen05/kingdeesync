@@ -48,75 +48,6 @@ _FAILED_STATUSES = {"failed", "failed_abnormal_exit", "error"}
 _WARNING_STATUSES = {"partial", "warning", "pending"}
 _SUCCESS_STATUSES = {"success", "completed", "done"}
 
-_VISUAL_FALLBACK_STATS = {
-    "sync_count": 28,
-    "success_rate": 96.35,
-    "fail_count": 8,
-    "pending_count": 3,
-    "avg_duration": 2.35,
-}
-
-_VISUAL_FALLBACK_TREND_ROWS = [
-    {"day": "2024-05-08", "count": 68000, "rate": 95.5},
-    {"day": "2024-05-09", "count": 70000, "rate": 96.0},
-    {"day": "2024-05-10", "count": 69000, "rate": 95.7},
-    {"day": "2024-05-11", "count": 68000, "rate": 95.8},
-    {"day": "2024-05-12", "count": 76000, "rate": 96.5},
-    {"day": "2024-05-13", "count": 77000, "rate": 95.2},
-    {"day": "2024-05-14", "count": 40000, "rate": 94.8},
-]
-
-_VISUAL_FALLBACK_RECENT_RECORDS = [
-    {
-        "start_time_str": "2024-05-14 10:15:32",
-        "task_name": "物料基础资料同步",
-        "table_name": "T_BD_Material",
-        "status": "success",
-        "record_count": 8542,
-        "duration_seconds": 92,
-    },
-    {
-        "start_time_str": "2024-05-14 10:10:21",
-        "task_name": "客户资料同步",
-        "table_name": "T_BD_Customer",
-        "status": "success",
-        "record_count": 3215,
-        "duration_seconds": 58,
-    },
-    {
-        "start_time_str": "2024-05-14 10:05:18",
-        "task_name": "销售订单同步",
-        "table_name": "T_SAL_SaleOrder",
-        "status": "failed",
-        "record_count": 128,
-        "duration_seconds": 45,
-        "message": "表单 T_SAL_SaleOrder 同步失败 1 次",
-    },
-    {
-        "start_time_str": "2024-05-14 10:00:11",
-        "task_name": "采购订单同步",
-        "table_name": "T_PUR_PurchaseOrder",
-        "status": "success",
-        "record_count": 1245,
-        "duration_seconds": 72,
-    },
-    {
-        "start_time_str": "2024-05-14 09:55:07",
-        "task_name": "库存余额同步",
-        "table_name": "T_INV_Stock",
-        "status": "warning",
-        "record_count": 5321,
-        "duration_seconds": 125,
-        "message": "库存余额同步存在警告，请检查明细",
-    },
-]
-
-_VISUAL_FALLBACK_RISKS = [
-    ("API 超时", "金蝶 API 响应超时 3 次，建议检查网络或 API 服务状态", "10:12"),
-    ("字段转换失败", "表单 T_BD_Material 中字段 FMaterialId 转换失败 5 条", "09:58"),
-    ("失败重试队列", "当前有 8 条失败任务在重试队列中，最长等待 15 分钟", "09:45"),
-]
-
 
 def _set_color(label: QLabel, fg: str) -> None:
     pal = label.palette()
@@ -1021,21 +952,21 @@ class DashboardPage(Win11PageScaffold):
     def _update_status_cards(self, stats: dict, history_stats: dict) -> None:
         if _stats_are_empty(stats, history_stats):
             self._status_cards.update(
-                task_count="28",
-                task_count_sub="较昨日 ↑ 12.50%",
-                task_count_tone="positive",
-                rate="96.35%",
-                rate_sub="较昨日 ↑ 1.28%",
-                rate_tone="positive",
-                fail_count="8",
-                fail_count_sub="较昨日 ↓ 20.00%",
-                fail_count_tone="positive",
-                pending_count="3",
-                pending_count_sub="较昨日 ↓ 25.00%",
-                pending_count_tone="positive",
-                avg_duration="2.35 秒",
-                avg_duration_sub="较昨日 ↓ 0.15 秒",
-                avg_duration_tone="positive",
+                task_count="0",
+                task_count_sub="暂无数据",
+                task_count_tone="idle",
+                rate="--",
+                rate_sub="暂无数据",
+                rate_tone="idle",
+                fail_count="0",
+                fail_count_sub="暂无数据",
+                fail_count_tone="idle",
+                pending_count="0",
+                pending_count_sub="暂无数据",
+                pending_count_tone="idle",
+                avg_duration="--",
+                avg_duration_sub="暂无数据",
+                avg_duration_tone="idle",
             )
             return
 
@@ -1176,7 +1107,8 @@ class DashboardPage(Win11PageScaffold):
             risks.append((title, desc, _risk_time(record)))
 
         if not risks:
-            risks.extend(_VISUAL_FALLBACK_RISKS)
+            # No risk items to display — risk area shows hidden state
+            pass
 
         for index, item in enumerate(self.risk_items):
             if index < len(risks):

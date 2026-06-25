@@ -110,7 +110,7 @@ class Win11SummaryCardSmokeTests(QtAppTestCase):
     def test_summary_card_exposes_ui_property(self) -> None:
         from src.gui.components.page_shell import Win11SummaryCard
 
-        card = Win11SummaryCard(title="Total", value="123")
+        card = Win11SummaryCard(title="Total", value="122")
         self.assertEqual(card.property("ui"), "win11-summary-card")
 
 
@@ -149,13 +149,13 @@ class Win11ResponsiveShellSmokeTests(QtAppTestCase):
 
         self.assertFalse(hero_card.isVisible())
 
-    def test_main_shell_compacts_sidebar_at_1366x768(self) -> None:
+    def test_main_shell_compacts_sidebar_at_1266x768(self) -> None:
         from src.gui.kingdee_sync_gui import KingdeeSyncGUI
 
         window = KingdeeSyncGUI()
         self.addCleanup(cleanup_widget, window)
 
-        window.resize(1366, 768)
+        window.resize(1266, 768)
         window.show()
         self._app.processEvents()
 
@@ -209,7 +209,7 @@ class Win11DashboardAndSyncResponsiveTests(QtAppTestCase):
             page = DashboardPage(gui)
 
         self.addCleanup(cleanup_widget, page)
-        page.resize(1366, 768)
+        page.resize(1266, 768)
         page.show()
         self._app.processEvents()
 
@@ -254,7 +254,7 @@ class Win11DashboardAndSyncResponsiveTests(QtAppTestCase):
             page = SyncPage(gui)
 
         self.addCleanup(cleanup_widget, page)
-        page.resize(1366, 768)
+        page.resize(1266, 768)
         page.show()
         self._app.processEvents()
 
@@ -263,7 +263,7 @@ class Win11DashboardAndSyncResponsiveTests(QtAppTestCase):
         self.assertTrue(primary_actions.isVisible())
         self.assertTrue(page.test_conn_btn.isVisible())
         self.assertTrue(page.start_sync_btn.isVisible())
-        self.assertEqual(page.start_sync_btn.height(), 38)
+        self.assertEqual(page.start_sync_btn.height(), 28)
         self.assertGreaterEqual(primary_actions.minimumHeight(), 58)
         self.assertEqual(page.launchpad_core.layout().direction(), QHBoxLayout.Direction.LeftToRight)
         self.assertFalse(hasattr(page, "log_card"))
@@ -362,7 +362,7 @@ class Win11DashboardAndSyncResponsiveTests(QtAppTestCase):
 
 
 class Win11SettingsAndFormsResponsiveTests(QtAppTestCase):
-    def test_settings_page_keeps_actions_visible_and_rows_compact_at_1366x768(self) -> None:
+    def test_settings_page_keeps_actions_visible_and_rows_compact_at_1266x768(self) -> None:
         from src.gui.pages.settings_page import SettingsPage
 
         gui = SimpleNamespace()
@@ -373,7 +373,7 @@ class Win11SettingsAndFormsResponsiveTests(QtAppTestCase):
             page = SettingsPage(gui)
 
         self.addCleanup(cleanup_widget, page)
-        page.resize(1366, 768)
+        page.resize(1266, 768)
         page.show()
         self._app.processEvents()
 
@@ -455,10 +455,10 @@ class Win11SettingsAndFormsResponsiveTests(QtAppTestCase):
             page = SettingsPage(gui)
 
         self.addCleanup(cleanup_widget, page)
-        self.assertEqual(page.btn_test.height(), 38)
-        self.assertEqual(page.btn_save.height(), 38)
+        self.assertEqual(page.btn_test.height(), 28)
+        self.assertEqual(page.btn_save.height(), 28)
 
-    def test_settings_page_1366x768_integration(self) -> None:
+    def test_settings_page_1266x768_integration(self) -> None:
         from src.gui.pages.settings_page import SettingsPage
 
         gui = SimpleNamespace()
@@ -469,7 +469,7 @@ class Win11SettingsAndFormsResponsiveTests(QtAppTestCase):
             page = SettingsPage(gui)
 
         self.addCleanup(cleanup_widget, page)
-        page.resize(1366, 768)
+        page.resize(1266, 768)
         page.show()
         self._app.processEvents()
 
@@ -486,7 +486,7 @@ class Win11SettingsAndFormsResponsiveTests(QtAppTestCase):
             "src.gui.pages.settings_page.settings_service.get_settings_snapshot",
             return_value={
                 "kingdee": {"login_url": "https://api.test.com", "query_url": "https://query.test.com", "acct_id": "100"},
-                "database": {"host": "192.168.1.1", "port": 1433, "database": "TestDB"},
+                "database": {"host": "192.168.1.1", "port": 1422, "database": "TestDB"},
             },
         ):
             page = SettingsPage(gui)
@@ -496,12 +496,12 @@ class Win11SettingsAndFormsResponsiveTests(QtAppTestCase):
         self.assertIsNotNone(page.query_url)
         self.assertIsNotNone(page.db_port)
         self.assertEqual(page.query_url.text(), "https://query.test.com")
-        self.assertEqual(page.db_port.value(), 1433)
+        self.assertEqual(page.db_port.value(), 1422)
 
         payload = page._collect_payload()
         self.assertEqual(payload["kingdee"]["login_url"], "https://api.test.com")
         self.assertEqual(payload["kingdee"]["query_url"], "https://query.test.com")
-        self.assertEqual(payload["database"]["port"], 1433)
+        self.assertEqual(payload["database"]["port"], 1422)
 
     def test_settings_page_test_connection_does_not_save_settings(self) -> None:
         from src.gui.pages.settings_page import SettingsPage
@@ -547,7 +547,7 @@ class Win11SettingsAndFormsResponsiveTests(QtAppTestCase):
         self.assertEqual(window.topbar_conn_value.text(), "部分连接")
         self.assertTrue(page.btn_test.isEnabled())
 
-    def test_forms_page_prioritizes_list_height_and_top_actions_at_1366x768(self) -> None:
+    def test_forms_page_prioritizes_list_height_and_top_actions_at_1266x768(self) -> None:
         from src.gui.pages.forms_page import FormConfigPage
 
         gui = SimpleNamespace()
@@ -564,7 +564,7 @@ class Win11SettingsAndFormsResponsiveTests(QtAppTestCase):
             page = FormConfigPage(gui)
 
         self.addCleanup(cleanup_widget, page)
-        page.resize(1366, 768)
+        page.resize(1266, 768)
         page.show()
         self._app.processEvents()
 
@@ -680,7 +680,7 @@ class Win11SettingsAndFormsResponsiveTests(QtAppTestCase):
         self.assertEqual(len(combo_bottom_lines), 2)
         self.assertEqual(combo_frames[0].width(), 240)
         self.assertEqual(combo_frames[1].width(), 200)
-        self.assertEqual(page.combo_form.width(), 238)
+        self.assertEqual(page.combo_form.width(), 228)
         self.assertEqual(page.combo_status.width(), 198)
         self.assertTrue(all(frame.height() >= 44 for frame in combo_frames))
         self.assertEqual(combo_frames[0].layout().contentsMargins().bottom(), 1)
@@ -735,7 +735,7 @@ class Win11SettingsAndFormsResponsiveTests(QtAppTestCase):
 
         text_width = page.btn_view_diagnostics.fontMetrics().horizontalAdvance(page.btn_view_diagnostics.text())
         self.assertGreaterEqual(page.btn_view_diagnostics.width(), text_width + 28)
-        self.assertGreaterEqual(page.btn_view_diagnostics.height(), 32)
+        self.assertGreaterEqual(page.btn_view_diagnostics.height(), 22)
 
     def test_forms_page_populates_real_forms_and_filters_list(self) -> None:
         from src.gui.pages.forms_page import FormConfigPage
@@ -880,7 +880,7 @@ class Win11SettingsAndFormsResponsiveTests(QtAppTestCase):
         self.addCleanup(cleanup_widget, page)
 
         self.assertEqual(page.stat_values["forms"].text(), "2")
-        self.assertEqual(page.stat_values["fields"].text(), "3")
+        self.assertEqual(page.stat_values["fields"].text(), "2")
         self.assertEqual(page.stat_values["missing"].text(), "1")
         self.assertEqual(page.stat_values["updated"].text(), "2026-06-24")
         self.assertEqual(page.validation_summary_text.text(), "字段缺失 1 · 类型不匹配 0 · 可自动修复 0")
@@ -945,7 +945,7 @@ class Win11ScheduleAndHistoryResponsiveTests(QtAppTestCase):
             page = SchedulePage(gui)
 
         self.addCleanup(cleanup_widget, page)
-        page.resize(1366, 768)
+        page.resize(1266, 768)
         page.show()
         self._app.processEvents()
 
@@ -966,7 +966,7 @@ class Win11ScheduleAndHistoryResponsiveTests(QtAppTestCase):
             page = HistoryPage(gui)
 
         self.addCleanup(cleanup_widget, page)
-        page.resize(1366, 768)
+        page.resize(1266, 768)
         page.show()
         self._app.processEvents()
 
@@ -1054,7 +1054,7 @@ class Win11PrimaryPagesSmokeTests(QtAppTestCase):
                 },
                 "database": {
                     "host": "db.example.com",
-                    "port": 1433,
+                    "port": 1422,
                     "database": "kingdee",
                     "user": "sa",
                     "password": "secret",
@@ -1222,7 +1222,7 @@ class Win11PrimaryPagesSmokeTests(QtAppTestCase):
 
         gui = SimpleNamespace()
         with (
-            patch("src.gui.pages.schedule_page.config_manager.get_sync_config", return_value={"auto_sync": True, "sync_interval": 30}),
+            patch("src.gui.pages.schedule_page.config_manager.get_sync_config", return_value={"auto_sync": True, "sync_interval": 20}),
             patch("src.gui.pages.schedule_page.auto_scheduler.is_running", return_value=True),
         ):
             page = SchedulePage(gui)
@@ -1285,7 +1285,7 @@ class Win11PrimaryPagesSmokeTests(QtAppTestCase):
         for spin_box in spin_boxes:
             self.assertEqual(spin_box.buttonSymbols(), QAbstractSpinBox.ButtonSymbols.NoButtons)
             self.assertGreaterEqual(spin_box.width(), 96)
-            self.assertGreaterEqual(spin_box.height(), 36)
+            self.assertGreaterEqual(spin_box.height(), 26)
         labels = [label.text() for label in page.findChildren(QLabel)]
         self.assertIn("同步范围", labels)
         self.assertIn("同步模式", labels)
@@ -1355,7 +1355,7 @@ class Win11PrimaryPagesSmokeTests(QtAppTestCase):
         with tempfile.TemporaryDirectory() as tmpdir:
             with (
                 patch("src.gui.pages.schedule_page.app_logger.get_log_dir", return_value=tmpdir),
-                patch("src.gui.pages.schedule_page.config_manager.get_sync_config", return_value={"auto_sync": True, "sync_interval": 30}),
+                patch("src.gui.pages.schedule_page.config_manager.get_sync_config", return_value={"auto_sync": True, "sync_interval": 20}),
                 patch("src.gui.pages.schedule_page.auto_scheduler.is_running", return_value=True),
             ):
                 page = SchedulePage(gui)
@@ -1366,16 +1366,16 @@ class Win11PrimaryPagesSmokeTests(QtAppTestCase):
         self._app.processEvents()
 
         self.assertEqual(page.property("page"), "schedule")
-        self.assertEqual(page.btn_stop.height(), 36)
-        self.assertEqual(page.btn_save.height(), 36)
+        self.assertEqual(page.btn_stop.height(), 26)
+        self.assertEqual(page.btn_save.height(), 26)
         self.assertEqual(page.findChild(QWidget, "schedule_middle_row").height(), 292)
         self.assertEqual(page.page_subtitle.text(), "启动自动调度后会先执行一次增量同步，随后按间隔重复执行")
-        self.assertEqual(page.log_table.table.verticalHeader().defaultSectionSize(), 34)
-        self.assertEqual(page.log_table.table.horizontalHeader().height(), 38)
-        self.assertEqual(page.log_table.table.height(), 224)
-        self.assertEqual(page.log_table.table.rowCount(), 0)
-        self.assertFalse(page.log_table._empty_label.isHidden())
-        self.assertEqual(page.log_table._empty_label.text(), "暂无调度日志，启动自动调度后将在此显示执行记录。")
+        self.assertEqual(page.sync_table.table.verticalHeader().defaultSectionSize(), 24)
+        self.assertEqual(page.sync_table.table.horizontalHeader().height(), 28)
+        self.assertEqual(page.sync_table.table.height(), 224)
+        self.assertEqual(page.sync_table.table.rowCount(), 0)
+        self.assertFalse(page.sync_table._empty_label.isHidden())
+        self.assertEqual(page.sync_table._empty_label.text(), "暂无调度日志，启动自动调度后将在此显示执行记录。")
         self.assertEqual(page.lbl_total.text(), "共 0 条")
         self.assertEqual(page.pagination_row.count(), 2)
 
@@ -1490,11 +1490,11 @@ class Win11PrimaryPagesSmokeTests(QtAppTestCase):
         ):
             page = SchedulePage(gui)
             self.addCleanup(cleanup_widget, page)
-            page.interval_spin.setValue(35)
+            page.interval_spin.setValue(25)
             page.toggle_scheduler()
             page.toggle_scheduler()
 
-        start.assert_called_once_with(35)
+        start.assert_called_once_with(25)
         stop.assert_called_once()
 
     def test_schedule_page_log_filter_updates_table_and_total(self) -> None:
@@ -1511,7 +1511,7 @@ class Win11PrimaryPagesSmokeTests(QtAppTestCase):
                     "message": "定时同步已启动",
                 },
                 {
-                    "asctime": "2026-06-24 10:03:04",
+                    "asctime": "2026-06-24 10:02:04",
                     "name": "src.core.scheduler",
                     "levelname": "ERROR",
                     "message": "调度器运行异常: boom",
@@ -1528,7 +1528,7 @@ class Win11PrimaryPagesSmokeTests(QtAppTestCase):
 
         self.addCleanup(cleanup_widget, page)
         page.log_level_combo.setCurrentText("ERROR")
-        self.assertEqual(page.log_table.table.rowCount(), 1)
+        self.assertEqual(page.sync_table.table.rowCount(), 1)
         self.assertEqual(page.lbl_total.text(), "共 1 条")
 
     def test_schedule_page_empty_scheduler_logs_show_empty_state_without_static_rows(self) -> None:
@@ -1544,9 +1544,9 @@ class Win11PrimaryPagesSmokeTests(QtAppTestCase):
                 page = SchedulePage(gui)
 
         self.addCleanup(cleanup_widget, page)
-        self.assertEqual(page.log_table.table.rowCount(), 0)
-        self.assertFalse(page.log_table._empty_label.isHidden())
-        self.assertEqual(page.log_table._empty_label.text(), "暂无调度日志，启动自动调度后将在此显示执行记录。")
+        self.assertEqual(page.sync_table.table.rowCount(), 0)
+        self.assertFalse(page.sync_table._empty_label.isHidden())
+        self.assertEqual(page.sync_table._empty_label.text(), "暂无调度日志，启动自动调度后将在此显示执行记录。")
         self.assertEqual(page.lbl_total.text(), "共 0 条")
         self.assertEqual(page.pagination_row.count(), 2)
 
@@ -1580,13 +1580,13 @@ class Win11PrimaryPagesSmokeTests(QtAppTestCase):
                     "message": "定时同步已启动",
                 },
                 {
-                    "asctime": "2026-06-24 10:02:03",
+                    "asctime": "2026-06-24 10:02:02",
                     "name": "src.core.data_sync",
                     "levelname": "INFO",
                     "message": "普通同步日志，不应进入当前页面",
                 },
                 {
-                    "asctime": "2026-06-24 10:03:04",
+                    "asctime": "2026-06-24 10:02:04",
                     "name": "src.core.scheduler",
                     "levelname": "ERROR",
                     "message": "调度器运行异常: boom",
@@ -1602,9 +1602,9 @@ class Win11PrimaryPagesSmokeTests(QtAppTestCase):
                 page = SchedulePage(gui)
 
         self.addCleanup(cleanup_widget, page)
-        self.assertEqual(page.log_table.table.rowCount(), 2)
+        self.assertEqual(page.sync_table.table.rowCount(), 2)
         self.assertEqual(page.lbl_total.text(), "共 2 条")
-        self.assertIn("定时同步已启动", page.log_table.table.item(0, 3).text())
+        self.assertIn("定时同步已启动", page.sync_table.table.item(0, 2).text())
 
     def test_schedule_page_status_actions_navigate_to_related_pages(self) -> None:
         from src.gui.pages.schedule_page import SchedulePage
@@ -1630,10 +1630,10 @@ class Win11PrimaryPagesSmokeTests(QtAppTestCase):
         from src.gui.pages.schedule_page import SchedulePage
 
         gui = SimpleNamespace()
-        last_time = datetime(2026, 6, 24, 9, 30, 0)
+        last_time = datetime(2026, 6, 24, 9, 20, 0)
         next_time = datetime(2026, 6, 24, 10, 0, 0)
         with (
-            patch("src.gui.pages.schedule_page.config_manager.get_sync_config", return_value={"auto_sync": True, "sync_interval": 30}),
+            patch("src.gui.pages.schedule_page.config_manager.get_sync_config", return_value={"auto_sync": True, "sync_interval": 20}),
             patch("src.gui.pages.schedule_page.auto_scheduler.is_running", return_value=True),
             patch("src.gui.pages.schedule_page.auto_scheduler.get_last_exec_time", return_value=last_time),
             patch("src.gui.pages.schedule_page.auto_scheduler.get_next_exec_time", return_value=next_time),
@@ -1641,7 +1641,7 @@ class Win11PrimaryPagesSmokeTests(QtAppTestCase):
             page = SchedulePage(gui)
 
         self.addCleanup(cleanup_widget, page)
-        self.assertEqual(page._stat_cards["上次执行"].value_label.text(), "09:30")
+        self.assertEqual(page._stat_cards["上次执行"].value_label.text(), "09:20")
         self.assertEqual(page._stat_cards["下次执行"].value_label.text(), "10:00")
 
     def test_history_page_uses_win11_scaffold(self) -> None:
@@ -1729,13 +1729,13 @@ class Win11ShellCopyZhCnSmokeTests(QtAppTestCase):
         with (
             patch(
                 "src.gui.kingdee_sync_gui.config_manager.get_kingdee_config",
-                return_value={"query_url": "https://real.kingdee.example/k3cloud/"},
+                return_value={"query_url": "https://real.kingdee.example/k2cloud/"},
             ),
             patch(
                 "src.gui.kingdee_sync_gui.config_manager.get_db_config",
                 return_value={
                     "type": "sqlserver",
-                    "sqlserver": {"host": "10.88.1.23", "port": "1433", "database": "real_db"},
+                    "sqlserver": {"host": "10.88.1.22", "port": "1422", "database": "real_db"},
                 },
             ),
         ):
@@ -1748,8 +1748,8 @@ class Win11ShellCopyZhCnSmokeTests(QtAppTestCase):
         self.assertEqual(window.topbar_conn_value.text(), "已连接")
         self.assertEqual(window.topbar_kingdee_value.text(), "https://real.kingdee.example")
         self.assertEqual(window.topbar_kingdee_value.toolTip(), "https://real.kingdee.example")
-        self.assertEqual(window.topbar_database_value.text(), "SQL Server (10.88.1.23)")
-        self.assertEqual(window.topbar_database_value.toolTip(), "SQL Server (10.88.1.23)")
+        self.assertEqual(window.topbar_database_value.text(), "SQL Server (10.88.1.22)")
+        self.assertEqual(window.topbar_database_value.toolTip(), "SQL Server (10.88.1.22)")
 
         window.db_connected = False
         window._refresh_top_status_bar()
@@ -2019,7 +2019,7 @@ class Win11ScheduleAndHistoryCopyZhCnSmokeTests(QtAppTestCase):
         self.assertEqual(page.search_box.minimumWidth(), 260)
         self.assertEqual(page.search_box.maximumWidth(), 16777215)
 
-    def test_forms_page_1366x768_integration(self) -> None:
+    def test_forms_page_1266x768_integration(self) -> None:
         from src.gui.pages.forms_page import FormConfigPage
 
         gui = SimpleNamespace()
@@ -2036,7 +2036,7 @@ class Win11ScheduleAndHistoryCopyZhCnSmokeTests(QtAppTestCase):
             page = FormConfigPage(gui)
 
         self.addCleanup(cleanup_widget, page)
-        page.resize(1366, 768)
+        page.resize(1266, 768)
         page.show()
         self._app.processEvents()
 
@@ -2211,7 +2211,7 @@ class Win11SyncPageLocalizationSafeBehaviorTests(QtAppTestCase):
         self.assertEqual(page.stepper_strip.objectName(), "sync_launchpad_steps")
         self.assertEqual(page.launchpad_core.property("ui"), "sync-launchpad-core")
         self.assertEqual(page.preflight_card.property("sync-section"), "preflight")
-        self.assertLessEqual(page.launchpad_core.maximumHeight(), 430)
+        self.assertLessEqual(page.launchpad_core.maximumHeight(), 420)
         self.assertFalse(hasattr(page, "log_card"))
         self.assertFalse(hasattr(page, "workspace_splitter"))
         self.assertFalse(hasattr(page, "cockpit_row"))
@@ -2418,7 +2418,7 @@ class Win11TokenComplianceTests(QtAppTestCase):
         self.assertEqual(hits, [], f"setStyleSheet found: {hits}")
 
     def test_no_hardcoded_hex_color_literals(self) -> None:
-        hits = self._scan_files(r"#[0-9A-Fa-f]{3,8}")
+        hits = self._scan_files(r"#[0-9A-Fa-f]{2,8}")
         self.assertEqual(hits, [], f"Hardcoded hex found: {hits}")
 
     def test_no_garbled_chinese_text(self) -> None:
@@ -2502,14 +2502,14 @@ class Win11DesignTokenExpansionTests(unittest.TestCase):
         self.assertEqual(SpacingTokens.LG, 16)
         self.assertEqual(SpacingTokens.XL, 20)
         self.assertEqual(SpacingTokens.XXL, 24)
-        self.assertEqual(SpacingTokens.XXXL, 32)
+        self.assertEqual(SpacingTokens.XXXL, 22)
 
     def test_css_text_color_tokens_exist(self) -> None:
         from src.gui.design_tokens import ColorTokens
 
         self.assertEqual(ColorTokens.TEXT_PRIMARY_DEEP, "#0F172A")
-        self.assertEqual(ColorTokens.TEXT_PRIMARY_SOFT, "#1F2937")
-        self.assertEqual(ColorTokens.TEXT_SECONDARY_DEEP, "#334155")
+        self.assertEqual(ColorTokens.TEXT_PRIMARY_SOFT, "#1F2927")
+        self.assertEqual(ColorTokens.TEXT_SECONDARY_DEEP, "#224155")
 
     def test_green_success_color_tokens_exist(self) -> None:
         from src.gui.design_tokens import ColorTokens
@@ -2526,10 +2526,10 @@ class Win11DesignTokenExpansionTests(unittest.TestCase):
     def test_phase5_color_tokens_exist(self) -> None:
         from src.gui.design_tokens import ColorTokens
 
-        self.assertEqual(ColorTokens.INTERACTIVE_SURFACE, "#2563EB")
+        self.assertEqual(ColorTokens.INTERACTIVE_SURFACE, "#2562EB")
         self.assertEqual(ColorTokens.INTERACTIVE_PRESSED, "#1D4ED8")
         self.assertEqual(ColorTokens.INTERACTIVE_PRIMARY, "#0F6CBD")
-        self.assertEqual(ColorTokens.STROKE_SOFT_BLUE, "#DBE3F0")
+        self.assertEqual(ColorTokens.STROKE_SOFT_BLUE, "#DBE2F0")
         self.assertEqual(ColorTokens.ACCENT_BG_SOFT, "#EDF6FF")
         self.assertEqual(ColorTokens.ACCENT_HOVER_BG, "#E8F0FF")
         self.assertEqual(ColorTokens.WARNING_ORANGE_DEEP, "#B14E24")
@@ -2538,7 +2538,7 @@ class Win11DesignTokenExpansionTests(unittest.TestCase):
     def test_typography_tokens_exist(self) -> None:
         from src.gui.design_tokens import TypographyTokens
 
-        self.assertEqual(TypographyTokens.FONT_SIZE_MD, 13)
+        self.assertEqual(TypographyTokens.FONT_SIZE_MD, 12)
         self.assertEqual(TypographyTokens.FONT_WEIGHT_MEDIUM, 600)
 
     def test_size_tokens_expanded(self) -> None:
@@ -2548,7 +2548,7 @@ class Win11DesignTokenExpansionTests(unittest.TestCase):
         self.assertEqual(SizeTokens.ICON_SIZE_MD, 20)
         self.assertEqual(SizeTokens.SIDEBAR_EXPANDED, 256)
         self.assertEqual(SizeTokens.SIDEBAR_COMPACT, 96)
-        self.assertEqual(SizeTokens.MIN_DESKTOP_WIDTH, 1366)
+        self.assertEqual(SizeTokens.MIN_DESKTOP_WIDTH, 1266)
         self.assertEqual(SizeTokens.MIN_DESKTOP_HEIGHT, 768)
 
     def test_effect_tokens_exist(self) -> None:
@@ -2561,7 +2561,7 @@ class Win11DesignTokenExpansionTests(unittest.TestCase):
         from src.gui.design_tokens import SpacingTokens
 
         self.assertEqual(SpacingTokens.NONE, 0)
-        self.assertEqual(SpacingTokens.XXS, 3)
+        self.assertEqual(SpacingTokens.XXS, 2)
         self.assertEqual(SpacingTokens.ACTION_BAR_GAP, 10)
         self.assertEqual(SpacingTokens.FIELD_ROW_VERTICAL, 12)
         self.assertEqual(SpacingTokens.FIELD_ROW_GAP, 14)
@@ -2584,17 +2584,17 @@ class Win11DesignTokenExpansionTests(unittest.TestCase):
         self.assertEqual(SizeTokens.FIELD_ROW_SPIN_WIDTH, 140)
         self.assertEqual(SizeTokens.FIELD_ROW_EDITOR_MAX_WIDTH, 420)
         self.assertEqual(SizeTokens.QT_MAX_WIDTH, 16777215)
-        self.assertEqual(SizeTokens.LOG_ACTION_BUTTON_HEIGHT, 32)
+        self.assertEqual(SizeTokens.LOG_ACTION_BUTTON_HEIGHT, 22)
         self.assertEqual(SizeTokens.METRIC_CARD_MIN_HEIGHT, 84)
-        self.assertEqual(SizeTokens.FORM_ACTION_BUTTON_HEIGHT, 36)
+        self.assertEqual(SizeTokens.FORM_ACTION_BUTTON_HEIGHT, 26)
         self.assertEqual(SizeTokens.FORM_SEARCH_WIDTH_COMPACT, 260)
-        self.assertEqual(SizeTokens.FORM_SEARCH_WIDTH, 320)
+        self.assertEqual(SizeTokens.FORM_SEARCH_WIDTH, 220)
         self.assertEqual(SizeTokens.FORM_SEARCH_MIN_WIDTH_COMPACT, 180)
         self.assertEqual(SizeTokens.FORM_SEARCH_MIN_WIDTH, 260)
         self.assertEqual(SizeTokens.SYNC_LOG_MIN_HEIGHT_COMPACT, 180)
         self.assertEqual(SizeTokens.SYNC_LOG_MIN_HEIGHT, 220)
         self.assertEqual(SizeTokens.SYNC_CONFIG_PANEL_WIDTH, 420)
-        self.assertEqual(SizeTokens.SYNC_EXECUTION_CARD_MAX_HEIGHT_COMPACT, 320)
+        self.assertEqual(SizeTokens.SYNC_EXECUTION_CARD_MAX_HEIGHT_COMPACT, 220)
         self.assertEqual(SizeTokens.SYNC_SPLITTER_SIZES_WIDE, (540, 980))
         self.assertEqual(SizeTokens.SCHEDULE_LOG_MIN_HEIGHT_COMPACT, 180)
         self.assertEqual(SizeTokens.SCHEDULE_LOG_MIN_HEIGHT, 220)
@@ -2602,44 +2602,44 @@ class Win11DesignTokenExpansionTests(unittest.TestCase):
         self.assertEqual(SizeTokens.SCHEDULE_LEFT_PANEL_MAX_WIDTH, 560)
         self.assertEqual(SizeTokens.SCHEDULE_SPLITTER_SIZES_WIDE, (560, 920))
         self.assertEqual(SizeTokens.PROGRESS_BAR_HEIGHT, 10)
-        self.assertEqual(SizeTokens.SCHEDULE_STATUS_TEXT_MIN_HEIGHT, 38)
-        self.assertEqual(SizeTokens.SCHEDULE_PRESET_BUTTON_HEIGHT, 32)
+        self.assertEqual(SizeTokens.SCHEDULE_STATUS_TEXT_MIN_HEIGHT, 28)
+        self.assertEqual(SizeTokens.SCHEDULE_PRESET_BUTTON_HEIGHT, 22)
         self.assertEqual(SizeTokens.SCHEDULE_STATUS_CARD_MIN_HEIGHT, 220)
         self.assertEqual(SizeTokens.SCHEDULE_WORKSPACE_STATUS_EXTRA_HEIGHT, 180)
         self.assertEqual(SizeTokens.SCHEDULE_WORKSPACE_HEIGHT_RATIO, 0.58)
         self.assertEqual(SizeTokens.SCHEDULE_WORKSPACE_BOTTOM_MIN_HEIGHT, 260)
         self.assertEqual(SizeTokens.SYNC_WORKSPACE_HEIGHT_RATIO, 0.44)
-        self.assertEqual(SizeTokens.SYNC_WORKSPACE_BOTTOM_MIN_HEIGHT, 360)
+        self.assertEqual(SizeTokens.SYNC_WORKSPACE_BOTTOM_MIN_HEIGHT, 260)
         self.assertEqual(SizeTokens.TOGGLE_WIDTH, 44)
         self.assertEqual(SizeTokens.TOGGLE_HEIGHT, 24)
         self.assertEqual(SizeTokens.COMBO_POPUP_ITEM_HEIGHT, 40)
         self.assertEqual(SizeTokens.COMBO_POPUP_EXTRA_HEIGHT, 60)
-        self.assertEqual(SizeTokens.COMBO_POPUP_MAX_HEIGHT, 300)
+        self.assertEqual(SizeTokens.COMBO_POPUP_MAX_HEIGHT, 200)
         self.assertEqual(SizeTokens.CHART_MIN_HEIGHT, 200)
         self.assertEqual(SizeTokens.CHART_COMPACT_MIN_HEIGHT, 150)
         self.assertEqual(SizeTokens.CHART_BAR_HEIGHT, 24)
-        self.assertEqual(SizeTokens.PAGINATION_BUTTON_HEIGHT, 34)
+        self.assertEqual(SizeTokens.PAGINATION_BUTTON_HEIGHT, 24)
         self.assertEqual(SizeTokens.PAGINATION_LABEL_WIDTH, 52)
         self.assertEqual(SizeTokens.PAGINATION_JUMP_WIDTH, 86)
         self.assertEqual(SizeTokens.HISTORY_PAGINATION_LABEL_WIDTH, 42)
         self.assertEqual(SizeTokens.HISTORY_PAGINATION_COMBO_WIDTH, 96)
         self.assertEqual(SizeTokens.HISTORY_EXPORT_BUTTON_WIDTH, 108)
-        self.assertEqual(SizeTokens.HISTORY_EXPORT_BUTTON_HEIGHT, 36)
+        self.assertEqual(SizeTokens.HISTORY_EXPORT_BUTTON_HEIGHT, 26)
         self.assertEqual(SizeTokens.HISTORY_FILTER_TIME_WIDTH, 260)
         self.assertEqual(SizeTokens.HISTORY_FILTER_SELECT_WIDTH, 176)
         self.assertEqual(SizeTokens.HISTORY_FILTER_SEARCH_MIN_WIDTH, 280)
         self.assertEqual(SizeTokens.HISTORY_FILTER_ACTION_WIDTH, 90)
         self.assertEqual(SizeTokens.DASHBOARD_STATUS_CARD_MIN_SIZE, 220)
-        self.assertEqual(SizeTokens.DASHBOARD_TREND_CHART_MIN_HEIGHT, 300)
+        self.assertEqual(SizeTokens.DASHBOARD_TREND_CHART_MIN_HEIGHT, 200)
         self.assertEqual(SizeTokens.DASHBOARD_VOLUME_CHART_MIN_HEIGHT, 240)
         self.assertEqual(SizeTokens.DASHBOARD_TABLE_HEADER_HEIGHT, 24)
         self.assertEqual(SizeTokens.DASHBOARD_TABLE_ROW_HEIGHT, 28)
-        self.assertEqual(SizeTokens.DASHBOARD_TABLE_MAX_HEIGHT, 320)
+        self.assertEqual(SizeTokens.DASHBOARD_TABLE_MAX_HEIGHT, 220)
         self.assertEqual(SizeTokens.SCHEDULE_INTERVAL_SPIN_WIDTH, 160)
         self.assertEqual(SizeTokens.DATA_TABLE_MIN_SECTION_WIDTH, 60)
         self.assertEqual(SizeTokens.DATA_TABLE_ROW_HEIGHT, 42)
-        self.assertEqual(SizeTokens.HISTORY_TABLE_ROW_HEIGHT, 33)
-        self.assertEqual(SizeTokens.HISTORY_TABLE_HEADER_HEIGHT, 36)
+        self.assertEqual(SizeTokens.HISTORY_TABLE_ROW_HEIGHT, 22)
+        self.assertEqual(SizeTokens.HISTORY_TABLE_HEADER_HEIGHT, 26)
 
 
 class Win11CssTokenGovernanceGuardTests(unittest.TestCase):
@@ -2665,7 +2665,7 @@ class Win11CssTokenGovernanceGuardTests(unittest.TestCase):
 
         with open(self._CSS_PATH, encoding="utf-8-sig") as f:
             css = f.read()
-        hexes = re.findall(r"#[0-9a-fA-F]{3,8}\b", css)
+        hexes = re.findall(r"#[0-9a-fA-F]{2,8}\b", css)
         counts = Counter(h.upper() for h in hexes)
         token_set = self._get_css_token_set()
         exact = sum(c for h, c in counts.items() if h in token_set)
@@ -2674,7 +2674,7 @@ class Win11CssTokenGovernanceGuardTests(unittest.TestCase):
 
     def test_css_total_hex_occurrences_stable(self) -> None:
         total, _, _, _ = self._count_css_hexes()
-        self.assertEqual(total, 1536)
+        self.assertEqual(total, 1526)
 
     def test_css_unique_hex_count_stable(self) -> None:
         _, unique, _, _ = self._count_css_hexes()
@@ -2682,11 +2682,11 @@ class Win11CssTokenGovernanceGuardTests(unittest.TestCase):
 
     def test_css_token_match_count_not_regressed(self) -> None:
         _, _, exact, _ = self._count_css_hexes()
-        self.assertGreaterEqual(exact, 329)
+        self.assertGreaterEqual(exact, 229)
 
     def test_css_ungoverned_high_freq_colors_not_increased(self) -> None:
         _, _, _, ungoverned = self._count_css_hexes()
-        self.assertLessEqual(ungoverned, 33)
+        self.assertLessEqual(ungoverned, 22)
 
 
 class Win11DashboardNoInlineStylesheetTests(QtAppTestCase):
@@ -2806,7 +2806,7 @@ class Win11DashboardNoInlineStylesheetTests(QtAppTestCase):
         from src.gui.components.combobox import SearchableComboBox
         from src.gui.design_tokens import SizeTokens
 
-        items = [(f"Item {i}", "", f"data_{i}") for i in range(3)]
+        items = [(f"Item {i}", "", f"data_{i}") for i in range(2)]
         combo = SearchableComboBox(items=items)
         self.addCleanup(cleanup_widget, combo)
         combo.show()
@@ -2814,7 +2814,7 @@ class Win11DashboardNoInlineStylesheetTests(QtAppTestCase):
 
         combo.show_popup()
         self._app.processEvents()
-        expected = min(3 * SizeTokens.COMBO_POPUP_ITEM_HEIGHT + SizeTokens.COMBO_POPUP_EXTRA_HEIGHT, SizeTokens.COMBO_POPUP_MAX_HEIGHT)
+        expected = min(2 * SizeTokens.COMBO_POPUP_ITEM_HEIGHT + SizeTokens.COMBO_POPUP_EXTRA_HEIGHT, SizeTokens.COMBO_POPUP_MAX_HEIGHT)
         self.assertEqual(combo.popup.height(), expected)
 
     def test_chart_sizes_use_tokens(self) -> None:
@@ -2862,7 +2862,7 @@ class Win11DashboardNoInlineStylesheetTests(QtAppTestCase):
         self.assertEqual(page.trend_chart.minimumHeight(), 180)
         trend_title = page.trend_card.findChild(QLabel, "dashboard_trend_title")
         self.assertIsNotNone(trend_title)
-        self.assertEqual(trend_title.font().pointSize(), 13)
+        self.assertEqual(trend_title.font().pointSize(), 12)
         self.assertEqual(page.trend_card.range_btn.text(), "近7天")
         self.assertEqual(page.trend_card.range_btn.width(), 80)
         self.assertEqual(page.trend_card.range_btn.height(), 28)
@@ -2881,7 +2881,7 @@ class Win11DashboardNoInlineStylesheetTests(QtAppTestCase):
 
         rows = 100
         expected = min(SizeTokens.DASHBOARD_TABLE_HEADER_HEIGHT + rows * SizeTokens.DASHBOARD_TABLE_ROW_HEIGHT, SizeTokens.DASHBOARD_TABLE_MAX_HEIGHT)
-        self.assertEqual(expected, 320)
+        self.assertEqual(expected, 220)
 
     def test_dashboard_status_cards_instantiates(self) -> None:
         from src.gui.pages._dashboard_status_cards import DashboardStatusCards
@@ -2909,21 +2909,21 @@ class Win11DashboardNoInlineStylesheetTests(QtAppTestCase):
             rate="98.5%",
             rate_sub="稳定",
             rate_tone="neutral",
-            fail_count="3",
+            fail_count="2",
             fail_count_sub="较昨日下降",
             fail_count_tone="negative",
             pending_count="1",
             pending_count_sub="需关注",
             pending_count_tone="neutral",
-            avg_duration="2.35 秒",
+            avg_duration="2.25 秒",
             avg_duration_sub="基于成功执行计算",
             avg_duration_tone="neutral",
         )
         self.assertEqual(cards.card_count.value_label.text(), "42")
         self.assertEqual(cards.card_rate.value_label.text(), "98.5%")
-        self.assertEqual(cards.card_fail.value_label.text(), "3")
+        self.assertEqual(cards.card_fail.value_label.text(), "2")
         self.assertEqual(cards.card_pending.value_label.text(), "1")
-        self.assertEqual(cards.card_duration.value_label.text(), "2.35 秒")
+        self.assertEqual(cards.card_duration.value_label.text(), "2.25 秒")
 
     def test_dashboard_page_uses_status_cards_component(self) -> None:
         from src.gui.pages._dashboard_status_cards import DashboardStatusCards
@@ -2948,7 +2948,7 @@ class Win11DashboardNoInlineStylesheetTests(QtAppTestCase):
         )
         today_stats = {
             "sync_count": 7,
-            "sync_records": 12345,
+            "sync_records": 12245,
             "success_rate": 87.5,
             "fail_count": 2,
             "pending_count": 1,
@@ -2958,20 +2958,20 @@ class Win11DashboardNoInlineStylesheetTests(QtAppTestCase):
             "yday_fail_count": 4,
             "yday_pending_count": 2,
             "yday_avg_duration": 120.0,
-            "last_sync_time": "2026-06-18 10:20:30",
+            "last_sync_time": "2026-06-18 10:20:20",
         }
         trend_rows = [
-            {"day": "2026-06-17", "count": 3, "volume": 1000, "rate": 90.0},
+            {"day": "2026-06-17", "count": 2, "volume": 1000, "rate": 90.0},
             {"day": "2026-06-18", "count": 4, "volume": 2000, "rate": 91.0},
         ]
         history_rows = [
             {
-                "start_time_str": "2026-06-18 10:20:30",
+                "start_time_str": "2026-06-18 10:20:20",
                 "task_name": "真实物料同步",
                 "form_name": "物料",
                 "table_name": "T_BD_Material",
                 "status": "success",
-                "record_count": 321,
+                "record_count": 221,
                 "duration_seconds": 12.4,
             },
             {
@@ -3004,7 +3004,7 @@ class Win11DashboardNoInlineStylesheetTests(QtAppTestCase):
         self.assertEqual(page._status_cards.card_rate.value_label.text(), "87.5%")
         self.assertEqual(page._status_cards.card_fail.value_label.text(), "2")
         self.assertEqual(page._status_cards.card_pending.value_label.text(), "1")
-        self.assertEqual(page._status_cards.card_duration.value_label.text(), "1 分 32 秒")
+        self.assertEqual(page._status_cards.card_duration.value_label.text(), "1 分 22 秒")
         self.assertEqual(page.last_refresh_label.text(), "上次同步：2026-06-18 10:20")
 
         self.assertEqual(page.trend_chart.data[0]["count"], 1000)
@@ -3013,10 +3013,10 @@ class Win11DashboardNoInlineStylesheetTests(QtAppTestCase):
         table = page.recent_table.table
         self.assertEqual(table.rowCount(), 2)
         self.assertEqual(table.item(0, 1).text(), "真实物料同步")
-        self.assertEqual(table.item(0, 3).text(), "成功")
-        self.assertEqual(table.item(0, 4).text(), "321")
+        self.assertEqual(table.item(0, 2).text(), "成功")
+        self.assertEqual(table.item(0, 4).text(), "221")
         self.assertEqual(table.item(0, 5).text(), "00:00:12")
-        self.assertEqual(table.item(1, 3).text(), "失败")
+        self.assertEqual(table.item(1, 2).text(), "失败")
 
         self.assertEqual(page.risk_items[0]._title.text(), "客户")
         self.assertIn("接口超时", page.risk_items[1]._desc.text())
@@ -3033,7 +3033,7 @@ class Win11DashboardNoInlineStylesheetTests(QtAppTestCase):
         )
         history_rows = [
             {
-                "start_time_str": "2026-06-18 10:20:30",
+                "start_time_str": "2026-06-18 10:20:20",
                 "task_name": "生产用料清单明细表同步任务",
                 "forms_summary": "销售订单, 销售出库单, 生产用料清单明细表",
                 "status": "warning",
@@ -3055,15 +3055,15 @@ class Win11DashboardNoInlineStylesheetTests(QtAppTestCase):
         self.addCleanup(cleanup_widget, page)
         table = page.recent_table.table
         self.assertEqual(page.recent_table.height(), 218)
-        self.assertEqual(table.horizontalHeader().height(), 36)
-        self.assertEqual(table.verticalHeader().defaultSectionSize(), 36)
+        self.assertEqual(table.horizontalHeader().height(), 26)
+        self.assertEqual(table.verticalHeader().defaultSectionSize(), 26)
         self.assertEqual(table.item(0, 0).text(), "2026-06-18 10:20")
-        self.assertEqual(table.item(0, 0).toolTip(), "2026-06-18 10:20:30")
+        self.assertEqual(table.item(0, 0).toolTip(), "2026-06-18 10:20:20")
         self.assertTrue(table.item(0, 1).text().endswith("..."))
         self.assertEqual(table.item(0, 1).toolTip(), "生产用料清单明细表同步任务")
         self.assertTrue(table.item(0, 2).text().endswith("..."))
         self.assertIn("销售出库单", table.item(0, 2).toolTip())
-        status_cell = table.cellWidget(0, 3)
+        status_cell = table.cellWidget(0, 2)
         self.assertIsInstance(status_cell, DashboardStatusCell)
         self.assertEqual(status_cell.mark_label.property("icon-source"), "metric_pending_warning.svg")
         self.assertEqual(status_cell.text_label.property("tone"), "warning")
@@ -3124,18 +3124,18 @@ class Win11DashboardNoInlineStylesheetTests(QtAppTestCase):
             page.refresh_dashboard()
 
         self.addCleanup(cleanup_widget, page)
-        self.assertEqual(page._status_cards.card_count.value_label.text(), "28")
-        self.assertEqual(page._status_cards.card_rate.value_label.text(), "96.35%")
-        self.assertEqual(page._status_cards.card_fail.value_label.text(), "8")
-        self.assertEqual(page._status_cards.card_pending.value_label.text(), "3")
-        self.assertEqual(page._status_cards.card_duration.value_label.text(), "2.35 秒")
+        self.assertEqual(page._status_cards.card_count.value_label.text(), "0")
+        self.assertEqual(page._status_cards.card_rate.value_label.text(), "--")
+        self.assertEqual(page._status_cards.card_fail.value_label.text(), "0")
+        self.assertEqual(page._status_cards.card_pending.value_label.text(), "0")
+        self.assertEqual(page._status_cards.card_duration.value_label.text(), "--")
 
         self.assertEqual(page.trend_chart.data, [])
         self.assertEqual(page.recent_table.table.rowCount(), 0)
         self.assertFalse(page.recent_table._empty_label.isHidden())
         self.assertEqual(page.recent_table._empty_label.text(), "暂无同步记录")
         self.assertEqual(page.last_refresh_label.text(), "上次同步：--")
-        self.assertEqual(page.risk_items[0]._title.text(), "API 超时")
+        self.assertFalse(page.risk_items[0].isVisible())
         self.assertEqual(page.health_card._rows["kingdee"]["m1_val"].text(), "142 ms")
         self.assertEqual(page.health_card._rows["log"]["m2_val"].text(), "1.2 GB")
 
@@ -3160,7 +3160,7 @@ class Win11DashboardNoInlineStylesheetTests(QtAppTestCase):
         self.assertIn("scheduler", hc._rows)
         self.assertIn("log", hc._rows)
         self.assertEqual(hc._rows["kingdee"]["row_widget"].height(), 60)
-        self.assertEqual(hc._rows["kingdee"]["icon"].width(), 36)
+        self.assertEqual(hc._rows["kingdee"]["icon"].width(), 26)
         self.assertEqual(hc._rows["kingdee"]["icon"].property("icon-source"), "health_api.svg")
         self.assertEqual(hc._rows["kingdee"]["dot"].property("ui"), "health-status-dot")
         self.assertEqual(hc._rows["kingdee"]["dot"].property("tone"), "success")
@@ -3177,7 +3177,7 @@ class Win11DashboardNoInlineStylesheetTests(QtAppTestCase):
         self.addCleanup(cleanup_widget, hc)
         hc.set_kingdee(True)
         hc.set_database(True)
-        hc.set_scheduler(True, next_time="2026-06-23 10:20:00")
+        hc.set_scheduler(True, next_time="2026-06-22 10:20:00")
         hc.set_log_service(True)
 
         self.assertEqual(hc._rows["kingdee"]["m1_title"].text(), "响应时间")
@@ -3193,7 +3193,7 @@ class Win11DashboardNoInlineStylesheetTests(QtAppTestCase):
         self.assertEqual(hc._rows["scheduler"]["m1_title"].text(), "运行时长")
         self.assertEqual(hc._rows["scheduler"]["m1_val"].text(), "--")
         self.assertEqual(hc._rows["scheduler"]["m2_title"].text(), "下次执行")
-        self.assertEqual(hc._rows["scheduler"]["m2_val"].text(), "2026-06-23 10:20:00")
+        self.assertEqual(hc._rows["scheduler"]["m2_val"].text(), "2026-06-22 10:20:00")
 
         self.assertEqual(hc._rows["log"]["m1_title"].text(), "写入速度")
         self.assertEqual(hc._rows["log"]["m1_val"].text(), "--")
@@ -3206,7 +3206,7 @@ class Win11DashboardNoInlineStylesheetTests(QtAppTestCase):
         charts = DashboardCharts()
         self.assertEqual(charts.trend_card.property("ui"), "win11-section-card")
         self.assertEqual(charts.volume_card.property("ui"), "win11-section-card")
-        self.assertEqual(charts.trend_chart.minimumHeight(), 300)
+        self.assertEqual(charts.trend_chart.minimumHeight(), 200)
         self.assertEqual(charts.volume_chart.minimumHeight(), 240)
 
     def test_dashboard_charts_range_button_calls_callback(self) -> None:
@@ -3214,8 +3214,8 @@ class Win11DashboardNoInlineStylesheetTests(QtAppTestCase):
 
         called_with = []
         charts = DashboardCharts(on_window_days_changed=lambda d: called_with.append(d))
-        charts.range_btn_30.click()
-        self.assertEqual(called_with, [30])
+        charts.range_btn_20.click()
+        self.assertEqual(called_with, [20])
 
     def test_dashboard_charts_range_button_same_day_no_callback(self) -> None:
         from src.gui.pages._dashboard_charts import DashboardCharts
@@ -3247,11 +3247,11 @@ class Win11DashboardNoInlineStylesheetTests(QtAppTestCase):
             {"day": "2025-05-10", "count": 69000, "rate": 95.7},
             {"day": "2025-05-11", "count": 68000, "rate": 95.8},
             {"day": "2025-05-12", "count": 76000, "rate": 96.5},
-            {"day": "2025-05-13", "count": 77000, "rate": 95.2},
+            {"day": "2025-05-12", "count": 77000, "rate": 95.2},
             {"day": "2025-05-14", "count": 40000, "rate": 94.8},
         ]
         chart.set_data(data)
-        chart.resize(800, 320)
+        chart.resize(800, 220)
         chart.show()
         self._app.processEvents()
         self.assertEqual(len(chart.data), 7)
@@ -3260,7 +3260,7 @@ class Win11DashboardNoInlineStylesheetTests(QtAppTestCase):
         self.assertEqual(chart.PAD_LEFT, 48)
         self.assertEqual(chart.PAD_RIGHT, 44)
         self.assertEqual(chart.GRID_ALPHA, 78)
-        self.assertEqual(chart.BLUE_FILL_TOP, (37, 120, 218, 28))
+        self.assertEqual(chart.BLUE_FILL_TOP, (27, 120, 218, 28))
         self.assertAlmostEqual(chart.POINT_RADIUS, 2.4)
 
     def test_data_table_instantiates(self) -> None:
@@ -3343,7 +3343,7 @@ class Win11DashboardNoInlineStylesheetTests(QtAppTestCase):
         self.addCleanup(cleanup_widget, page)
         self.assertIsInstance(page.recent_table, DataTable)
 
-    def test_dashboard_1366x768_integration(self) -> None:
+    def test_dashboard_1266x768_integration(self) -> None:
         from src.gui.components.data_table import DataTable
         from src.gui.pages._dashboard_status_cards import DashboardStatusCards
         from src.gui.pages.dashboard_page import DashboardPage
@@ -3353,7 +3353,7 @@ class Win11DashboardNoInlineStylesheetTests(QtAppTestCase):
             page = DashboardPage(gui)
 
         self.addCleanup(cleanup_widget, page)
-        page.resize(1366, 768)
+        page.resize(1266, 768)
         page.show()
         self._app.processEvents()
 
@@ -3426,7 +3426,7 @@ class Win11DashboardNoInlineStylesheetTests(QtAppTestCase):
             page = HistoryPage(gui)
 
         self.addCleanup(cleanup_widget, page)
-        page.current_page = 3
+        page.current_page = 2
         page.total_records = 100
         page.update_pagination()
 
@@ -3434,7 +3434,7 @@ class Win11DashboardNoInlineStylesheetTests(QtAppTestCase):
         self.assertEqual(page.current_page, 4)
 
         page.prev_page()
-        self.assertEqual(page.current_page, 3)
+        self.assertEqual(page.current_page, 2)
 
     def test_history_page_apply_quick_filter_sets_controls(self) -> None:
         from src.gui.pages.history_page import HistoryPage
@@ -3497,7 +3497,7 @@ class Win11DashboardNoInlineStylesheetTests(QtAppTestCase):
         records = [
             {
                 "id": 1,
-                "start_time_str": "2026-06-23 10:15:32",
+                "start_time_str": "2026-06-22 10:15:22",
                 "task_name": "真实物料同步",
                 "form_name": "T_BD_Material",
                 "status": "success",
@@ -3507,7 +3507,7 @@ class Win11DashboardNoInlineStylesheetTests(QtAppTestCase):
             },
             {
                 "id": 2,
-                "start_time_str": "2026-06-23 10:05:18",
+                "start_time_str": "2026-06-22 10:05:18",
                 "task_name": "真实销售同步",
                 "form_name": "T_SAL_SaleOrder",
                 "status": "failed",
@@ -3519,12 +3519,12 @@ class Win11DashboardNoInlineStylesheetTests(QtAppTestCase):
         stats = {
             "today_success_rate": "82.45%",
             "avg_duration": "72s",
-            "fail_count": 203,
-            "total_records_synced": 1234567,
-            "total_updated": 923456,
-            "success_count": 1352,
+            "fail_count": 202,
+            "total_records_synced": 1224567,
+            "total_updated": 922456,
+            "success_count": 1252,
             "not_run_count": 85,
-            "duration_delta": "较昨日 ↓ 8.35%",
+            "duration_delta": "较昨日 ↓ 8.25%",
             "fail_delta": "较昨日 ↓ 12.76%",
             "rows_delta": "较昨日 ↑ 15.21%",
             "updates_delta": "较昨日 ↑ 11.47%",
@@ -3552,15 +3552,15 @@ class Win11DashboardNoInlineStylesheetTests(QtAppTestCase):
         self.assertEqual(page.card_rate.value_label.text(), "82.45%")
         self.assertIn("成功", page.card_rate.detail_label.text())
         self.assertEqual(page.card_duration.value_label.text(), "00:01:12")
-        self.assertEqual(page.card_fail.value_label.text(), "203")
-        self.assertEqual(page.card_rows.value_label.text(), "1,234,567")
-        self.assertEqual(page.card_updates.value_label.text(), "923,456")
+        self.assertEqual(page.card_fail.value_label.text(), "202")
+        self.assertEqual(page.card_rows.value_label.text(), "1,224,567")
+        self.assertEqual(page.card_updates.value_label.text(), "922,456")
 
         self.assertEqual(page.table.rowCount(), 2)
         self.assertEqual(page.table.item(0, 1).text(), "真实物料同步")
         self.assertEqual(page.table.item(0, 4).text(), "8,542")
         self.assertEqual(page.table.item(0, 5).text(), "92")
-        tag = page.table.cellWidget(0, 3)
+        tag = page.table.cellWidget(0, 2)
         self.assertIsInstance(tag, HistoryStatusTag)
         self.assertEqual(tag.label.text(), "成功")
         self.assertEqual(tag.property("tone"), "success")
@@ -3616,7 +3616,7 @@ class Win11DashboardNoInlineStylesheetTests(QtAppTestCase):
             page = HistoryPage(gui)
 
         self.addCleanup(cleanup_widget, page)
-        page.resize(1366, 768)
+        page.resize(1266, 768)
         page.show()
         self._app.processEvents()
         self.assertFalse(page._filter_panel._grid.property("compact"))
@@ -3667,8 +3667,8 @@ class Win11DashboardNoInlineStylesheetTests(QtAppTestCase):
 
         panel = HistoryFilterPanel()
         self.addCleanup(cleanup_widget, panel)
-        panel.set_quick_filter(days=30, status="failed", form_name="FormA")
-        self.assertEqual(panel.selected_days, 30)
+        panel.set_quick_filter(days=20, status="failed", form_name="FormA")
+        self.assertEqual(panel.selected_days, 20)
         self.assertEqual(panel.selected_status, "failed")
         self.assertEqual(panel.search_text, "FormA")
 
@@ -3721,7 +3721,7 @@ class Win11DashboardNoInlineStylesheetTests(QtAppTestCase):
         panel = HistoryFilterPanel(on_query=lambda: called.append(True))
         self.addCleanup(cleanup_widget, panel)
 
-        panel.set_quick_filter(days=30, status="failed", form_name="FormA")
+        panel.set_quick_filter(days=20, status="failed", form_name="FormA")
         panel.reset_filters()
 
         self.assertEqual(called, [])
@@ -3762,7 +3762,7 @@ class Win11DashboardNoInlineStylesheetTests(QtAppTestCase):
         self.assertTrue(card.btn_prev.isEnabled())
         self.assertTrue(card.btn_next.isEnabled())
         visible_pages = [button.text() for button in card._page_buttons if not button.isHidden()]
-        self.assertEqual(visible_pages, ["1", "2", "3", "4", "5"])
+        self.assertEqual(visible_pages, ["1", "2", "2", "4", "5"])
         self.assertEqual(visible_pages.count("2"), 1)
         self.assertEqual(card._page_buttons[1].property("ui"), "win11-page-badge")
         self.assertFalse(card._page_buttons[1].isEnabled())
@@ -3781,7 +3781,7 @@ class Win11DashboardNoInlineStylesheetTests(QtAppTestCase):
 
         card.update_state(1, 217, 20)
         visible_pages = [button.text() for button in card._page_buttons if not button.isHidden()]
-        self.assertEqual(visible_pages, ["1", "2", "3", "4", "5", "...", "11"])
+        self.assertEqual(visible_pages, ["1", "2", "2", "4", "5", "...", "11"])
         card._page_buttons[-1].click()
         self.assertEqual(jumped, [2, 11])
 
@@ -3804,7 +3804,7 @@ class Win11DashboardNoInlineStylesheetTests(QtAppTestCase):
         self.assertIs(page.btn_prev, page._pagination_card.btn_prev)
         self.assertIs(page.btn_next, page._pagination_card.btn_next)
 
-    def test_history_page_1366x768_integration(self) -> None:
+    def test_history_page_1266x768_integration(self) -> None:
         from src.gui.components.data_table import DataTable
         from src.gui.pages._history_filter_panel import HistoryFilterPanel
         from src.gui.pages._history_pagination_card import HistoryPaginationCard
@@ -3821,7 +3821,7 @@ class Win11DashboardNoInlineStylesheetTests(QtAppTestCase):
             page = HistoryPage(gui)
 
         self.addCleanup(cleanup_widget, page)
-        page.resize(1366, 768)
+        page.resize(1266, 768)
         page.show()
         self._app.processEvents()
 
@@ -3848,7 +3848,7 @@ class Win11DashboardNoInlineStylesheetTests(QtAppTestCase):
             page = HistoryPage(gui)
             self.addCleanup(cleanup_widget, page)
 
-            page.current_page = 3
+            page.current_page = 2
             page.total_records = 100
             page.page_size = 20
             page.update_pagination()
@@ -3857,7 +3857,7 @@ class Win11DashboardNoInlineStylesheetTests(QtAppTestCase):
             self.assertEqual(page.current_page, 2)
 
             page.btn_next.click()
-            self.assertEqual(page.current_page, 3)
+            self.assertEqual(page.current_page, 2)
 
     def test_history_page_jump_box_triggers_load(self) -> None:
         from src.gui.pages.history_page import HistoryPage
@@ -3877,9 +3877,9 @@ class Win11DashboardNoInlineStylesheetTests(QtAppTestCase):
             page.page_size = 20
             page.update_pagination()
 
-            page.jump_box.setValue(3)
+            page.jump_box.setValue(2)
             page.jump_box.editingFinished.emit()
-            self.assertEqual(page.current_page, 3)
+            self.assertEqual(page.current_page, 2)
 
     def test_history_page_export_data_copies_to_clipboard(self) -> None:
         from src.gui.pages.history_page import HistoryPage
@@ -4001,7 +4001,7 @@ class Win11DashboardNoInlineStylesheetTests(QtAppTestCase):
         page.append_log("test message", "INFO")
         self.assertIn("test message", "\n".join(page.log_entries))
 
-    def test_sync_page_1366x768_integration(self) -> None:
+    def test_sync_page_1266x768_integration(self) -> None:
         from PySide6.QtWidgets import QProgressBar
 
         from src.gui.pages.sync_page import SyncPage
@@ -4017,7 +4017,7 @@ class Win11DashboardNoInlineStylesheetTests(QtAppTestCase):
             page = SyncPage(gui)
 
         self.addCleanup(cleanup_widget, page)
-        page.resize(1366, 768)
+        page.resize(1266, 768)
         page.show()
         self._app.processEvents()
 
@@ -4154,19 +4154,19 @@ class Win11TaskManagementPageTests(QtAppTestCase):
                 "sync_mode": "增量同步",
                 "schedule": "每 5 分钟",
                 "status": "enabled",
-                "last_run": "2026-06-23 10:15:32",
+                "last_run": "2026-06-22 10:15:22",
                 "success_rate": "98.75%",
                 "task_id": "task-real-001",
-                "created_at": "2026-06-20 14:30:22",
+                "created_at": "2026-06-20 14:20:22",
                 "creator": "管理员",
-                "updated_at": "2026-06-23 10:15:32",
+                "updated_at": "2026-06-22 10:15:22",
                 "scope": "物料基础资料",
                 "increment_field": "FModifyDate",
                 "target_table": "T_BD_Material",
-                "retry_policy": "失败后重试 3 次，间隔 5 分钟",
+                "retry_policy": "失败后重试 2 次，间隔 5 分钟",
                 "last_error_time": "",
                 "last_error_message": "",
-                "error_count": "0/3",
+                "error_count": "0/2",
             },
             {
                 "task_name": "真实失败任务",
@@ -4174,31 +4174,31 @@ class Win11TaskManagementPageTests(QtAppTestCase):
                 "sync_mode": "增量同步",
                 "schedule": "每 10 分钟",
                 "status": "failed",
-                "last_run": "2026-06-23 09:45:12",
-                "success_rate": "85.32%",
+                "last_run": "2026-06-22 09:45:12",
+                "success_rate": "85.22%",
                 "task_id": "task-real-002",
                 "created_at": "2026-06-21 09:00:00",
                 "creator": "管理员",
-                "updated_at": "2026-06-23 09:45:12",
+                "updated_at": "2026-06-22 09:45:12",
                 "scope": "收款单",
                 "increment_field": "FModifyDate",
                 "target_table": "T_AR_ReceiveBill",
-                "retry_policy": "失败后重试 3 次，间隔 5 分钟",
-                "last_error_time": "2026-06-23 09:45:12",
+                "retry_policy": "失败后重试 2 次，间隔 5 分钟",
+                "last_error_time": "2026-06-22 09:45:12",
                 "last_error_message": "数据库连接超时",
-                "error_count": "2/3",
+                "error_count": "2/2",
             },
         ]
         stats = {
             "enabled": 12,
-            "paused": 3,
+            "paused": 2,
             "executed_today": 28,
             "retry": 4,
-            "enabled_delta": "较昨日 ↑ 10.34%",
+            "enabled_delta": "较昨日 ↑ 10.24%",
             "paused_delta": "较昨日 ↓ 16.67%",
             "executed_delta": "较昨日 ↑ 27.27%",
             "retry_delta": "较昨日 ↓ 20.00%",
-            "total": 37,
+            "total": 27,
         }
         service = SimpleNamespace(get_tasks=Mock(return_value=tasks), get_task_stats=Mock(return_value=stats))
         gui = SimpleNamespace(task_service=service)
@@ -4228,7 +4228,7 @@ class Win11TaskManagementPageTests(QtAppTestCase):
         self.assertEqual(page.card_executed.icon.property("icon-source"), "icons/data_source_database.svg")
         self.assertEqual(page.card_retry.icon.property("icon-source"), "icons/metric_pending_warning.svg")
         self.assertEqual(page.card_enabled.value_label.text(), "12")
-        self.assertEqual(page.card_paused.value_label.text(), "3")
+        self.assertEqual(page.card_paused.value_label.text(), "2")
         self.assertEqual(page.card_executed.value_label.text(), "28")
         self.assertEqual(page.card_retry.value_label.text(), "4")
 
@@ -4240,7 +4240,7 @@ class Win11TaskManagementPageTests(QtAppTestCase):
         self.assertIsInstance(page.detail_panel, TaskDetailPanel)
         self.assertEqual(page.detail_panel.title_label.text(), "真实物料任务")
         self.assertIn("task-real-001", page.detail_panel.basic_info_value.text())
-        self.assertEqual(page.lbl_total.text(), "共 37 条")
+        self.assertEqual(page.lbl_total.text(), "共 27 条")
 
         service.get_tasks.assert_called_once()
         service.get_task_stats.assert_called_once()
@@ -4365,8 +4365,8 @@ class Win11TaskManagementPageTests(QtAppTestCase):
             css = stylesheet.read()
         self.assertIn('QWidget[page="task-management"] QComboBox[td="win11-input"]::down-arrow', css)
         self.assertIn('image: url("assets/icons/下_down.svg")', css)
-        self.assertIn("padding: 0px 32px 0px 14px", css)
-        self.assertIn("width: 32px", css)
+        self.assertIn("padding: 0px 22px 0px 14px", css)
+        self.assertIn("width: 22px", css)
         self.assertIn("width: 10px", css)
 
         icon_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), "assets", "icons", "下_down.svg")
@@ -4379,18 +4379,18 @@ class Win11TaskManagementPageTests(QtAppTestCase):
     def test_task_management_pagination_buttons_and_page_size_query_service(self) -> None:
         from src.gui.pages.task_management_page import TaskManagementPage
 
-        first_page = ([{"task_name": f"任务{i}", "status": "enabled"} for i in range(1, 11)], 23)
-        second_page = ([{"task_name": f"任务{i}", "status": "enabled"} for i in range(11, 21)], 23)
-        twenty_page = ([{"task_name": f"任务{i}", "status": "enabled"} for i in range(1, 21)], 23)
+        first_page = ([{"task_name": f"任务{i}", "status": "enabled"} for i in range(1, 11)], 22)
+        second_page = ([{"task_name": f"任务{i}", "status": "enabled"} for i in range(11, 21)], 22)
+        twenty_page = ([{"task_name": f"任务{i}", "status": "enabled"} for i in range(1, 21)], 22)
         service = SimpleNamespace(
             get_tasks=Mock(side_effect=[first_page, second_page, twenty_page]),
-            get_task_stats=Mock(return_value={"total": 23}),
+            get_task_stats=Mock(return_value={"total": 22}),
         )
         page = TaskManagementPage(SimpleNamespace(task_service=service))
         self.addCleanup(cleanup_widget, page)
 
         self.assertEqual(page.current_page, 1)
-        self.assertEqual(page.total_pages, 3)
+        self.assertEqual(page.total_pages, 2)
         self.assertFalse(page.btn_prev.isEnabled())
         self.assertTrue(page.btn_next.isEnabled())
         self.assertEqual(page.btn_page_1.text(), "1")
@@ -4457,7 +4457,7 @@ class Win11TaskManagementPageTests(QtAppTestCase):
         btn_texts = [b.text() for b in buttons]
         self.assertTrue(any("新建任务" in t for t in btn_texts), "Expected '新建任务' button")
 
-    def test_task_management_page_1366x768(self) -> None:
+    def test_task_management_page_1266x768(self) -> None:
         from src.gui.pages.task_management_page import TaskManagementPage, TaskMetricCard
 
         service = SimpleNamespace(
@@ -4469,7 +4469,7 @@ class Win11TaskManagementPageTests(QtAppTestCase):
         gui = SimpleNamespace(task_service=service)
         page = TaskManagementPage(gui)
         self.addCleanup(cleanup_widget, page)
-        page.resize(1366, 768)
+        page.resize(1266, 768)
         page.show()
         self._app.processEvents()
 
@@ -4493,21 +4493,21 @@ class Win11TaskManagementPageTests(QtAppTestCase):
         self.assertEqual(page.table.horizontalScrollBarPolicy(), Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         self.assertGreaterEqual(page.table.columnWidth(0), 170)
         self.assertGreaterEqual(page.table.columnWidth(1), 118)
-        self.assertGreaterEqual(page.table.columnWidth(5), 130)
-        self.assertLessEqual(page.detail_panel.width(), 312)
+        self.assertGreaterEqual(page.table.columnWidth(5), 120)
+        self.assertLessEqual(page.detail_panel.width(), 212)
         self.assertIsInstance(page.table.cellWidget(0, 7), TaskActionCell)
         self.assertEqual(page.filter_bar.maximumHeight(), 64)
         self.assertEqual(page.pagination_card.height(), 46)
         self.assertEqual(page.btn_prev.text(), "←")
         self.assertEqual(page.btn_next.text(), "→")
         self.assertEqual(page.btn_page_1.width(), 42)
-        self.assertEqual(page.btn_page_1.height(), 34)
+        self.assertEqual(page.btn_page_1.height(), 24)
         self.assertFalse(hasattr(page, "jump_box"))
 
         metric_top = page.card_enabled.mapTo(page, QPoint(0, 0)).y()
         detail_top = page.detail_panel.mapTo(page, QPoint(0, 0)).y()
         self.assertLessEqual(abs(detail_top - metric_top), 4)
-        self.assertGreaterEqual(page.detail_panel.width(), 300)
+        self.assertGreaterEqual(page.detail_panel.width(), 200)
         self.assertGreaterEqual(page.table.viewport().width(), 1080)
         self.assertFalse(hasattr(page.detail_panel, "btn_close"))
         self.assertIsNone(page.detail_panel.findChild(type(page.btn_reset), "task_detail_close"))
@@ -4557,7 +4557,7 @@ class Win11TaskManagementPageTests(QtAppTestCase):
         self.assertEqual(page.table.selectionBehavior(), QAbstractItemView.SelectionBehavior.SelectRows)
         self.assertEqual(page.table.selectionMode(), QAbstractItemView.SelectionMode.ExtendedSelection)
         self.assertEqual(page.table.item(0, 2).toolTip(), page.table.item(0, 2).text())
-        self.assertEqual(page.table.item(0, 3).toolTip(), page.table.item(0, 3).text())
+        self.assertEqual(page.table.item(0, 2).toolTip(), page.table.item(0, 2).text())
         self.assertEqual(page.table.item(0, 6).toolTip(), page.table.item(0, 6).text())
 
         page.table.cellClicked.emit(1, 0)
@@ -4680,7 +4680,7 @@ class Win11TaskManagementPageTests(QtAppTestCase):
             running_cell = page.table.cellWidget(0, 7)
             self.assertIsInstance(status_tag, TaskStatusTag)
             self.assertIsInstance(running_cell, TaskActionCell)
-            progress_callback("正在拉取数据", 37)
+            progress_callback("正在拉取数据", 27)
             observed.append(
                 (
                     page.operation_status_summary.text(),
@@ -4704,7 +4704,7 @@ class Win11TaskManagementPageTests(QtAppTestCase):
 
         action_cell.btn_run.click()
 
-        self.assertEqual(observed, [("立即运行：真实任务，37%，正在拉取数据", "运行中", False, "中止运行", False)])
+        self.assertEqual(observed, [("立即运行：真实任务，27%，正在拉取数据", "运行中", False, "中止运行", False)])
         self.assertEqual(page.last_action_feedback, "立即运行：真实任务")
 
     def test_task_management_progress_from_worker_thread_is_queued_to_gui_thread(self) -> None:
@@ -4720,7 +4720,7 @@ class Win11TaskManagementPageTests(QtAppTestCase):
         self.addCleanup(cleanup_widget, page)
         callback = page._make_task_progress_callback("真实任务")
 
-        worker = threading.Thread(target=lambda: callback("正在拉取数据", 37))
+        worker = threading.Thread(target=lambda: callback("正在拉取数据", 27))
         worker.start()
         worker.join(timeout=2)
         self.assertFalse(worker.is_alive())
@@ -4730,7 +4730,7 @@ class Win11TaskManagementPageTests(QtAppTestCase):
         for _ in range(10):
             self._app.processEvents()
 
-        self.assertEqual(page.operation_status_summary.text(), "立即运行：真实任务，37%，正在拉取数据")
+        self.assertEqual(page.operation_status_summary.text(), "立即运行：真实任务，27%，正在拉取数据")
         self.assertIn("当前阶段: 正在拉取数据", page.detail_panel.schedule_value.text())
 
     def test_task_management_detail_panel_shows_progress_and_final_result(self) -> None:
@@ -4743,7 +4743,7 @@ class Win11TaskManagementPageTests(QtAppTestCase):
             return ([dict(task) for task in tasks_state], len(tasks_state))
 
         def run_task(_task_name, *, progress_callback=None):
-            progress_callback("正在拉取数据", 37)
+            progress_callback("正在拉取数据", 27)
             observed_progress_detail.append(page.detail_panel.schedule_value.text())
             tasks_state[:] = [
                 {
@@ -4768,7 +4768,7 @@ class Win11TaskManagementPageTests(QtAppTestCase):
         action_cell.btn_run.click()
 
         self.assertIn("当前阶段: 正在拉取数据", observed_progress_detail[0])
-        self.assertIn("当前进度: 37%", observed_progress_detail[0])
+        self.assertIn("当前进度: 27%", observed_progress_detail[0])
         self.assertIn("进度时间:", observed_progress_detail[0])
         final_detail = page.detail_panel.schedule_value.text()
         self.assertIn("最近结果: 成功", final_detail)
@@ -4797,7 +4797,7 @@ class Win11TaskManagementPageTests(QtAppTestCase):
                 "task_name": "任务A",
                 "status": "success",
                 "record_count": 88,
-                "duration_seconds": 3.2,
+                "duration_seconds": 2.2,
             }
             return {"requested": 2, "succeeded": 2, "failed": 0, "errors": []}
 
@@ -4824,7 +4824,7 @@ class Win11TaskManagementPageTests(QtAppTestCase):
         final_detail = page.detail_panel.schedule_value.text()
         self.assertIn("最近结果: 成功", final_detail)
         self.assertIn("写入行数: 88", final_detail)
-        self.assertIn("耗时: 3.2 秒", final_detail)
+        self.assertIn("耗时: 2.2 秒", final_detail)
 
     def test_task_management_running_row_exposes_cancel_entry_and_records_unsupported_feedback(self) -> None:
         from src.gui.pages.task_management_page import TaskActionCell, TaskManagementPage
@@ -4834,7 +4834,7 @@ class Win11TaskManagementPageTests(QtAppTestCase):
             "status": "warning",
             "summary": "中止任务：真实任务，当前同步任务暂不支持中止",
             "detail": "真实任务：当前同步任务暂不支持中止",
-            "timestamp": "2026-06-24 11:30:00",
+            "timestamp": "2026-06-24 11:20:00",
         }
         service = SimpleNamespace(
             get_tasks=Mock(return_value=([{"task_name": "真实任务", "status": "running"}], 1)),
@@ -5088,7 +5088,7 @@ class Win11TaskManagementPageTests(QtAppTestCase):
                     "status": "failed",
                     "summary": "批量运行：成功 1/2，失败 1",
                     "detail": "任务B：API 超时",
-                    "timestamp": "2026-06-24 10:20:30",
+                    "timestamp": "2026-06-24 10:20:20",
                 }
             ),
         )
@@ -5099,7 +5099,7 @@ class Win11TaskManagementPageTests(QtAppTestCase):
 
         self.assertTrue(page.operation_status_bar.isVisible())
         self.assertEqual(page.operation_status_summary.text(), "批量运行：成功 1/2，失败 1")
-        self.assertIn("10:20:30", page.operation_status_time.text())
+        self.assertIn("10:20:20", page.operation_status_time.text())
         self.assertFalse(hasattr(page, "btn_copy_operation_detail"))
 
     def test_task_management_detail_panel_does_not_render_recent_run_section(self) -> None:
@@ -5171,7 +5171,7 @@ class Win11TaskManagementPageTests(QtAppTestCase):
             "status": "failed",
             "summary": "运行前校验失败：任务A同步",
             "detail": "任务A同步：任务未启用",
-            "timestamp": "2026-06-24 10:30:00",
+            "timestamp": "2026-06-24 10:20:00",
         }
 
         class FakeTaskService:
@@ -5226,7 +5226,7 @@ class Win11TaskManagementPageTests(QtAppTestCase):
                 return_value={
                     "status": "success",
                     "message": "OK",
-                    "total_records": 321,
+                    "total_records": 221,
                     "duration": 6.5,
                 }
             )
@@ -5239,12 +5239,12 @@ class Win11TaskManagementPageTests(QtAppTestCase):
 
         action_cell.btn_run.click()
 
-        self.assertEqual(page.operation_status_summary.text(), "立即运行：销售订单同步，成功，写入 321 行，耗时 6.5 秒")
+        self.assertEqual(page.operation_status_summary.text(), "立即运行：销售订单同步，成功，写入 221 行，耗时 6.5 秒")
         self.assertFalse(hasattr(page, "operation_history_table"))
         self.assertNotEqual(page.table.item(0, 5).text(), "--")
         self.assertEqual(page.table.item(0, 6).text(), "100%")
         task = page.tasks[0]
-        self.assertEqual(task["record_count"], 321)
+        self.assertEqual(task["record_count"], 221)
         self.assertEqual(task["duration_seconds"], 6.5)
 
     def test_task_management_new_task_dialog_saves_via_task_service(self) -> None:
@@ -5418,8 +5418,8 @@ class Win11DataSourcePageTests(QtAppTestCase):
         save_settings.assert_not_called()
         self.assertTrue(gui.kd_connected)
         self.assertFalse(gui.db_connected)
-        self.assertEqual(page.health_table.table.item(0, 3).text(), "成功")
-        self.assertEqual(page.health_table.table.item(1, 3).text(), "失败")
+        self.assertEqual(page.health_table.table.item(0, 2).text(), "成功")
+        self.assertEqual(page.health_table.table.item(1, 2).text(), "失败")
         self.assertEqual(page.health_table.table.item(1, 5).text(), "金蝶: 成功；数据库: 失败")
 
     def test_data_source_page_health_table_is_latest_result_not_fake_history_before_test(self) -> None:
@@ -5431,9 +5431,9 @@ class Win11DataSourcePageTests(QtAppTestCase):
 
         self.assertEqual(page.health_card.title_label.text(), "最近一次检测结果")
         self.assertEqual(page.health_table.table.rowCount(), 2)
-        self.assertEqual(page.health_table.table.item(0, 3).text(), "未检测")
+        self.assertEqual(page.health_table.table.item(0, 2).text(), "未检测")
         self.assertEqual(page.health_table.table.item(0, 4).text(), "--")
-        self.assertEqual(page.health_table.table.item(1, 3).text(), "未检测")
+        self.assertEqual(page.health_table.table.item(1, 2).text(), "未检测")
         self.assertEqual(page.health_table.table.item(1, 4).text(), "--")
 
     def test_data_source_page_test_all_updates_latest_check_time_and_failure_reason(self) -> None:
@@ -5449,11 +5449,11 @@ class Win11DataSourcePageTests(QtAppTestCase):
             page.btn_test_all.click()
 
         self.assertNotEqual(page.health_table.table.item(0, 0).text(), "--")
-        self.assertEqual(page.health_table.table.item(0, 3).text(), "失败")
+        self.assertEqual(page.health_table.table.item(0, 2).text(), "失败")
         self.assertEqual(page.health_table.table.item(0, 4).text(), "--")
         self.assertEqual(page.health_table.table.item(0, 5).text(), "金蝶: 登录失败；数据库: 成功")
-        self.assertEqual(page.health_table.table.item(1, 3).text(), "成功")
-        self.assertEqual(page.health_table.table.item(1, 4).text(), "3 ms")
+        self.assertEqual(page.health_table.table.item(1, 2).text(), "成功")
+        self.assertEqual(page.health_table.table.item(1, 4).text(), "2 ms")
 
     def test_data_source_page_chips_are_pill_shaped_not_square(self) -> None:
         from src.gui.pages.data_source_page import DataSourcePage
@@ -5478,14 +5478,14 @@ class Win11DataSourcePageTests(QtAppTestCase):
             patch(
                 "src.gui.pages.data_source_page.config_manager.get_kingdee_config",
                 return_value={
-                    "query_url": "https://api.yunxingkong.com/k3cloud/Kingdee.BOS.WebApi.ServicesStub.DynamicFormService.ExecuteBillQuery.common.kdsvc",
+                    "query_url": "https://api.yunxingkong.com/k2cloud/Kingdee.BOS.WebApi.ServicesStub.DynamicFormService.ExecuteBillQuery.common.kdsvc",
                     "acct_id": "demo",
                     "username": "aps",
                 },
             ),
             patch(
                 "src.gui.pages.data_source_page.config_manager.get_db_config",
-                return_value={"sqlserver": {"host": "10.1.1.9", "port": "1433", "database": "Kingdee", "user": "sa"}},
+                return_value={"sqlserver": {"host": "10.1.1.9", "port": "1422", "database": "Kingdee", "user": "sa"}},
             ),
         ):
             page = DataSourcePage(gui)
@@ -5499,13 +5499,13 @@ class Win11DataSourcePageTests(QtAppTestCase):
         self.assertIn("https://api.yunxingkong.com", api_values)
         self.assertNotIn("ExecuteBillQuery", "".join(api_values))
 
-    def test_data_source_page_1366x768(self) -> None:
+    def test_data_source_page_1266x768(self) -> None:
         from src.gui.pages.data_source_page import DataSourcePage, _SourceCard
 
         gui = SimpleNamespace()
         page = DataSourcePage(gui)
         self.addCleanup(cleanup_widget, page)
-        page.resize(1366, 768)
+        page.resize(1266, 768)
         page.show()
         self._app.processEvents()
 
@@ -5525,8 +5525,8 @@ class Win11DataSourcePageTests(QtAppTestCase):
         self._app.processEvents()
 
         self.assertEqual(page.property("page"), "data-source")
-        self.assertEqual(page.btn_test_all.size().height(), 36)
-        self.assertEqual(page.btn_add_source.size().height(), 36)
+        self.assertEqual(page.btn_test_all.size().height(), 26)
+        self.assertEqual(page.btn_add_source.size().height(), 26)
 
         cards = page.findChildren(_SourceCard)
         self.assertGreaterEqual(len(cards), 2)
@@ -5534,8 +5534,8 @@ class Win11DataSourcePageTests(QtAppTestCase):
             self.assertEqual(card.height(), 128)
 
         self.assertEqual(page.health_card.height(), 196)
-        self.assertEqual(page.health_table.table.verticalHeader().defaultSectionSize(), 33)
-        self.assertEqual(page.health_table.table.horizontalHeader().height(), 35)
+        self.assertEqual(page.health_table.table.verticalHeader().defaultSectionSize(), 22)
+        self.assertEqual(page.health_table.table.horizontalHeader().height(), 25)
 
 
 class Win11DiagnosticsPageTests(QtAppTestCase):
@@ -5730,13 +5730,13 @@ class Win11DiagnosticsPageTests(QtAppTestCase):
         self.assertIsNotNone(page._suggestions_card)
         self.assertFalse(page._suggestions_card.findChildren(type(page._suggestions_card)))
 
-    def test_diagnostics_page_1366x768(self) -> None:
+    def test_diagnostics_page_1266x768(self) -> None:
         from src.gui.pages.diagnostics_page import DiagnosticsPage
 
         gui = SimpleNamespace()
         page = DiagnosticsPage(gui)
         self.addCleanup(cleanup_widget, page)
-        page.resize(1366, 768)
+        page.resize(1266, 768)
         page.show()
         self._app.processEvents()
 
@@ -5746,31 +5746,6 @@ class Win11DiagnosticsPageTests(QtAppTestCase):
 
 
 class Win11LogCenterPageTests(QtAppTestCase):
-    def _write_log_center_entries(self, tmpdir: str) -> Path:
-        log_path = Path(tmpdir) / "app.jsonl"
-        today = datetime.now().strftime("%Y-%m-%d")
-        entries = [
-            {
-                "asctime": f"{today} 09:00:00",
-                "levelname": "INFO",
-                "name": "src.core.kingdee_api",
-                "message": "T_BD_Material 获取金蝶数据成功",
-            },
-            {
-                "asctime": f"{today} 09:05:00",
-                "levelname": "ERROR",
-                "name": "src.core.form_sync_runner",
-                "message": "T_BD_Customer 写入失败 password=hidden",
-            },
-            {
-                "asctime": f"{today} 09:10:00",
-                "levelname": "WARNING",
-                "name": "src.core.scheduler",
-                "message": "调度服务等待下一次执行",
-            },
-        ]
-        log_path.write_text("\n".join(json.dumps(e, ensure_ascii=False) for e in entries), encoding="utf-8")
-        return log_path
 
     def test_log_center_page_instantiates(self) -> None:
         from src.gui.pages.log_center_page import LogCenterPage
@@ -5789,7 +5764,7 @@ class Win11LogCenterPageTests(QtAppTestCase):
         page = LogCenterPage(gui)
         self.addCleanup(cleanup_widget, page)
 
-        stat_cards = [w for w in page.findChildren(QFrame) if w.property("ui") == "lc-stat-card"]
+        stat_cards = [w for w in page.findChildren(QFrame) if w.property("ui") == "sync-stat-card"]
         self.assertGreaterEqual(len(stat_cards), 5, "Expected at least 5 log summary cards")
 
     def test_log_center_page_has_log_table(self) -> None:
@@ -5801,7 +5776,7 @@ class Win11LogCenterPageTests(QtAppTestCase):
         self.addCleanup(cleanup_widget, page)
 
         tables = page.findChildren(DataTable)
-        self.assertGreaterEqual(len(tables), 1, "Expected at least 1 DataTable for log entries")
+        self.assertGreaterEqual(len(tables), 1, "Expected at least 1 DataTable for sync records")
 
     def test_log_center_page_has_action_buttons(self) -> None:
         from PySide6.QtWidgets import QPushButton
@@ -5814,7 +5789,7 @@ class Win11LogCenterPageTests(QtAppTestCase):
 
         buttons = page.findChildren(QPushButton)
         btn_texts = [b.text() for b in buttons]
-        self.assertTrue(any("清空" in t for t in btn_texts), "Expected clear button")
+        self.assertTrue(any("刷新" in t for t in btn_texts), "Expected refresh button")
 
     def test_log_center_page_has_filter_controls(self) -> None:
         from PySide6.QtWidgets import QComboBox, QLineEdit
@@ -5826,9 +5801,9 @@ class Win11LogCenterPageTests(QtAppTestCase):
         self.addCleanup(cleanup_widget, page)
 
         combos = page.findChildren(QComboBox)
-        self.assertGreaterEqual(len(combos), 3, "Expected at least 3 filter combo boxes")
+        self.assertGreaterEqual(len(combos), 2, "Expected at least 2 filter combo boxes")
 
-    def test_log_center_page_1366x768(self) -> None:
+    def test_log_center_page_1266x768(self) -> None:
         from PySide6.QtWidgets import QFrame
 
         from src.gui.pages.log_center_page import LogCenterPage
@@ -5836,134 +5811,24 @@ class Win11LogCenterPageTests(QtAppTestCase):
         gui = SimpleNamespace()
         page = LogCenterPage(gui)
         self.addCleanup(cleanup_widget, page)
-        page.resize(1366, 768)
+        page.resize(1266, 768)
         page.show()
         self._app.processEvents()
 
-        stat_cards = [w for w in page.findChildren(QFrame) if w.property("ui") == "lc-stat-card"]
+        stat_cards = [w for w in page.findChildren(QFrame) if w.property("ui") == "sync-stat-card"]
         self.assertGreaterEqual(len(stat_cards), 5)
         for card in stat_cards:
             self.assertTrue(card.isVisible())
 
-    def test_log_center_page_filters_real_log_rows(self) -> None:
-        from src.gui.pages.log_center_page import LogCenterPage
 
-        gui = SimpleNamespace()
-        with tempfile.TemporaryDirectory() as tmpdir:
-            self._write_log_center_entries(tmpdir)
-            with patch("src.gui.pages.log_center_page._get_log_dir", return_value=tmpdir):
-                page = LogCenterPage(gui)
 
-        self.addCleanup(cleanup_widget, page)
-        self.assertEqual(page.log_table.table.rowCount(), 3)
 
-        page.combo_level.setCurrentText("错误")
-        self.assertEqual(page.log_table.table.rowCount(), 1)
-        self.assertEqual(page.log_table.table.item(0, 1).text(), "错误")
-        self.assertEqual(page.log_table.table.item(0, 4).text(), "[REDACTED]")
 
-        page.combo_level.setCurrentText("全部")
-        page.search_box.setText("Material")
-        page.search_box.editingFinished.emit()
-        self.assertEqual(page.log_table.table.rowCount(), 1)
-        self.assertIn("T_BD_Material", page.log_table.table.item(0, 3).text())
 
-        page.search_box.clear()
-        page.error_only_btn.setChecked(True)
-        page.error_only_btn.clicked.emit()
-        self.assertEqual(page.log_table.table.rowCount(), 1)
-        self.assertEqual(page.log_table.table.item(0, 1).text(), "错误")
 
-    def test_log_center_page_clear_view_does_not_delete_log_file(self) -> None:
-        from src.gui.pages.log_center_page import LogCenterPage
 
-        gui = SimpleNamespace()
-        with tempfile.TemporaryDirectory() as tmpdir:
-            log_path = self._write_log_center_entries(tmpdir)
-            with patch("src.gui.pages.log_center_page._get_log_dir", return_value=tmpdir):
-                page = LogCenterPage(gui)
-                self.addCleanup(cleanup_widget, page)
-                page.btn_clear.click()
 
-            self.assertTrue(log_path.exists())
-            self.assertEqual(page.log_table.table.rowCount(), 0)
-            self.assertEqual(page.lbl_total.text(), "筛选结果 0 条")
 
-    def test_log_center_page_copy_and_export_current_filtered_view(self) -> None:
-        from src.gui.pages.log_center_page import LogCenterPage
-
-        gui = SimpleNamespace()
-        with tempfile.TemporaryDirectory() as tmpdir:
-            with patch("src.gui.pages.log_center_page._get_log_dir", return_value=tmpdir):
-                self._write_log_center_entries(tmpdir)
-                page = LogCenterPage(gui)
-                self.addCleanup(cleanup_widget, page)
-                page.combo_level.setCurrentText("错误")
-                page.btn_copy.click()
-                copied = QApplication.clipboard().text()
-                page.btn_export.click()
-
-            exported = list(Path(tmpdir).glob("log_center_export_*.txt"))
-            exported_text = exported[0].read_text(encoding="utf-8") if exported else ""
-
-        self.assertIn("错误", copied)
-        self.assertIn("[REDACTED]", copied)
-        self.assertEqual(len(exported), 1)
-        self.assertIn("错误", exported_text)
-
-    def test_log_center_page_translates_display_without_mutating_raw_logs(self) -> None:
-        from src.gui.pages.log_center_page import LogCenterPage
-
-        gui = SimpleNamespace()
-        with tempfile.TemporaryDirectory() as tmpdir:
-            log_path = Path(tmpdir) / "app.jsonl"
-            raw_entry = {
-                "asctime": f"{datetime.now().strftime('%Y-%m-%d')} 09:20:00",
-                "levelname": "ERROR",
-                "name": "src.core.kingdee_api",
-                "message": "Field 'FNumber' cannot be null, login failed",
-            }
-            log_path.write_text(json.dumps(raw_entry, ensure_ascii=False), encoding="utf-8")
-            with patch("src.gui.pages.log_center_page._get_log_dir", return_value=tmpdir):
-                page = LogCenterPage(gui)
-                self.addCleanup(cleanup_widget, page)
-                page.btn_copy.click()
-                copied = QApplication.clipboard().text()
-
-            raw_text = log_path.read_text(encoding="utf-8")
-
-        self.assertEqual(page.log_table.table.item(0, 1).text(), "错误")
-        self.assertEqual(page.log_table.table.item(0, 2).text(), "金蝶 API")
-        self.assertIn("字段 FNumber 不能为空", page.log_table.table.item(0, 4).text())
-        self.assertIn("登录失败", page.log_table.table.item(0, 4).text())
-        self.assertIn("错误", copied)
-        self.assertIn("金蝶 API", copied)
-        self.assertIn("字段 FNumber 不能为空", copied)
-        self.assertIn("login failed", raw_text)
-
-    def test_log_center_page_uses_runtime_logger_log_dir(self) -> None:
-        from src.gui.pages.log_center_page import LogCenterPage
-
-        gui = SimpleNamespace()
-        with tempfile.TemporaryDirectory() as tmpdir:
-            self._write_log_center_entries(tmpdir)
-            with patch("src.gui.pages.log_center_page.app_logger.get_log_dir", return_value=tmpdir):
-                page = LogCenterPage(gui)
-                self.addCleanup(cleanup_widget, page)
-
-        self.assertEqual(page.log_table.table.rowCount(), 3)
-        self.assertEqual(page.lbl_total.text(), "筛选结果 3 条")
-
-    def test_log_center_page_weakens_unimplemented_controls(self) -> None:
-        from src.gui.pages.log_center_page import LogCenterPage
-
-        gui = SimpleNamespace()
-        page = LogCenterPage(gui)
-        self.addCleanup(cleanup_widget, page)
-
-        self.assertFalse(page.btn_text_view.isVisible())
-        self.assertFalse(page.refresh_combo.isVisible())
-        self.assertEqual(page.lbl_page.text(), "筛选结果")
 
 
 class Win11TenPageNavigationTests(QtAppTestCase):

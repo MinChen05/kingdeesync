@@ -17,7 +17,7 @@ echo.
 echo Building...
 echo.
 
-pyinstaller --name="金蝶数据同步工具" --windowed --onedir --add-data="config.ini;." --add-data="assets;assets" --hidden-import=dateutil --hidden-import=pymysql --hidden-import=pyodbc --hidden-import=requests --hidden-import=schedule --hidden-import=PySide6 --hidden-import=cryptography --hidden-import=DBUtils --hidden-import=python_json_logger main.py
+pyinstaller --name 金蝶数据同步工具 --windowed --onedir --icon assets\sync-tool-icon.ico --add-data config.ini;. --add-data assets;assets --hidden-import dateutil --hidden-import pymysql --hidden-import pyodbc --hidden-import requests --hidden-import schedule --hidden-import PySide6 --hidden-import cryptography --hidden-import DBUtils --hidden-import python_json_logger main.py
 
 echo.
 echo Build complete!

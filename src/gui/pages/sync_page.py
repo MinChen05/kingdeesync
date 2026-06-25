@@ -157,9 +157,13 @@ class SyncPage(Win11PageScaffold):
         cr.setSpacing(12)
 
         cr.addWidget(QLabel("表单范围"))
+        available = list(sync_service.get_available_forms() or [])
+        form_items = [(FORM_ALL_TEXT, "", FORM_ALL_DATA)]
+        form_items.extend((name, "", name) for name in available)
+        form_items.append((FORM_DEFAULT_TEXT, "", FORM_DEFAULT_DATA))
         self.form_selector = self._make_combo(SearchableComboBox(
             placeholder="", searchable=True,
-            items=[(FORM_ALL_TEXT, "", FORM_ALL_DATA)],
+            items=form_items,
         ))
         self.form_selector.setMinimumWidth(200)
         cr.addWidget(self.form_selector, 1)

@@ -269,9 +269,6 @@ def _stats_are_empty(stats: dict, history_stats: dict) -> bool:
 def _trend_rows_are_empty(rows: list[dict]) -> bool:
     if not rows:
         return True
-    positive_rates = sum(1 for row in rows if _to_float(row.get("rate")) > 0.0)
-    if len(rows) >= 7 and positive_rates < max(2, len(rows) // 2):
-        return True
     return all(_to_int(row.get("count")) == 0 and _to_float(row.get("rate")) == 0.0 for row in rows)
 
 
@@ -943,6 +940,8 @@ class DashboardPage(Win11PageScaffold):
 
             last_sync = _format_datetime(stats.get("last_sync_time"))
             self.last_refresh_label.setText(f"上次同步：{last_sync[:16] if last_sync != '--' else '--'}")
+            if hasattr(self.gui, "refresh_statusbar_sync_time"):
+                self.gui.refresh_statusbar_sync_time(last_sync)
         except Exception as exc:
             logger.error("Dashboard refresh failed: %s", exc)
             self.last_refresh_label.setText(f"刷新失败：{exc}")

@@ -19,15 +19,14 @@ def insert_production_orders(manager, data: List[Dict]) -> int:
         # SQL Server/ MySQL 通用：新增 FCREATEDATE 字段
         sql = """
         INSERT INTO prd_mo (
-            FID, FBILLNO, FBILLTYPE, FDATE, FPRDORGID, FWORKSHOPID, FDocumentStatus, FCREATEDATE, FMODIFYDATE, FCANCELSTATUS
+            FID, FBILLNO, FBILLTYPE, FDATE, FPRDORGID, FDocumentStatus, FCREATEDATE, FMODIFYDATE, FCANCELSTATUS
         ) VALUES (
-            %s, %s, %s, %s, %s, %s, %s, %s, %s, %s
+            %s, %s, %s, %s, %s, %s, %s, %s, %s
         ) ON DUPLICATE KEY UPDATE
             FBILLNO = VALUES(FBILLNO),
             FBILLTYPE = VALUES(FBILLTYPE),
             FDATE = VALUES(FDATE),
             FPRDORGID = VALUES(FPRDORGID),
-            FWORKSHOPID = VALUES(FWORKSHOPID),
             FDocumentStatus = VALUES(FDocumentStatus),
             FCREATEDATE = VALUES(FCREATEDATE),
             FMODIFYDATE = VALUES(FMODIFYDATE),

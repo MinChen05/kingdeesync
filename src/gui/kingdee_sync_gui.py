@@ -1035,7 +1035,7 @@ class KingdeeSyncGUI(QMainWindow):
         self.statusbar_conn.setObjectName("statusbar_conn")
         state_row.addWidget(self.statusbar_conn)
 
-        self.statusbar_clock = QLabel("上次同步：2024-05-14 10:15:32")
+        self.statusbar_clock = QLabel("上次同步：--")
         self.statusbar_clock.setObjectName("statusbar_clock")
         cf = self.statusbar_clock.font()
         cf.setPointSize(10)
@@ -1092,7 +1092,13 @@ class KingdeeSyncGUI(QMainWindow):
             return
         self.statusbar_state.setText("数据同步服务运行中")
         self.statusbar_conn.setText("")
-        self.statusbar_clock.setText("上次同步：2024-05-14 10:15:32")
+        self.statusbar_clock.setText("上次同步：--")
+
+    def refresh_statusbar_sync_time(self, time_str: str = "--") -> None:
+        """Update the status bar last-sync timestamp from real data."""
+        if hasattr(self, "statusbar_clock"):
+            display = time_str[:19] if time_str != "--" else "--"
+            self.statusbar_clock.setText(f"\u4e0a\u6b21\u540c\u6b65\uff1a{display}")
 
     def _show_window_menu(self, global_pos):
         pass  # native title bar — no custom window menu

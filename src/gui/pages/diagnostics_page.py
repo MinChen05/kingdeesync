@@ -23,7 +23,7 @@ from PySide6.QtWidgets import (
 )
 
 from src.core.history_manager import history_manager
-from src.gui.components.common import StatusChip, SvgIconLabel
+from src.gui.components.common import SvgIconLabel
 from src.gui.components.data_table import DataTable
 from src.gui.components.page_shell import Win11PageScaffold, Win11SectionCard
 from src.gui.design_tokens import ColorTokens, SizeTokens, SpacingTokens, qcolor
@@ -98,69 +98,8 @@ class _PieChart(QWidget):
         painter.end()
 
 
-class _SuggestionItem(QFrame):
-    """Diagnostic suggestion row with numbered icon, title, description, and action."""
-
-    def __init__(
-        self,
-        number: int,
-        title: str,
-        description: str,
-        action: str,
-        target_page: str | None = None,
-        parent=None,
-    ):
-        super().__init__(parent)
-        self.setProperty("ui", "dg-suggestion-item")
-        self.setMinimumHeight(56)
-        self.target_page = target_page
-
-        root = QHBoxLayout(self)
-        root.setContentsMargins(16, 10, 16, 10)
-        root.setSpacing(12)
-
-        num_label = QLabel(str(number))
-        num_label.setProperty("ui", "dg-suggestion-num")
-        num_label.setFixedSize(28, 28)
-        num_label.setAlignment(Qt.AlignCenter)
-        root.addWidget(num_label)
-
-        text_col = QVBoxLayout()
-        text_col.setSpacing(2)
-        title_lbl = QLabel(title)
-        title_lbl.setProperty("ui", "dg-suggestion-title")
-        desc_lbl = QLabel(description)
-        desc_lbl.setProperty("ui", "dg-suggestion-desc")
-        desc_lbl.setWordWrap(True)
-        text_col.addWidget(title_lbl)
-        text_col.addWidget(desc_lbl)
-        root.addLayout(text_col, 1)
-
-        if target_page:
-            self.action_button = QPushButton(action)
-            self.action_button.setProperty("ui", "dg-suggestion-action")
-            self.action_button.setCursor(Qt.CursorShape.PointingHandCursor)
-            root.addWidget(self.action_button)
-
-            arrow = SvgIconLabel("chevron_right.svg", size=18, icon_size=16, color=ColorTokens.NEUTRAL_400)
-            arrow.setProperty("ui", "dg-suggestion-arrow")
-            root.addWidget(arrow)
-        else:
-            action_lbl = QLabel(action)
-            action_lbl.setProperty("ui", "dg-suggestion-note")
-            root.addWidget(action_lbl)
-
-
 class DiagnosticsPage(Win11PageScaffold):
     """Exception diagnostics page with real data from history_manager and reporting."""
-
-    _FALLBACK_SUGGESTIONS = [
-        ("字段类型转换失败", "字段值无法从字符串转换为数值类型，请检查数据格式", "检查字段映射", "forms"),
-        ("API 请求超时", "金蝶 API 响应时间超过阈值（> 30s），建议检查网络或稍后重试", "查看日志", "log_center"),
-        ("目标表索引缺失", "表缺少索引，影响写入性能", "建议由数据库维护人员评估"),
-        ("重复键冲突", "主键或唯一索引冲突，导致数据写入失败", "建议先检查源数据重复"),
-        ("数据库连接不稳定", "数据库连接存在超时或中断，建议检查连接池配置", "检查连接配置", "settings"),
-    ]
 
     def __init__(self, parent_gui, parent=None):
         self.gui = parent_gui
@@ -259,13 +198,7 @@ class DiagnosticsPage(Win11PageScaffold):
 
         suggestions_card = Win11SectionCard("诊断建议", "")
         self._suggestions_card = suggestions_card
-        for idx, suggestion in enumerate(self._FALLBACK_SUGGESTIONS, 1):
-            title, desc, action, *target = suggestion
-            target_page = target[0] if target else None
-            item = _SuggestionItem(idx, title, desc, action, target_page=target_page)
-            if target_page and hasattr(item, "action_button"):
-                item.action_button.clicked.connect(lambda _checked=False, page_id=target_page: self._navigate_to_page(page_id))
-            suggestions_card.content_layout.addWidget(item)
+        suggestions_card.content_layout.addWidget(QLabel("暂无诊断建议"))
         middle_layout.addWidget(suggestions_card, 1)
         content_layout.addWidget(middle_row)
 
@@ -324,25 +257,6 @@ class DiagnosticsPage(Win11PageScaffold):
         pagination_layout.addWidget(self.page_label)
         content_layout.addWidget(pagination_row)
 
-        chain_card = Win11SectionCard("错误链路（所选异常的处理链路）", "")
-        chain_card.setVisible(False)
-        chain_body = QWidget()
-        chain_layout = QHBoxLayout(chain_body)
-        chain_layout.setContentsMargins(0, 0, 0, 0)
-        chain_layout.setSpacing(16)
-
-        chain_steps = [
-            ("API 拉取", "成功", ["开始时间: --", "耗时: --", "状态: 等待"]),
-            ("字段转换", "待执行", ["开始时间: --", "耗时: --", "状态: 待执行"]),
-            ("SQL 写入", "待执行", ["开始时间: --", "耗时: --", "状态: 待执行"]),
-            ("结果确认", "待执行", ["开始时间: --", "耗时: --", "状态: 待执行"]),
-        ]
-        for step_title, step_status, step_details in chain_steps:
-            step_widget = self._create_chain_step(step_title, step_status, step_details)
-            chain_layout.addWidget(step_widget)
-        chain_card.content_layout.addWidget(chain_body)
-        content_layout.addWidget(chain_card)
-
         scroll = self.create_scroll_container("diagnostics_scroll")
         scroll.setWidget(content_widget)
         self.set_content(scroll)
@@ -375,29 +289,6 @@ class DiagnosticsPage(Win11PageScaffold):
         card._value_label = value_lbl
         card._trend_label = trend_lbl
         return card
-
-    def _create_chain_step(self, title: str, status: str, details: list[str]) -> QWidget:
-        """Create a chain step widget."""
-        step = QFrame()
-        step.setProperty("ui", "dg-chain-step")
-
-        layout = QVBoxLayout(step)
-        layout.setContentsMargins(16, 12, 16, 12)
-        layout.setSpacing(4)
-
-        status_chip = StatusChip(status, tone="success" if status == "成功" else "danger" if status == "失败" else "info")
-        layout.addWidget(status_chip)
-
-        title_lbl = QLabel(title)
-        title_lbl.setProperty("ui", "dg-chain-title")
-        layout.addWidget(title_lbl)
-
-        for detail in details:
-            lbl = QLabel(detail)
-            lbl.setProperty("ui", "dg-chain-detail")
-            layout.addWidget(lbl)
-
-        return step
 
     def _navigate_to_page(self, page_id: str) -> None:
         """Navigate to a related workspace page when the host supports it."""

@@ -16,10 +16,10 @@ from PySide6.QtGui import QFont, QFontDatabase, QPixmap
 from PySide6.QtWidgets import QApplication
 
 
-def main():
+def main() -> None:
     app = QApplication.instance()
     if app is None:
-        QApplication.setAttribute(Qt.AA_Use96Dpi, True)
+        QApplication.setAttribute(Qt.ApplicationAttribute.AA_Use96Dpi, True)
         app = QApplication(["screenshot"])
     app.setQuitOnLastWindowClosed(False)
 
@@ -28,16 +28,21 @@ def main():
             QFontDatabase.addApplicationFont(font_file)
     app.setFont(QFont("Microsoft YaHei", 13))
 
+    stylesheet_path = os.path.join(
+        os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+        "assets",
+        "styles.css",
+    )
+    with open(stylesheet_path, encoding="utf-8") as stylesheet:
+        app.setStyleSheet(stylesheet.read())
+
     from src.gui.kingdee_sync_gui import KingdeeSyncGUI
 
     with patch("src.gui.kingdee_sync_gui.QTimer.singleShot", lambda *_args, **_kwargs: None):
         gui = KingdeeSyncGUI()
-        gui.kd_connected = True
-        gui.db_connected = True
         gui.resize(1440, 900)
         gui.show()
         app.processEvents()
-
         gui.switch_to_page("task_management")
         app.processEvents()
         app.processEvents()

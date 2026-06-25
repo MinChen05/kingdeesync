@@ -5694,37 +5694,17 @@ class Win11DiagnosticsPageTests(QtAppTestCase):
         feedback.success.assert_called_once()
 
     def test_diagnostics_page_has_suggestions_section(self) -> None:
-        from PySide6.QtWidgets import QPushButton
+        from PySide6.QtWidgets import QLabel
 
-        from src.gui.pages.diagnostics_page import DiagnosticsPage, _SuggestionItem
+        from src.gui.pages.diagnostics_page import DiagnosticsPage
 
         gui = SimpleNamespace()
         page = DiagnosticsPage(gui)
         self.addCleanup(cleanup_widget, page)
-        items = page.findChildren(_SuggestionItem)
-        self.assertGreaterEqual(len(items), 5, "Expected at least 5 suggestion items")
-
-        action_buttons = [button for button in page.findChildren(QPushButton) if button.property("ui") == "dg-suggestion-action"]
-        self.assertEqual([button.text() for button in action_buttons], ["检查字段映射", "查看日志", "检查连接配置"])
-
-    def test_diagnostics_page_suggestion_actions_navigate_to_real_pages(self) -> None:
-        from PySide6.QtWidgets import QPushButton
-
-        from src.gui.pages.diagnostics_page import DiagnosticsPage
-
-        gui = SimpleNamespace(switch_to_page=MagicMock())
-        page = DiagnosticsPage(gui)
-        self.addCleanup(cleanup_widget, page)
-
-        action_buttons = {button.text(): button for button in page.findChildren(QPushButton) if button.property("ui") == "dg-suggestion-action"}
-        action_buttons["检查字段映射"].click()
-        action_buttons["查看日志"].click()
-        action_buttons["检查连接配置"].click()
-
-        self.assertEqual(
-            gui.switch_to_page.call_args_list,
-            [unittest.mock.call("forms"), unittest.mock.call("log_center"), unittest.mock.call("settings")],
-        )
+        self.assertIsNotNone(page._suggestions_card)
+        # 建议卡已替换为空态占位，不再包含 _SuggestionItem 实例
+        empty_labels = [child for child in page._suggestions_card.findChildren(QLabel) if "暂无" in child.text()]
+        self.assertGreaterEqual(len(empty_labels), 1)
 
     def test_diagnostics_page_weakens_static_page_size_text(self) -> None:
         from src.gui.pages.diagnostics_page import DiagnosticsPage
@@ -5738,7 +5718,7 @@ class Win11DiagnosticsPageTests(QtAppTestCase):
     def test_diagnostics_page_uses_scrollable_content_without_suggestion_clipping(self) -> None:
         from PySide6.QtWidgets import QScrollArea
 
-        from src.gui.pages.diagnostics_page import DiagnosticsPage, _SuggestionItem
+        from src.gui.pages.diagnostics_page import DiagnosticsPage
 
         gui = SimpleNamespace()
         page = DiagnosticsPage(gui)
@@ -5747,9 +5727,8 @@ class Win11DiagnosticsPageTests(QtAppTestCase):
         scroll_areas = page.findChildren(QScrollArea)
         self.assertTrue(any(area.objectName() == "diagnostics_scroll" for area in scroll_areas))
 
-        items = page.findChildren(_SuggestionItem)
-        self.assertGreaterEqual(len(items), 5)
-        self.assertTrue(all(item.minimumHeight() >= 56 for item in items))
+        self.assertIsNotNone(page._suggestions_card)
+        self.assertFalse(page._suggestions_card.findChildren(type(page._suggestions_card)))
 
     def test_diagnostics_page_1366x768(self) -> None:
         from src.gui.pages.diagnostics_page import DiagnosticsPage

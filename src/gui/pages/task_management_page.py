@@ -572,180 +572,9 @@ class TaskManagementPage(Win11PageScaffold):
 
     """Task management page with real-service-first data loading."""
 
-    _SAMPLE_TASKS: list[dict[str, Any]] = [
-        {
-            "task_id": "task_202405140001",
-            "task_name": "物料基础资料同步",
-            "form_name": "T_BD_Material",
-            "sync_mode": "增量同步",
-            "schedule": "每 5 分钟",
-            "status": "enabled",
-            "last_run": "2024-05-14 10:15:32",
-            "success_rate": "98.75%",
-            "created_at": "2024-05-10 14:30:22",
-            "creator": "管理员",
-            "updated_at": "2024-05-14 10:15:32",
-            "scope": "物料基础资料",
-            "increment_field": "FModifyDate",
-            "target_table": "T_BD_Material",
-            "retry_policy": "失败后重试 3 次，间隔 5 分钟",
-            "last_error_time": "",
-            "last_error_message": "",
-            "error_count": "0/3",
-        },
-        {
-            "task_id": "task_202405140002",
-            "task_name": "客户资料同步",
-            "form_name": "T_BD_Customer",
-            "sync_mode": "完全同步",
-            "schedule": "每 10 分钟",
-            "status": "enabled",
-            "last_run": "2024-05-14 10:10:21",
-            "success_rate": "99.12%",
-            "created_at": "2024-05-10 15:12:10",
-            "creator": "管理员",
-            "updated_at": "2024-05-14 10:10:21",
-            "scope": "客户资料",
-            "increment_field": "FModifyDate",
-            "target_table": "T_BD_Customer",
-            "retry_policy": "失败后重试 3 次，间隔 5 分钟",
-            "last_error_time": "",
-            "last_error_message": "",
-            "error_count": "0/3",
-        },
-        {
-            "task_id": "task_202405140003",
-            "task_name": "销售订单同步",
-            "form_name": "T_SAL_SaleOrder",
-            "sync_mode": "增量同步",
-            "schedule": "每 5 分钟",
-            "status": "enabled",
-            "last_run": "2024-05-14 10:05:18",
-            "success_rate": "97.46%",
-            "created_at": "2024-05-11 09:18:44",
-            "creator": "管理员",
-            "updated_at": "2024-05-14 10:05:18",
-            "scope": "销售订单",
-            "increment_field": "FModifyDate",
-            "target_table": "T_SAL_SaleOrder",
-            "retry_policy": "失败后重试 3 次，间隔 5 分钟",
-            "last_error_time": "",
-            "last_error_message": "",
-            "error_count": "0/3",
-        },
-        {
-            "task_id": "task_202405140004",
-            "task_name": "采购订单同步",
-            "form_name": "T_PUR_PurchaseOrder",
-            "sync_mode": "增量同步",
-            "schedule": "每 10 分钟",
-            "status": "paused",
-            "last_run": "2024-05-14 09:58:11",
-            "success_rate": "--",
-            "created_at": "2024-05-11 10:02:31",
-            "creator": "管理员",
-            "updated_at": "2024-05-14 09:58:11",
-            "scope": "采购订单",
-            "increment_field": "FModifyDate",
-            "target_table": "T_PUR_PurchaseOrder",
-            "retry_policy": "失败后重试 3 次，间隔 5 分钟",
-            "last_error_time": "",
-            "last_error_message": "",
-            "error_count": "0/3",
-        },
-        {
-            "task_id": "task_202405140005",
-            "task_name": "库存余额同步",
-            "form_name": "T_INV_Stock",
-            "sync_mode": "完全同步",
-            "schedule": "每天 00:00",
-            "status": "enabled",
-            "last_run": "2024-05-14 09:55:07",
-            "success_rate": "99.81%",
-            "created_at": "2024-05-12 08:20:05",
-            "creator": "管理员",
-            "updated_at": "2024-05-14 09:55:07",
-            "scope": "库存余额",
-            "increment_field": "FModifyDate",
-            "target_table": "T_INV_Stock",
-            "retry_policy": "失败后重试 3 次，间隔 5 分钟",
-            "last_error_time": "",
-            "last_error_message": "",
-            "error_count": "0/3",
-        },
-        {
-            "task_id": "task_202405140006",
-            "task_name": "应收应付余额同步",
-            "form_name": "T_AR_AP_Balance",
-            "sync_mode": "增量同步",
-            "schedule": "每 15 分钟",
-            "status": "enabled",
-            "last_run": "2024-05-14 09:50:33",
-            "success_rate": "98.93%",
-            "created_at": "2024-05-12 11:45:00",
-            "creator": "管理员",
-            "updated_at": "2024-05-14 09:50:33",
-            "scope": "应收应付余额",
-            "increment_field": "FModifyDate",
-            "target_table": "T_AR_AP_Balance",
-            "retry_policy": "失败后重试 3 次，间隔 5 分钟",
-            "last_error_time": "",
-            "last_error_message": "",
-            "error_count": "0/3",
-        },
-        {
-            "task_id": "task_202405140007",
-            "task_name": "收款单同步",
-            "form_name": "T_AR_ReceiveBill",
-            "sync_mode": "增量同步",
-            "schedule": "每 10 分钟",
-            "status": "failed",
-            "last_run": "2024-05-14 09:45:12",
-            "success_rate": "85.32%",
-            "created_at": "2024-05-12 14:06:19",
-            "creator": "管理员",
-            "updated_at": "2024-05-14 09:45:12",
-            "scope": "收款单",
-            "increment_field": "FModifyDate",
-            "target_table": "T_AR_ReceiveBill",
-            "retry_policy": "失败后重试 3 次，间隔 5 分钟",
-            "last_error_time": "2024-05-14 09:45:12",
-            "last_error_message": "数据库连接超时，请检查网络或数据库状态",
-            "error_count": "2/3",
-        },
-        {
-            "task_id": "task_202405140008",
-            "task_name": "付款单同步",
-            "form_name": "T_AP_PayBill",
-            "sync_mode": "增量同步",
-            "schedule": "每 10 分钟",
-            "status": "enabled",
-            "last_run": "2024-05-14 09:40:08",
-            "success_rate": "99.05%",
-            "created_at": "2024-05-12 15:20:00",
-            "creator": "管理员",
-            "updated_at": "2024-05-14 09:40:08",
-            "scope": "付款单",
-            "increment_field": "FModifyDate",
-            "target_table": "T_AP_PayBill",
-            "retry_policy": "失败后重试 3 次，间隔 5 分钟",
-            "last_error_time": "",
-            "last_error_message": "",
-            "error_count": "0/3",
-        },
-    ]
-
-    _SAMPLE_STATS: dict[str, Any] = {
-        "enabled": 32,
-        "paused": 5,
-        "executed_today": 28,
-        "retry": 4,
-        "enabled_delta": "较昨日 ↑ 10.34%",
-        "paused_delta": "较昨日 ↓ 16.67%",
-        "executed_delta": "较昨日 ↑ 27.27%",
-        "retry_delta": "较昨日 ↓ 20.00%",
-        "total": 37,
-    }
+    # Static sample fallbacks removed — real data comes from TaskService._build_tasks()
+    _SAMPLE_TASKS: list[dict[str, Any]] = []
+    _SAMPLE_STATS: dict[str, Any] = {}
 
     def __init__(self, parent_gui, parent: QWidget | None = None) -> None:
         self.gui = parent_gui
@@ -1171,9 +1000,7 @@ class TaskManagementPage(Win11PageScaffold):
 
     def _load_tasks(self, service: Any, filters: Mapping[str, str] | None = None) -> tuple[list[dict[str, Any]], int | None]:
         if service is None:
-            tasks = [dict(task) for task in self._SAMPLE_TASKS]
-            filtered_tasks = self._filter_tasks(tasks, filters or {})
-            return filtered_tasks, len(filtered_tasks)
+            return [], 0
         for method_name in ("get_tasks", "list_tasks", "query_tasks"):
             method = getattr(service, method_name, None)
             if callable(method):
@@ -1183,9 +1010,7 @@ class TaskManagementPage(Win11PageScaffold):
                     return tasks, total
                 filtered = self._filter_tasks(tasks, filters or {})
                 return self._paginate_tasks(filtered), len(filtered)
-        tasks = [dict(task) for task in self._SAMPLE_TASKS]
-        filtered_tasks = self._filter_tasks(tasks, filters or {})
-        return self._paginate_tasks(filtered_tasks), len(filtered_tasks)
+        return [], 0
 
     def _call_task_method(self, method, filters: Mapping[str, str]):
         try:
@@ -1268,7 +1093,7 @@ class TaskManagementPage(Win11PageScaffold):
 
     def _load_stats(self, service: Any) -> dict[str, Any]:
         if service is None:
-            return dict(self._SAMPLE_STATS)
+            return {}
         for method_name in ("get_task_stats", "get_stats", "stats"):
             method = getattr(service, method_name, None)
             if callable(method):

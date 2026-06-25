@@ -2958,6 +2958,7 @@ class Win11DashboardNoInlineStylesheetTests(QtAppTestCase):
             "yday_fail_count": 4,
             "yday_pending_count": 2,
             "yday_avg_duration": 120.0,
+            "last_sync_time": "2026-06-18 10:20:30",
         }
         trend_rows = [
             {"day": "2026-06-17", "count": 3, "volume": 1000, "rate": 90.0},
@@ -3004,6 +3005,7 @@ class Win11DashboardNoInlineStylesheetTests(QtAppTestCase):
         self.assertEqual(page._status_cards.card_fail.value_label.text(), "2")
         self.assertEqual(page._status_cards.card_pending.value_label.text(), "1")
         self.assertEqual(page._status_cards.card_duration.value_label.text(), "1 分 32 秒")
+        self.assertEqual(page.last_refresh_label.text(), "上次同步：2026-06-18 10:20")
 
         self.assertEqual(page.trend_chart.data[0]["count"], 1000)
         self.assertEqual(page.trend_chart.data[1]["rate"], 91.0)
@@ -3100,7 +3102,7 @@ class Win11DashboardNoInlineStylesheetTests(QtAppTestCase):
         self.assertEqual(switch_to_page.call_args_list[0].args, ("history",))
         self.assertEqual(switch_to_page.call_args_list[1].args, ("diagnostics",))
 
-    def test_dashboard_empty_sources_use_visual_fallback_state(self) -> None:
+    def test_dashboard_empty_sources_do_not_show_static_trend_or_recent_records(self) -> None:
         from src.gui.pages.dashboard_page import DashboardPage
 
         gui = SimpleNamespace(
@@ -3128,11 +3130,11 @@ class Win11DashboardNoInlineStylesheetTests(QtAppTestCase):
         self.assertEqual(page._status_cards.card_pending.value_label.text(), "3")
         self.assertEqual(page._status_cards.card_duration.value_label.text(), "2.35 秒")
 
-        self.assertEqual(len(page.trend_chart.data), 7)
-        self.assertEqual(page.trend_chart.data[0]["day"], "2024-05-08")
-        self.assertEqual(page.recent_table.table.rowCount(), 5)
-        self.assertEqual(page.recent_table.table.item(0, 1).text(), "物料基础资料同步")
-        self.assertEqual(page.recent_table.table.item(4, 2).text(), "T_INV_Stock")
+        self.assertEqual(page.trend_chart.data, [])
+        self.assertEqual(page.recent_table.table.rowCount(), 0)
+        self.assertFalse(page.recent_table._empty_label.isHidden())
+        self.assertEqual(page.recent_table._empty_label.text(), "暂无同步记录")
+        self.assertEqual(page.last_refresh_label.text(), "上次同步：--")
         self.assertEqual(page.risk_items[0]._title.text(), "API 超时")
         self.assertEqual(page.health_card._rows["kingdee"]["m1_val"].text(), "142 ms")
         self.assertEqual(page.health_card._rows["log"]["m2_val"].text(), "1.2 GB")

@@ -817,7 +817,7 @@ class DashboardPage(Win11PageScaffold):
         self.set_content(self._create_scroll_content())
 
     def _build_hero(self) -> None:
-        self.last_refresh_label = QLabel("上次同步：2024-05-14 10:15:32")
+        self.last_refresh_label = QLabel("上次同步：--")
         _set_color(self.last_refresh_label, ColorTokens.NEUTRAL_400)
         _font_size(self.last_refresh_label, 12)
         self.refresh_btn = LoadingButton("刷新")
@@ -887,6 +887,7 @@ class DashboardPage(Win11PageScaffold):
         self.recent_card.content_layout.setSpacing(10)
         self.recent_table = DataTable(["开始时间", "任务名称", "表单", "状态", "写入行数", "耗时"])
         self.recent_table.setObjectName("dashboard_recent_table")
+        self.recent_table.set_empty_text("暂无同步记录")
         self.recent_table.setFixedHeight(218)
         header = self.recent_table.table.horizontalHeader()
         header.setSectionResizeMode(QHeaderView.ResizeMode.Interactive)
@@ -1000,7 +1001,6 @@ class DashboardPage(Win11PageScaffold):
             self.refresh_btn.set_loading(True, LoadingText.REFRESH)
             stats = get_dashboard_today_stats()
             trend_rows = get_trend_days(self._window_days)
-            now = datetime.now()
             recent_records, _ = history_manager.get_history(page=1, page_size=5)
             history_stats = history_manager.get_stats()
 
@@ -1010,7 +1010,8 @@ class DashboardPage(Win11PageScaffold):
             self._update_recent_table(recent_records)
             self._update_risk_items(recent_records, history_stats)
 
-            self.last_refresh_label.setText(now.strftime("上次刷新：%Y-%m-%d %H:%M"))
+            last_sync = _format_datetime(stats.get("last_sync_time"))
+            self.last_refresh_label.setText(f"上次同步：{last_sync[:16] if last_sync != '--' else '--'}")
         except Exception as exc:
             logger.error("Dashboard refresh failed: %s", exc)
             self.last_refresh_label.setText(f"刷新失败：{exc}")
@@ -1090,7 +1091,7 @@ class DashboardPage(Win11PageScaffold):
             for row in (trend_rows or [])
         ]
         if _trend_rows_are_empty(chart_rows):
-            chart_rows = list(_VISUAL_FALLBACK_TREND_ROWS)
+            chart_rows = []
         self.trend_chart.set_data(chart_rows)
 
     def _update_health_card(self, stats: dict) -> None:
@@ -1113,8 +1114,6 @@ class DashboardPage(Win11PageScaffold):
             self.health_card.set_visual_fallback_metrics()
 
     def _update_recent_table(self, recent_records: list[dict]) -> None:
-        if not recent_records:
-            recent_records = list(_VISUAL_FALLBACK_RECENT_RECORDS)
         rows = []
         tooltips = []
         statuses = []

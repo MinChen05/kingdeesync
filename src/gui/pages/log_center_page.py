@@ -29,6 +29,7 @@ from src.gui.components.common import StatusChip, SvgIconLabel
 from src.gui.components.data_table import DataTable
 from src.gui.components.page_shell import Win11PageScaffold, Win11SectionCard
 from src.gui.design_tokens import ColorTokens, SizeTokens, SpacingTokens
+from src.utils import logger as app_logger
 
 logger = logging.getLogger(__name__)
 
@@ -118,8 +119,7 @@ def _friendly_message(message: str) -> str:
 
 def _get_log_dir() -> str:
     """Get the log directory path."""
-    base_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
-    return os.path.join(base_dir, "logs")
+    return app_logger.get_log_dir()
 
 
 def _read_jsonl_logs(max_lines: int = 1000) -> list[dict]:

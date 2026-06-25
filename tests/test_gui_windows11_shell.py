@@ -5960,6 +5960,19 @@ class Win11LogCenterPageTests(QtAppTestCase):
         self.assertIn("字段 FNumber 不能为空", copied)
         self.assertIn("login failed", raw_text)
 
+    def test_log_center_page_uses_runtime_logger_log_dir(self) -> None:
+        from src.gui.pages.log_center_page import LogCenterPage
+
+        gui = SimpleNamespace()
+        with tempfile.TemporaryDirectory() as tmpdir:
+            self._write_log_center_entries(tmpdir)
+            with patch("src.gui.pages.log_center_page.app_logger.get_log_dir", return_value=tmpdir):
+                page = LogCenterPage(gui)
+                self.addCleanup(cleanup_widget, page)
+
+        self.assertEqual(page.log_table.table.rowCount(), 3)
+        self.assertEqual(page.lbl_total.text(), "筛选结果 3 条")
+
     def test_log_center_page_weakens_unimplemented_controls(self) -> None:
         from src.gui.pages.log_center_page import LogCenterPage
 

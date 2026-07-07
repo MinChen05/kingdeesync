@@ -2,6 +2,7 @@
 change: add-purchase-instock-sync
 design-doc: docs/superpowers/specs/2026-07-07-purchase-instock-sync-design.md
 base-ref: 850dae0d84e7967ed42008eec5ea9a4e2b779949
+archived-with: 2026-07-08-add-purchase-instock-sync
 ---
 
 # Purchase Instock Sync Implementation Plan
@@ -14,6 +15,7 @@ base-ref: 850dae0d84e7967ed42008eec5ea9a4e2b779949
 
 **Tech Stack:** Python、unittest/pytest、JSON 配置、SQL Server upsert/staging、OpenSpec/Comet。
 
+archived-with: 2026-07-08-add-purchase-instock-sync
 ---
 
 ## File Structure

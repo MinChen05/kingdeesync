@@ -2,6 +2,8 @@
 comet_change: add-purchase-instock-sync
 role: technical-design
 canonical_spec: openspec
+archived-with: 2026-07-08-add-purchase-instock-sync
+status: final
 ---
 
 # 采购入库单同步技术设计

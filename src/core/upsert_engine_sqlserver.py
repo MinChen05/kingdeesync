@@ -164,6 +164,7 @@ class UpsertEngineSqlServer:
             required_map = {
                 "sal_deliverynotice": ["FID", "FENTRYID"],
                 "prd_instock": ["FID", "FENTRYID"],
+                "stk_instock": ["FID", "FENTRYID"],
                 "ap_payable": ["FID", "FENTRYID"],
             }
             required_cols = required_map.get(base_name)

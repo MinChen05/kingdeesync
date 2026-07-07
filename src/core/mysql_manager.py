@@ -1028,6 +1028,7 @@ class MySQLManager:
             "bd_stock": "FSTOCKID",
             "eng_bomchild": "FID,FENTRYID",
             "prd_instock": "FENTRYID",
+            "stk_instock": "FENTRYID",
             "pur_purchaseorder": "FID,FENTRYID",
             "sub_subreqorder": "FID,FENTRYID",
             "ar_receivable": "FENTRYID",
@@ -1260,7 +1261,7 @@ class MySQLManager:
 
     def _prepare_production_order_data(self, item) -> tuple | None:
         """准备生产订单数据（新增 FCREATEDATE）
-        字段顺序: FID, FBILLNO, FBILLTYPE, FDATE, FPRDORGID, FWORKSHOPID, FDocumentStatus, FCREATEDATE, FMODIFYDATE, FCANCELSTATUS
+        字段顺序: FID, FBILLNO, FBILLTYPE, FDATE, FPRDORGID, FDocumentStatus, FCREATEDATE, FMODIFYDATE, FCANCELSTATUS
         """
         try:
             # 检查数据类型
@@ -1276,10 +1277,6 @@ class MySQLManager:
                 )
                 fdate = self._parse_datetime(item.get("FDATE") or item.get("FDate"))
                 fprdorgid = self._to_int_or_none(item.get("FPrdOrgId") or item.get("FPRDORGID")) or 0
-                fworkshopid = (
-                    self._to_int_or_none(item.get("FWORKSHOPID") or item.get("FWorkShopID") or item.get("FWorkshopID"))
-                    or 0
-                )
                 fdocstatus = self._convert_production_status(
                     item.get("FDocumentStatus") or item.get("FDOCUMENTSTATUS") or item.get("FSTATUS")
                 )
@@ -1303,7 +1300,6 @@ class MySQLManager:
                     fbilltype,
                     fdate,
                     fprdorgid,
-                    fworkshopid,
                     fdocstatus,
                     fcreated,
                     fmodifydate,
@@ -1312,34 +1308,32 @@ class MySQLManager:
             if isinstance(item, list):
                 # 列表格式数据
                 if len(item) == 10:
-                    # 新FieldKeys: FID, FBILLNO, FBILLTYPE.FNAME, FDATE, FPRDORGID, FWORKSHOPID, FDocumentStatus, FCREATEDATE, FModifyDate, FCancelStatus
+                    # 新FieldKeys: FID, FBILLNO, FBILLTYPE.FNAME, FDATE, FPRDORGID, FDocumentStatus, FCREATEDATE, FModifyDate, FCancelStatus
                     fid = self._to_int_or_none(item[0]) or 0
                     fbillno = self._safe_str(item[1])
                     fbilltype = self._safe_str(item[2])
                     fdate = self._parse_datetime(item[3])
                     fprdorgid = self._to_int_or_none(item[4]) or 0
-                    fworkshopid = self._to_int_or_none(item[5]) or 0
-                    fdocstatus = self._convert_production_status(item[6])
+                    fdocstatus = self._convert_production_status(item[5])
                     if fdocstatus is None:
                         fdocstatus = ""
-                    fcreated = self._parse_datetime(item[7])
-                    fmodifydate = self._parse_datetime(item[8])
+                    fcreated = self._parse_datetime(item[6])
+                    fmodifydate = self._parse_datetime(item[7])
                     cancel_row = {
                         "FID": item[0],
                         "FBILLNO": item[1],
                         "FBILLTYPE.FNAME": item[2],
                         "FDATE": item[3],
                         "FPRDORGID": item[4],
-                        "FWORKSHOPID": item[5],
-                        "FDocumentStatus": item[6],
-                        "FCREATEDATE": item[7],
-                        "FModifyDate": item[8],
-                        "FCANCELSTATUS": item[9],
-                        "FCancelStatus": item[9],
+                        "FDocumentStatus": item[5],
+                        "FCREATEDATE": item[6],
+                        "FModifyDate": item[7],
+                        "FCANCELSTATUS": item[8],
+                        "FCancelStatus": item[8],
                     }
                     fcancel = self._resolve_configured_field("prd_mo", "FCANCELSTATUS", cancel_row)
                     if fcancel is None:
-                        fcancel = item[9]
+                        fcancel = item[8]
                     fcancel = self._safe_str(fcancel)
                     if fcancel is None:
                         fcancel = ""
@@ -1349,7 +1343,6 @@ class MySQLManager:
                         fbilltype,
                         fdate,
                         fprdorgid,
-                        fworkshopid,
                         fdocstatus,
                         fcreated,
                         fmodifydate,
@@ -1362,7 +1355,6 @@ class MySQLManager:
                     fbilltype = self._safe_str(item[4])
                     fdate = self._parse_datetime(item[8])
                     fprdorgid = self._to_int_or_none(item[18] if len(item) > 18 else None) or 0
-                    fworkshopid = 0
                     fdocstatus = ""
                     fcreated = None
                     fmodifydate = self._parse_datetime(item[14])
@@ -1386,7 +1378,6 @@ class MySQLManager:
                         fbilltype,
                         fdate,
                         fprdorgid,
-                        fworkshopid,
                         fdocstatus,
                         fcreated,
                         fmodifydate,

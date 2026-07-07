@@ -245,6 +245,42 @@ class UpsertEngineSqlServerTests(unittest.TestCase):
         self.assertEqual(inserted, 1)
         self.assertEqual(len(manager.cursor.executemany_calls[0][1]), 1)
 
+    def test_stk_instock_filters_missing_entryid(self) -> None:
+        manager = FakeSqlServerManager()
+        manager.cursor._fetchall_queue = [
+            [
+                ("FID", "bigint", None),
+                ("FENTRYID", "bigint", None),
+                ("FSEQ", "int", None),
+                ("FBILLNO", "nvarchar", 80),
+                ("SYNC_TIME", "datetime", None),
+            ],
+            [],
+        ]
+        manager._parse_insert_sql = lambda sql: ("STK_InStock", ["FID", "FENTRYID", "FSEQ", "FBILLNO"])
+        manager._get_table_columns_info = lambda table: {
+            "FID": "bigint",
+            "FENTRYID": "bigint",
+            "FSEQ": "int",
+            "FBILLNO": "nvarchar",
+            "SYNC_TIME": "datetime",
+        }
+        manager._get_primary_key = lambda table: "FENTRYID"
+        engine = UpsertEngineSqlServer(manager)
+
+        inserted = engine.execute(
+            sql="INSERT INTO STK_InStock (FID, FENTRYID, FSEQ, FBILLNO) VALUES (%s, %s, %s, %s)",
+            values=[
+                [10, None, 1, "PI20260708001"],
+                [10, 1001, 1, "PI20260708001"],
+            ],
+            batch_size=10000,
+            commit_every_n_batches=0,
+        )
+
+        self.assertEqual(inserted, 1)
+        self.assertEqual(len(manager.cursor.executemany_calls[0][1]), 1)
+
     def test_ar_receivable_staging_allows_omitted_sync_time(self) -> None:
         manager = FakeSqlServerManager()
         manager.config["force_staging_tables"] = "ar_receivable"

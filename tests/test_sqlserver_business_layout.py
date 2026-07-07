@@ -267,6 +267,48 @@ class SqlServerBusinessLayoutTests(unittest.TestCase):
             ],
         )
 
+    def test_stk_instock_places_material_and_source_fields_before_modifydate(self) -> None:
+        existing = [
+            "FID",
+            "FENTRYID",
+            "FSEQ",
+            "FBILLNO",
+            "FDATE",
+            "FDOCUMENTSTATUS",
+            "FSUPPLIERNAME",
+            "FPURCHASEORGNAME",
+            "FMODIFYDATE",
+            "SYNC_TIME",
+            "FMATERIALNUMBER",
+            "FMATERIALNAME",
+            "FREALQTY",
+            "FSRCBILLNO",
+            "FSRCENTRYSEQ",
+        ]
+
+        ordered = resolve_desired_order("STK_InStock", existing)
+
+        self.assertEqual(
+            ordered,
+            [
+                "FID",
+                "FENTRYID",
+                "FSEQ",
+                "FBILLNO",
+                "FDATE",
+                "FDOCUMENTSTATUS",
+                "FSUPPLIERNAME",
+                "FPURCHASEORGNAME",
+                "FMATERIALNUMBER",
+                "FMATERIALNAME",
+                "FREALQTY",
+                "FSRCBILLNO",
+                "FSRCENTRYSEQ",
+                "FMODIFYDATE",
+                "SYNC_TIME",
+            ],
+        )
+
 
 if __name__ == "__main__":
     unittest.main()

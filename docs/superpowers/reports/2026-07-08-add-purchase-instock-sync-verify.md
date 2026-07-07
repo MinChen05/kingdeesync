@@ -42,6 +42,12 @@
   - Local `logs/sync_stats.db` recorded both `run_stats` and `form_stats` for the same run; `form_stats.table_name` was empty in the current implementation.
   - `logs/app.log` captured 19 matching lines and `logs/app.jsonl` captured 5 matching audit/completion lines for the run.
   - No pending checkpoint files remained after the successful 0-row incremental sync.
+- 2026-07-08 `sync_stats.form_stats.table_name` fix verification:
+  - Commit `c073c3b0` updates local stats recording to fall back to `DataSyncManager.table_mapping` when a form result omits `table_name`.
+  - Regression test first reproduced the empty `table_name`, then passed after the fix.
+  - Focused regression command result: `27 passed in 0.39s`.
+  - Formal entrypoint re-run `run_id=da2a2b6a0c5f40b5a86cd39a8174f026` succeeded with 0 new rows, and `logs/sync_stats.db.form_stats.table_name` recorded `STK_InStock`.
+  - `dbo.STK_InStock` remained at 1000 rows after the re-run.
 
 ## Requirement Mapping
 
@@ -84,6 +90,7 @@
   - Real write verification created `dbo.STK_InStock` and `UX_STK_InStock_fentryid`, inserted/updated 10 sampled rows, and confirmed 10 matching target rows after the write.
   - Expanded write verification inserted/updated 1000 sampled rows, confirmed 0 invalid rows, 0 failed rows, 0 duplicate source keys, 0 duplicate target `FENTRYID` groups, and repeat-write row delta 0.
   - Formal incremental sync entrypoint verification recorded success in `sync_runs`, `sync_logs`, `logs/sync_stats.db`, `logs/app.log`, and `logs/app.jsonl`.
+  - Local form stats now record `table_name=STK_InStock` for purchase instock formal sync runs.
 
 ## Issues
 
@@ -97,7 +104,7 @@ None.
 
 ### SUGGESTION
 
-- Optional follow-up: populate `form_stats.table_name` for form-level local stats (reason: the formal entrypoint recorded the purchase instock form row, but the table name field is currently blank in `logs/sync_stats.db`).
+None.
 
 ## Final Assessment
 

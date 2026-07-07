@@ -37,6 +37,12 @@
   - 本地 `logs/sync_stats.db` 已记录 `run_stats` 与 `form_stats`；其中 `form_stats.table_name` 当前为空（原因：现有统计落库未填充该字段，不影响 SQL Server 同步日志）。
   - `logs/app.log` 命中 19 条本次采购入库单/run 日志，`logs/app.jsonl` 命中 5 条审计/完成日志。
   - 成功同步后未留下 pending checkpoint 文件。
+- 2026-07-08 `sync_stats.form_stats.table_name` 修复验证
+  - 提交 `c073c3b0` 已将本地统计写入改为：当表单结果缺少 `table_name` 时，从 `DataSyncManager.table_mapping` 兜底获取目标表名（原因：正式同步结果当前不直接返回表名）。
+  - 新增回归测试先复现 `form_stats.table_name=''`，修复后通过。
+  - 相关回归命令结果：`27 passed in 0.39s`。
+  - 正式入口复验 `run_id=da2a2b6a0c5f40b5a86cd39a8174f026` 成功，金蝶返回 0 条新数据，`logs/sync_stats.db.form_stats.table_name` 已记录 `STK_InStock`。
+  - 复验后 `dbo.STK_InStock` 仍为 1000 行。
 - `python -m pytest tests/test_config_manager.py tests/test_purchase_instock_write_validation.py tests/test_writers_registry.py tests/test_upsert_engine_sqlserver.py::UpsertEngineSqlServerTests::test_stk_instock_filters_missing_entryid tests/test_sqlserver_business_layout.py::SqlServerBusinessLayoutTests::test_stk_instock_places_material_and_source_fields_before_modifydate -q`
   - 结果：`19 passed in 0.25s`
 - `python -m pytest tests/test_config_manager.py tests/test_purchase_instock_write_validation.py tests/test_writers_registry.py tests/test_upsert_engine_sqlserver.py::UpsertEngineSqlServerTests::test_stk_instock_filters_missing_entryid tests/test_sqlserver_business_layout.py::SqlServerBusinessLayoutTests::test_stk_instock_places_material_and_source_fields_before_modifydate -q`
@@ -54,6 +60,7 @@
 - 目标表已具备 `UX_STK_InStock_fentryid` 唯一索引，`FModifyDate` 可用于增量/排查。
 - 1000 行重复写入验证显示目标表总行数不再增长，重复 `FENTRYID` 组数为 0（原因：证明分录级幂等键在当前目标库生效）。
 - 正式入口验证显示 `sync_runs`、`sync_logs`、`sync_stats.db`、`app.log` 和 `app.jsonl` 均可观测到本次增量同步；checkpoint 成功清理或未生成 pending 文件。
+- `sync_stats.db.form_stats.table_name` 已在修复后记录 `STK_InStock`，与 SQL Server `sync_logs.table_name` 保持一致。
 
 ## 既有改动归因
 

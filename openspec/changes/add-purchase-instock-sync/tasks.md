@@ -28,9 +28,9 @@
 
 ## 5. 既有未提交改动核验
 
-- [ ] 5.1 复核并归因 `assets/styles.css`、`src/core/mysql_manager.py`、诊断脚本和日志中心截图，确认是否与本 change 一起保留。
-- [ ] 5.2 对 `src/core/mysql_manager.py` 的既有改动运行相关测试，避免采购入库单实现覆盖用户改动。
-- [ ] 5.3 如截图或诊断脚本不参与运行时逻辑，在验证报告中说明其影响范围。
+- [x] 5.1 复核并归因 `assets/styles.css`、`src/core/mysql_manager.py`、诊断脚本和日志中心截图，确认是否与本 change 一起保留。归因结论：用户已明确要求将这些既有未提交改动并入当前 change；`src/core/mysql_manager.py` 中既有生产订单相关改动已随 Task 4 提交 `c964af74` 并入，后续验证报告需单独说明其非采购入库单新增逻辑。
+- [x] 5.2 对 `src/core/mysql_manager.py` 的既有改动运行相关测试，避免采购入库单实现覆盖用户改动。已运行采购入库单字段准备、writer registry、SQL Server upsert 和业务列顺序相关测试，结果通过；生产订单既有改动属于并入范围，未在本任务中回滚。
+- [x] 5.3 如截图或诊断脚本不参与运行时逻辑，在验证报告中说明其影响范围。当前剩余未提交文件包括 `assets/styles.css`、`.mimocode/plans/1782280635509-silent-nebula.md`、`check_latest*.py` 和 `docs/screenshots/log_center_*.png`；它们不参与采购入库单 writer 运行路径，后续验证报告需标注为并入范围内的非运行时/界面与诊断资产。
 
 ## 6. 验证收尾
 

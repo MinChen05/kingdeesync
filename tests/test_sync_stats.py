@@ -159,6 +159,48 @@ class SyncStatsSchemaTests(unittest.TestCase):
         self.assertEqual(rows.get("partial"), 1)
         self.assertEqual(rows.get("failed"), 1)
 
+    def test_record_run_stats_uses_table_mapping_when_result_table_name_missing(self):
+        """正式同步结果缺少 table_name 时，应从表单映射补齐本地统计表名。"""
+        from src.core.data_sync import DataSyncManager, SyncStatus, SyncType
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            previous_cwd = os.getcwd()
+            os.chdir(tmp_dir)
+            try:
+                os.mkdir("logs")
+                manager = DataSyncManager.__new__(DataSyncManager)
+                manager.table_mapping = {"采购入库单": "STK_InStock"}
+
+                manager._record_run_stats(
+                    run_id="run-purchase-instock",
+                    sync_type=SyncType.INCREMENTAL,
+                    run_status=SyncStatus.SUCCESS,
+                    total_records=0,
+                    duration_seconds=1.0,
+                    failed_forms=[],
+                    results={
+                        "采购入库单": {
+                            "status": "success",
+                            "fetched": 0,
+                            "inserted": 0,
+                            "duration_seconds": 0,
+                        }
+                    },
+                )
+
+                conn = sqlite3.connect(os.path.join("logs", "sync_stats.db"))
+                try:
+                    row = conn.execute(
+                        "SELECT form_name, table_name FROM form_stats WHERE run_id=?",
+                        ("run-purchase-instock",),
+                    ).fetchone()
+                finally:
+                    conn.close()
+            finally:
+                os.chdir(previous_cwd)
+
+        self.assertEqual(row, ("采购入库单", "STK_InStock"))
+
 
 if __name__ == "__main__":
     unittest.main()

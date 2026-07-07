@@ -276,6 +276,7 @@ class DataSyncManager:
             for form_name, res in results.items():
                 if not isinstance(res, dict):
                     continue
+                table_name = res.get("table_name") or self.table_mapping.get(form_name, "")
                 conn.execute(
                     "INSERT INTO form_stats "
                     "(run_id, form_name, table_name, fetched, inserted, "
@@ -284,7 +285,7 @@ class DataSyncManager:
                     (
                         run_id,
                         str(form_name),
-                        str(res.get("table_name", "")),
+                        str(table_name),
                         int(res.get("fetched", 0)),
                         int(res.get("inserted", 0)),
                         str(res.get("status", "unknown")),

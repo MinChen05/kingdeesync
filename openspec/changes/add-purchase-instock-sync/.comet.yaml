@@ -1,0 +1,16 @@
+workflow: full
+phase: build
+build_mode: subagent-driven-development
+isolation: worktree
+verify_mode: null
+base_ref: 850dae0d84e7967ed42008eec5ea9a4e2b779949
+design_doc: docs/superpowers/specs/2026-07-07-purchase-instock-sync-design.md
+plan: docs/superpowers/plans/2026-07-08-purchase-instock-sync.md
+verify_result: pending
+verification_report: null
+branch_status: pending
+created_at: 2026-07-07
+verified_at: null
+archived: false
+handoff_context: openspec/changes/add-purchase-instock-sync/.comet/handoff/design-context.json
+handoff_hash: 036eec0cf0faf7c21e38ab7a42f5198d5cd53d17cfcf4af988912df71ee92f0c

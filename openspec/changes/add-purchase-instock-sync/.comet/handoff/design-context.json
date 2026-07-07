@@ -1,0 +1,14 @@
+{
+  "change": "add-purchase-instock-sync",
+  "phase": "design",
+  "mode": "compact",
+  "canonical_spec": "openspec",
+  "generated_by": "comet-handoff.sh",
+  "context_hash": "036eec0cf0faf7c21e38ab7a42f5198d5cd53d17cfcf4af988912df71ee92f0c",
+  "files": [
+    { "path": "openspec/changes/add-purchase-instock-sync/proposal.md", "sha256": "10bea4b6d800633216ff0b77877948cb0b8c91f051c35c4c5bf108c0318c08ab" },
+    { "path": "openspec/changes/add-purchase-instock-sync/design.md", "sha256": "cfb8476e21dba9fe8e8f67f5f6cdd5decd11b8bc2bac94f21dba70336c0bc374" },
+    { "path": "openspec/changes/add-purchase-instock-sync/tasks.md", "sha256": "96fb13936b346cf2cc252ac9516178892c175306bbce4acb1964a0012f313fa8" },
+    { "path": "openspec/changes/add-purchase-instock-sync/specs/purchase-instock-sync/spec.md", "sha256": "2641f9386ec3f57dc9d473e59a2ebca3c0f1ba499fb4bdf0dad85f1734cc3a07" }
+  ]
+}

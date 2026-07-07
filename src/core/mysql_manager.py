@@ -1028,6 +1028,7 @@ class MySQLManager:
             "bd_stock": "FSTOCKID",
             "eng_bomchild": "FID,FENTRYID",
             "prd_instock": "FENTRYID",
+            "stk_instock": "FENTRYID",
             "pur_purchaseorder": "FID,FENTRYID",
             "sub_subreqorder": "FID,FENTRYID",
             "ar_receivable": "FENTRYID",
@@ -1260,7 +1261,7 @@ class MySQLManager:
 
     def _prepare_production_order_data(self, item) -> tuple | None:
         """准备生产订单数据（新增 FCREATEDATE）
-        字段顺序: FID, FBILLNO, FBILLTYPE, FDATE, FPRDORGID, FWORKSHOPID, FDocumentStatus, FCREATEDATE, FMODIFYDATE, FCANCELSTATUS
+        字段顺序: FID, FBILLNO, FBILLTYPE, FDATE, FPRDORGID, FDocumentStatus, FCREATEDATE, FMODIFYDATE, FCANCELSTATUS
         """
         try:
             # 检查数据类型
@@ -1276,10 +1277,6 @@ class MySQLManager:
                 )
                 fdate = self._parse_datetime(item.get("FDATE") or item.get("FDate"))
                 fprdorgid = self._to_int_or_none(item.get("FPrdOrgId") or item.get("FPRDORGID")) or 0
-                fworkshopid = (
-                    self._to_int_or_none(item.get("FWORKSHOPID") or item.get("FWorkShopID") or item.get("FWorkshopID"))
-                    or 0
-                )
                 fdocstatus = self._convert_production_status(
                     item.get("FDocumentStatus") or item.get("FDOCUMENTSTATUS") or item.get("FSTATUS")
                 )
@@ -1303,7 +1300,6 @@ class MySQLManager:
                     fbilltype,
                     fdate,
                     fprdorgid,
-                    fworkshopid,
                     fdocstatus,
                     fcreated,
                     fmodifydate,
@@ -1312,34 +1308,32 @@ class MySQLManager:
             if isinstance(item, list):
                 # 列表格式数据
                 if len(item) == 10:
-                    # 新FieldKeys: FID, FBILLNO, FBILLTYPE.FNAME, FDATE, FPRDORGID, FWORKSHOPID, FDocumentStatus, FCREATEDATE, FModifyDate, FCancelStatus
+                    # 新FieldKeys: FID, FBILLNO, FBILLTYPE.FNAME, FDATE, FPRDORGID, FDocumentStatus, FCREATEDATE, FModifyDate, FCancelStatus
                     fid = self._to_int_or_none(item[0]) or 0
                     fbillno = self._safe_str(item[1])
                     fbilltype = self._safe_str(item[2])
                     fdate = self._parse_datetime(item[3])
                     fprdorgid = self._to_int_or_none(item[4]) or 0
-                    fworkshopid = self._to_int_or_none(item[5]) or 0
-                    fdocstatus = self._convert_production_status(item[6])
+                    fdocstatus = self._convert_production_status(item[5])
                     if fdocstatus is None:
                         fdocstatus = ""
-                    fcreated = self._parse_datetime(item[7])
-                    fmodifydate = self._parse_datetime(item[8])
+                    fcreated = self._parse_datetime(item[6])
+                    fmodifydate = self._parse_datetime(item[7])
                     cancel_row = {
                         "FID": item[0],
                         "FBILLNO": item[1],
                         "FBILLTYPE.FNAME": item[2],
                         "FDATE": item[3],
                         "FPRDORGID": item[4],
-                        "FWORKSHOPID": item[5],
-                        "FDocumentStatus": item[6],
-                        "FCREATEDATE": item[7],
-                        "FModifyDate": item[8],
-                        "FCANCELSTATUS": item[9],
-                        "FCancelStatus": item[9],
+                        "FDocumentStatus": item[5],
+                        "FCREATEDATE": item[6],
+                        "FModifyDate": item[7],
+                        "FCANCELSTATUS": item[8],
+                        "FCancelStatus": item[8],
                     }
                     fcancel = self._resolve_configured_field("prd_mo", "FCANCELSTATUS", cancel_row)
                     if fcancel is None:
-                        fcancel = item[9]
+                        fcancel = item[8]
                     fcancel = self._safe_str(fcancel)
                     if fcancel is None:
                         fcancel = ""
@@ -1349,7 +1343,6 @@ class MySQLManager:
                         fbilltype,
                         fdate,
                         fprdorgid,
-                        fworkshopid,
                         fdocstatus,
                         fcreated,
                         fmodifydate,
@@ -1362,7 +1355,6 @@ class MySQLManager:
                     fbilltype = self._safe_str(item[4])
                     fdate = self._parse_datetime(item[8])
                     fprdorgid = self._to_int_or_none(item[18] if len(item) > 18 else None) or 0
-                    fworkshopid = 0
                     fdocstatus = ""
                     fcreated = None
                     fmodifydate = self._parse_datetime(item[14])
@@ -1386,7 +1378,6 @@ class MySQLManager:
                         fbilltype,
                         fdate,
                         fprdorgid,
-                        fworkshopid,
                         fdocstatus,
                         fcreated,
                         fmodifydate,
@@ -1861,6 +1852,89 @@ class MySQLManager:
 
     def insert_purchase_order(self, data: list[dict]) -> int:
         return self.execute_writer("insert_purchase_order", data)
+
+    def insert_purchase_instock(self, data: list[dict]) -> int:
+        return self.execute_writer("insert_purchase_instock", data)
+
+    def _prepare_purchase_instock_data(self, item) -> tuple | None:
+        """准备采购入库单数据映射"""
+        try:
+            def mark_invalid() -> None:
+                outcome = getattr(self, "_last_write_outcome", None)
+                if outcome is not None:
+                    outcome.invalid = int(getattr(outcome, "invalid", 0) or 0) + 1
+
+            def first_value(*keys):
+                for key in keys:
+                    if key in item:
+                        return item.get(key)
+                return None
+
+            if isinstance(item, dict):
+                raw_fid = first_value("FID", "FId", "Id")
+                raw_fentryid = first_value("FInStockEntry_FENTRYID", "FEntity_FENTRYID", "FENTRYID")
+                fid = self._to_int_or_none(raw_fid)
+                fentryid = self._to_int_or_none(raw_fentryid)
+                if fid is None or fentryid is None:
+                    billno = first_value("FBillNo", "FBILLNO")
+                    logger.warning(
+                        "采购入库单主键为空，已跳过: FID=%s(%s) FENTRYID=%s(%s) FBILLNO=%s",
+                        raw_fid,
+                        type(raw_fid).__name__,
+                        raw_fentryid,
+                        type(raw_fentryid).__name__,
+                        billno,
+                    )
+                    mark_invalid()
+                    return None
+
+                billno = self._safe_str(first_value("FBillNo", "FBILLNO"))
+                if billno is None:
+                    logger.warning("采购入库单单号为空，已跳过: FID=%s FENTRYID=%s", fid, fentryid)
+                    mark_invalid()
+                    return None
+
+                fseq = self._to_int_or_none(first_value("FInStockEntry_FSEQ", "FSEQ"))
+                fdate = self._parse_datetime(first_value("FDate", "FDATE"))
+                docstatus = first_value("FDocumentStatus", "FDOCUMENTSTATUS")
+                supplier = self._safe_str(
+                    first_value("FSupplierId.FNAME", "FSupplierId.FName", "FSUPPLIERID.FNAME")
+                )
+                purchase_org = self._safe_str(
+                    first_value("FPurchaseOrgId.FNAME", "FPurchaseOrgId.FName", "FPURCHASEORGID.FNAME")
+                )
+                material_number = self._safe_str(
+                    first_value("FMaterialId.FNUMBER", "FMaterialId.FNumber", "FMATERIALID.FNUMBER")
+                )
+                material_name = self._safe_str(
+                    first_value("FMaterialId.FNAME", "FMaterialId.FName", "FMATERIALID.FNAME")
+                )
+                real_qty = self._to_decimal_or_none(first_value("FRealQty", "FREALQTY"))
+                if real_qty is None:
+                    real_qty = 0
+                src_billno = self._safe_str(first_value("FSrcBillNo", "FSRCBILLNO"))
+                src_entry_seq = self._to_int_or_none(first_value("FSrcEntrySeq", "FSRCENTRYSEQ"))
+                fmodify = self._parse_datetime(first_value("FModifyDate", "FMODIFYDATE"))
+                return (
+                    fid,
+                    fentryid,
+                    fseq,
+                    billno,
+                    fdate,
+                    docstatus,
+                    supplier,
+                    purchase_org,
+                    material_number,
+                    material_name,
+                    real_qty,
+                    src_billno,
+                    src_entry_seq,
+                    fmodify,
+                )
+            return None
+        except Exception as e:
+            logger.error(f"准备采购入库单数据失败: {str(e)}")
+            return None
 
     def _prepare_purchase_order_data(self, item) -> tuple | None:
         """准备采购订单数据映射

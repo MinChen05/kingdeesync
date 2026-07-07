@@ -1,0 +1,18 @@
+workflow: full
+phase: verify
+build_mode: subagent-driven-development
+isolation: worktree
+verify_mode: full
+base_ref: 850dae0d84e7967ed42008eec5ea9a4e2b779949
+design_doc: docs/superpowers/specs/2026-07-07-purchase-instock-sync-design.md
+plan: docs/superpowers/plans/2026-07-08-purchase-instock-sync.md
+verify_result: pending
+verification_report: docs/superpowers/reports/2026-07-08-add-purchase-instock-sync-verify.md
+branch_status: pending
+created_at: 2026-07-07
+verified_at: null
+archived: false
+handoff_context: openspec/changes/add-purchase-instock-sync/.comet/handoff/design-context.json
+handoff_hash: 036eec0cf0faf7c21e38ab7a42f5198d5cd53d17cfcf4af988912df71ee92f0c
+build_command: /mnt/c/Users/Administrator/AppData/Local/Programs/Python/Python311/python.exe -m pytest tests/test_config_manager.py::ConfigManagerTests::test_builtin_tables_json_registers_purchase_instock_sync tests/test_writers_registry.py tests/test_purchase_instock_write_validation.py tests/test_upsert_engine_sqlserver.py tests/test_sqlserver_business_layout.py tests/test_prd_instock_write_validation.py tests/test_ap_payable_field_mapping.py -q
+verify_command: /mnt/c/Users/Administrator/AppData/Local/Programs/Python/Python311/python.exe -m pytest tests/test_config_manager.py::ConfigManagerTests::test_builtin_tables_json_registers_purchase_instock_sync tests/test_writers_registry.py tests/test_purchase_instock_write_validation.py tests/test_upsert_engine_sqlserver.py tests/test_sqlserver_business_layout.py tests/test_prd_instock_write_validation.py tests/test_ap_payable_field_mapping.py -q

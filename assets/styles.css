@@ -5525,83 +5525,120 @@ QMainWindow[theme="win11-shell"] QWidget[page="log-center"] QLabel[ui="lc-filter
     font-size: 13px;
 }
 
-QMainWindow[theme="win11-shell"] QWidget[page="log-center"] QFrame[ui="lc-stat-card"] {
-    background-color: #ffffff;
-    border: 1px solid #D4E5F3;
+QMainWindow[theme="win11-shell"] QWidget[page="log-center"] QFrame[ui="lc-toolbar"] {
+    background-color: #F7FBFF;
+    border: 1px solid #E5F0F8;
     border-radius: 10px;
 }
 
-QMainWindow[theme="win11-shell"] QWidget[page="log-center"] QLabel[ui="lc-stat-title"] {
-    color: #647F97;
-    font-size: 13px;
+QMainWindow[theme="win11-shell"] QWidget[page="log-center"] QFrame[ui="lc-separator"] {
+    color: #D4E5F3;
 }
 
-QMainWindow[theme="win11-shell"] QWidget[page="log-center"] QLabel[ui="lc-stat-value"] {
-    color: #14263A;
-    font-size: 20px;
-    font-weight: 700;
-}
-
-QMainWindow[theme="win11-shell"] QWidget[page="log-center"] QLabel[ui="lc-stat-trend"] {
-    color: #41607B;
-    font-size: 11px;
-}
-
-QMainWindow[theme="win11-shell"] QWidget[page="log-center"] QLabel[ui="lc-sidebar-title"] {
-    color: #14263A;
-    font-size: 14px;
-    font-weight: 700;
-}
-
-QMainWindow[theme="win11-shell"] QWidget[page="log-center"] QFrame[ui="lc-module-item"] {
+QMainWindow[theme="win11-shell"] QWidget[page="log-center"] QPushButton[ui="lc-level-btn"] {
     background-color: transparent;
-    border: none;
-}
-
-QMainWindow[theme="win11-shell"] QWidget[page="log-center"] QFrame[ui="lc-module-item"]:hover {
-    background-color: #EDF6FF;
-}
-
-QMainWindow[theme="win11-shell"] QWidget[page="log-center"] QFrame[ui="lc-module-item"][selected="true"] {
-    background-color: #E5F3FF;
-}
-
-QMainWindow[theme="win11-shell"] QWidget[page="log-center"] QLabel[ui="lc-module-name"] {
-    color: #14263A;
-    font-size: 13px;
-}
-
-QMainWindow[theme="win11-shell"] QWidget[page="log-center"] QLabel[ui="lc-module-count"] {
-    color: #647F97;
-    font-size: 12px;
-}
-
-QMainWindow[theme="win11-shell"] QWidget[page="log-center"] QPushButton[ui="lc-view-btn"] {
-    background-color: #ffffff;
     border: 1px solid #D4E5F3;
     border-radius: 6px;
-    color: #284157;
+    color: #41607B;
     font-size: 12px;
-    padding-left: 12px;
-    padding-right: 12px;
+    padding-left: 8px;
+    padding-right: 8px;
 }
 
-QMainWindow[theme="win11-shell"] QWidget[page="log-center"] QPushButton[ui="lc-view-btn"]:checked {
+QMainWindow[theme="win11-shell"] QWidget[page="log-center"] QPushButton[ui="lc-level-btn"]:hover {
+    background-color: #EDF6FF;
+    border-color: #4CA8F8;
+}
+
+QMainWindow[theme="win11-shell"] QWidget[page="log-center"] QPushButton[ui="lc-level-btn"]:checked {
     background-color: #2578DA;
     border-color: #2578DA;
     color: #ffffff;
 }
 
-QMainWindow[theme="win11-shell"] QWidget[page="log-center"] QPushButton[ui="lc-bottom-btn"] {
-    background-color: transparent;
-    border: none;
-    color: #2578DA;
-    font-size: 13px;
+QMainWindow[theme="win11-shell"] QWidget[page="log-center"] QWidget[ui="lc-detail-container"] {
+    background-color: #F7FBFF;
+    border-top: 1px solid #E5F0F8;
 }
 
-QMainWindow[theme="win11-shell"] QWidget[page="log-center"] QLabel[ui="lc-bottom-label"] {
+QMainWindow[theme="win11-shell"] QWidget[page="log-center"] QLabel[ui="lc-detail-title"] {
+    color: #14263A;
+    font-size: 13px;
+    font-weight: 600;
+}
+
+QMainWindow[theme="win11-shell"] QWidget[page="log-center"] QLabel[ui="lc-detail-meta"] {
     color: #647F97;
     font-size: 12px;
+}
+
+QMainWindow[theme="win11-shell"] QWidget[page="log-center"] QTextEdit[ui="lc-detail-message"] {
+    background-color: #ffffff;
+    border: 1px solid #D4E5F3;
+    border-radius: 6px;
+    color: #284157;
+    font-family: "Cascadia Code", "Consolas", monospace;
+    font-size: 12px;
+    padding: 8px;
+}
+
+QMainWindow[theme="win11-shell"] QWidget[page="log-center"] QPushButton[ui="lc-detail-close"] {
+    background-color: transparent;
+    border: none;
+    color: #647F97;
+    font-size: 12px;
+}
+
+QMainWindow[theme="win11-shell"] QWidget[page="log-center"] QPushButton[ui="lc-detail-close"]:hover {
+    color: #2578DA;
+}
+
+QMainWindow[theme="win11-shell"] QWidget[page="log-center"] QFrame[ui="lc-summary-bar"] {
+    background-color: #F7FBFF;
+    border: 1px solid #E5F0F8;
+    border-radius: 8px;
+}
+
+QMainWindow[theme="win11-shell"] QWidget[page="log-center"] QLabel[ui="lc-summary-count"] {
+    color: #14263A;
+    font-size: 13px;
+    font-weight: 600;
+}
+
+QMainWindow[theme="win11-shell"] QWidget[page="log-center"] QLabel[ui="lc-summary-errors"] {
+    color: #C24D4D;
+    font-size: 12px;
+}
+
+QMainWindow[theme="win11-shell"] QWidget[page="log-center"] QLabel[ui="lc-summary-warnings"] {
+    color: #B0861A;
+    font-size: 12px;
+}
+
+QMainWindow[theme="win11-shell"] QWidget[page="log-center"] QLabel[ui="lc-summary-sep"] {
+    color: #D4E5F3;
+    font-size: 12px;
+}
+
+QMainWindow[theme="win11-shell"] QWidget[page="log-center"] QPushButton[ui="lc-toggle-btn"] {
+    background-color: transparent;
+    border: 1px solid #D4E5F3;
+    border-radius: 6px;
+    color: #41607B;
+    font-size: 12px;
+    padding-left: 10px;
+    padding-right: 10px;
+}
+
+QMainWindow[theme="win11-shell"] QWidget[page="log-center"] QPushButton[ui="lc-toggle-btn"]:hover {
+    background-color: #EDF6FF;
+    border-color: #4CA8F8;
+}
+
+QMainWindow[theme="win11-shell"] QWidget[page="log-center"] QPushButton[ui="lc-toggle-btn"]:checked {
+    background-color: #2578DA;
+    border-color: #2578DA;
+    color: #ffffff;
 }
 
 /* ═══════ 系统设置页面样式 ═══════ */

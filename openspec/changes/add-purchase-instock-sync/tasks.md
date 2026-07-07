@@ -34,7 +34,7 @@
 
 ## 6. 验证收尾
 
-- [ ] 6.1 运行 `pytest` 中采购入库单相关单元测试。
-- [ ] 6.2 运行配置管理、writer registry、upsert/staging 相关回归测试。
-- [ ] 6.3 执行采购入库单 dry-run，并记录预期 SQL Server 写入日志变化。
-- [ ] 6.4 运行 `openspec validate add-purchase-instock-sync --strict`。
+- [x] 6.1 运行 `pytest` 中采购入库单相关单元测试。
+- [x] 6.2 运行配置管理、writer registry、upsert/staging 相关回归测试。
+- [x] 6.3 执行采购入库单 dry-run，并记录预期 SQL Server 写入日志变化。未连接生产库；已在 `verification-report.md` 记录 dry-run/小批量同步时应观察的 SQL Server 写入日志。
+- [x] 6.4 运行 `openspec validate add-purchase-instock-sync --strict`。

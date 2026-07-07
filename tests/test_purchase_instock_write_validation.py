@@ -72,6 +72,20 @@ class PurchaseInstockPrepareTests(unittest.TestCase):
         self.assertEqual(prepared[1], 1001)
         self.assertEqual(prepared[3], "PI20260708001")
 
+    def test_prepare_purchase_instock_data_maps_instock_entry_fseq_to_source_entry_seq(self) -> None:
+        item = {
+            "FID": 10,
+            "FInStockEntry_FENTRYID": 1001,
+            "FInStockEntry_FSEQ": 3,
+            "FBillNo": "PI20260708001",
+            "FInStockEntry_fseq": 3,
+        }
+
+        prepared = self.manager._prepare_purchase_instock_data(item)
+
+        self.assertIsNotNone(prepared)
+        self.assertEqual(prepared[12], 3)
+
 
 if __name__ == "__main__":
     unittest.main()

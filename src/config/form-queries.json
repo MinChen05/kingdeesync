@@ -205,7 +205,7 @@
   },
   "采购入库单": {
     "FormId": "STK_InStock",
-    "FieldKeys": "FID,FInStockEntry_FENTRYID,FInStockEntry_FSEQ,FBillNo,FDate,FDocumentStatus,FSupplierId.FNAME,FPurchaseOrgId.FNAME,FMaterialId.FNUMBER,FMaterialId.FNAME,FRealQty,FSrcBillNo,FSrcEntrySeq,FModifyDate",
+    "FieldKeys": "FID,FInStockEntry_FENTRYID,FInStockEntry_FSEQ,FBillNo,FDate,FDocumentStatus,FSupplierId.FNAME,FPurchaseOrgId.FNAME,FMaterialId.FNUMBER,FMaterialId.FNAME,FRealQty,FSrcBillNo,FInStockEntry_fseq,FModifyDate",
     "FilterString": "FPurchaseOrgId = 171190",
     "OrderString": "",
     "TopRowCount": 0,

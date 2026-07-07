@@ -1913,7 +1913,9 @@ class MySQLManager:
                 if real_qty is None:
                     real_qty = 0
                 src_billno = self._safe_str(first_value("FSrcBillNo", "FSRCBILLNO"))
-                src_entry_seq = self._to_int_or_none(first_value("FSrcEntrySeq", "FSRCENTRYSEQ"))
+                src_entry_seq = self._to_int_or_none(
+                    first_value("FSrcEntrySeq", "FSRCENTRYSEQ", "FInStockEntry_fseq", "FInStockEntry_FSEQ")
+                )
                 fmodify = self._parse_datetime(first_value("FModifyDate", "FMODIFYDATE"))
                 return (
                     fid,

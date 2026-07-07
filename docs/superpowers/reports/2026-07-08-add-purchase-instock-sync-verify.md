@@ -18,6 +18,13 @@
   - Purchase instock focused tests: `6 passed`.
   - SQL Server upsert/layout tests: `20 passed`.
   - Adjacent form regression tests: `10 passed`.
+- 2026-07-08 real Kingdee dry-run and SQL Server write verification:
+  - `STK_InStock` query with `Limit=10` returned 10 rows.
+  - `FSrcEntrySeq` was rejected by Kingdee metadata; `FInStockEntry_fseq` was accepted and matched `FInStockEntry_FSEQ` for the sampled rows.
+  - `FInStockEntry_fseq` now feeds target column `FSRCENTRYSEQ`.
+  - SQL Server target table `dbo.STK_InStock` did not exist before the write verification, so the non-report business table and unique index `UX_STK_InStock_fentryid` were created.
+  - Before write: 0 matching `FENTRYID` rows. Writer result: 10 rows. After write: 10 matching rows and 10 total rows.
+  - SQL Server log evidence: `成功插入/更新 10 条记录 (SQL Server)`.
 
 ## Requirement Mapping
 
@@ -34,6 +41,7 @@
 - Evidence:
   - `src/core/sales_writer.py` writes the basic detail columns to `STK_InStock`.
   - `src/core/mysql_manager.py` maps `FID`, entry id, sequence, bill no, date, status, supplier, purchase org, material, quantity, source bill, source entry, and modify date.
+  - Real dry-run calibrated the source-entry sequence path to `FInStockEntry_fseq`; the writer also keeps `FSrcEntrySeq`, `FSRCENTRYSEQ`, and `FInStockEntry_FSEQ` aliases for compatibility.
   - `tests/test_purchase_instock_write_validation.py` covers normal field conversion.
 
 ### 分录级幂等写入
@@ -55,7 +63,7 @@
 - Evidence:
   - Writer registry tests confirm `insert_purchase_instock` is registered and bound to the expected callable.
   - SQL Server upsert and layout tests pass.
-  - `openspec/changes/add-purchase-instock-sync/verification-report.md` records dry-run and SQL Server write-log expectations.
+  - Real write verification created `dbo.STK_InStock` and `UX_STK_InStock_fentryid`, inserted/updated 10 sampled rows, and confirmed 10 matching target rows after the write.
 
 ## Issues
 
@@ -69,7 +77,7 @@ None.
 
 ### SUGGESTION
 
-- Run a real Kingdee dry-run against the target account before production enablement to confirm `STK_InStock` field paths and any custom fields (reason: the change intentionally defers field calibration to dry-run because Kingdee environments may differ).
+- For production-scale enablement, run a larger incremental batch after confirming the first 10-row write sample with the business owner (reason: the target field path has been calibrated, but broader data distribution may expose optional/custom fields).
 
 ## Final Assessment
 

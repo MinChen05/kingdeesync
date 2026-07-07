@@ -304,6 +304,21 @@ class ConfigManagerTests(unittest.TestCase):
         self.assertEqual(tables["应收单"]["table"], "AR_receivable")
         self.assertEqual(tables["应收单"]["insert_method"], "insert_ar_receivable")
 
+    def test_builtin_tables_json_registers_purchase_instock_sync(self) -> None:
+        repo_root = Path(__file__).resolve().parents[1]
+        tables = json.loads((repo_root / "src" / "config" / "tables.json").read_text(encoding="utf-8"))
+        form_queries = json.loads((repo_root / "src" / "config" / "form-queries.json").read_text(encoding="utf-8"))
+
+        self.assertIn("采购入库单", form_queries)
+        self.assertEqual(form_queries["采购入库单"]["FormId"], "STK_InStock")
+        field_keys = form_queries["采购入库单"]["FieldKeys"].split(",")
+        self.assertIn("FID", field_keys)
+        self.assertIn("FBillNo", field_keys)
+        self.assertIn("FModifyDate", field_keys)
+        self.assertIn("采购入库单", tables)
+        self.assertEqual(tables["采购入库单"]["table"], "STK_InStock")
+        self.assertEqual(tables["采购入库单"]["insert_method"], "insert_purchase_instock")
+
     def test_builtin_material_query_requests_fdescription(self) -> None:
         repo_root = Path(__file__).resolve().parents[1]
         form_queries = json.loads((repo_root / "src" / "config" / "form-queries.json").read_text(encoding="utf-8"))

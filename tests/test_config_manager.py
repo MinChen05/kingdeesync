@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import configparser
 import importlib
 import json
 import sys
@@ -308,6 +309,8 @@ class ConfigManagerTests(unittest.TestCase):
         repo_root = Path(__file__).resolve().parents[1]
         tables = json.loads((repo_root / "src" / "config" / "tables.json").read_text(encoding="utf-8"))
         form_queries = json.loads((repo_root / "src" / "config" / "form-queries.json").read_text(encoding="utf-8"))
+        example_config = configparser.ConfigParser()
+        example_config.read(repo_root / "config.example.ini", encoding="utf-8")
 
         self.assertIn("采购入库单", form_queries)
         self.assertEqual(form_queries["采购入库单"]["FormId"], "STK_InStock")
@@ -318,6 +321,13 @@ class ConfigManagerTests(unittest.TestCase):
         self.assertIn("采购入库单", tables)
         self.assertEqual(tables["采购入库单"]["table"], "STK_InStock")
         self.assertEqual(tables["采购入库单"]["insert_method"], "insert_purchase_instock")
+        force_staging_tables = [
+            table.strip()
+            for table in example_config.get("SQLSERVER", "force_staging_tables").split(",")
+        ]
+        self.assertIn("stk_instock", force_staging_tables)
+        self.assertNotIn("", force_staging_tables)
+        self.assertEqual(force_staging_tables.count("stk_instock"), 1)
 
     def test_builtin_material_query_requests_fdescription(self) -> None:
         repo_root = Path(__file__).resolve().parents[1]

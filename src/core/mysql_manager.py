@@ -1862,6 +1862,89 @@ class MySQLManager:
     def insert_purchase_order(self, data: list[dict]) -> int:
         return self.execute_writer("insert_purchase_order", data)
 
+    def insert_purchase_instock(self, data: list[dict]) -> int:
+        return self.execute_writer("insert_purchase_instock", data)
+
+    def _prepare_purchase_instock_data(self, item) -> tuple | None:
+        """准备采购入库单数据映射"""
+        try:
+            def mark_invalid() -> None:
+                outcome = getattr(self, "_last_write_outcome", None)
+                if outcome is not None:
+                    outcome.invalid = int(getattr(outcome, "invalid", 0) or 0) + 1
+
+            def first_value(*keys):
+                for key in keys:
+                    if key in item:
+                        return item.get(key)
+                return None
+
+            if isinstance(item, dict):
+                raw_fid = first_value("FID", "FId", "Id")
+                raw_fentryid = first_value("FInStockEntry_FENTRYID", "FEntity_FENTRYID", "FENTRYID")
+                fid = self._to_int_or_none(raw_fid)
+                fentryid = self._to_int_or_none(raw_fentryid)
+                if fid is None or fentryid is None:
+                    billno = first_value("FBillNo", "FBILLNO")
+                    logger.warning(
+                        "采购入库单主键为空，已跳过: FID=%s(%s) FENTRYID=%s(%s) FBILLNO=%s",
+                        raw_fid,
+                        type(raw_fid).__name__,
+                        raw_fentryid,
+                        type(raw_fentryid).__name__,
+                        billno,
+                    )
+                    mark_invalid()
+                    return None
+
+                billno = self._safe_str(first_value("FBillNo", "FBILLNO"))
+                if billno is None:
+                    logger.warning("采购入库单单号为空，已跳过: FID=%s FENTRYID=%s", fid, fentryid)
+                    mark_invalid()
+                    return None
+
+                fseq = self._to_int_or_none(first_value("FInStockEntry_FSEQ", "FSEQ"))
+                fdate = self._parse_datetime(first_value("FDate", "FDATE"))
+                docstatus = first_value("FDocumentStatus", "FDOCUMENTSTATUS")
+                supplier = self._safe_str(
+                    first_value("FSupplierId.FNAME", "FSupplierId.FName", "FSUPPLIERID.FNAME")
+                )
+                purchase_org = self._safe_str(
+                    first_value("FPurchaseOrgId.FNAME", "FPurchaseOrgId.FName", "FPURCHASEORGID.FNAME")
+                )
+                material_number = self._safe_str(
+                    first_value("FMaterialId.FNUMBER", "FMaterialId.FNumber", "FMATERIALID.FNUMBER")
+                )
+                material_name = self._safe_str(
+                    first_value("FMaterialId.FNAME", "FMaterialId.FName", "FMATERIALID.FNAME")
+                )
+                real_qty = self._to_decimal_or_none(first_value("FRealQty", "FREALQTY"))
+                if real_qty is None:
+                    real_qty = 0
+                src_billno = self._safe_str(first_value("FSrcBillNo", "FSRCBILLNO"))
+                src_entry_seq = self._to_int_or_none(first_value("FSrcEntrySeq", "FSRCENTRYSEQ"))
+                fmodify = self._parse_datetime(first_value("FModifyDate", "FMODIFYDATE"))
+                return (
+                    fid,
+                    fentryid,
+                    fseq,
+                    billno,
+                    fdate,
+                    docstatus,
+                    supplier,
+                    purchase_org,
+                    material_number,
+                    material_name,
+                    real_qty,
+                    src_billno,
+                    src_entry_seq,
+                    fmodify,
+                )
+            return None
+        except Exception as e:
+            logger.error(f"准备采购入库单数据失败: {str(e)}")
+            return None
+
     def _prepare_purchase_order_data(self, item) -> tuple | None:
         """准备采购订单数据映射
         API→SQL字段映射：

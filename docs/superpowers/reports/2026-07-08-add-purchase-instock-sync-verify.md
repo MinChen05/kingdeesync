@@ -33,6 +33,15 @@
   - Idempotency check: second write returned 1000, target total rows stayed 1000, matching rows stayed 1000, and total row delta was 0.
   - Target validation: 0 rows with missing key fields, 0 duplicate `FENTRYID` groups, and `FSRCENTRYSEQ` values were populated from `FInStockEntry_fseq`.
   - Command stdout showed `成功插入/更新 1000 条记录 (SQL Server)` twice; `logs/app.log` did not capture this run because the verification harness logged to stdout instead of the application file handler.
+- 2026-07-08 formal incremental sync entrypoint verification:
+  - Ran the normal `run_sync` / `DataSyncManager.sync_data` path for `采购入库单` with mode `incremental`, with application file logging enabled.
+  - `run_id=453d49a964dd476ba5ab49c5dc11d263`; sync status was `success`.
+  - Incremental filter used `FModifyDate`; Kingdee returned 0 new rows, so `dbo.STK_InStock` remained at 1000 rows.
+  - SQL Server `sync_runs` recorded the run with `total_records=0`, `success_count=1`, and `failure_count=0`.
+  - SQL Server `sync_logs` recorded `table_name=STK_InStock`, `record_count=0`, and `status=success`.
+  - Local `logs/sync_stats.db` recorded both `run_stats` and `form_stats` for the same run; `form_stats.table_name` was empty in the current implementation.
+  - `logs/app.log` captured 19 matching lines and `logs/app.jsonl` captured 5 matching audit/completion lines for the run.
+  - No pending checkpoint files remained after the successful 0-row incremental sync.
 
 ## Requirement Mapping
 
@@ -74,6 +83,7 @@
   - SQL Server upsert and layout tests pass.
   - Real write verification created `dbo.STK_InStock` and `UX_STK_InStock_fentryid`, inserted/updated 10 sampled rows, and confirmed 10 matching target rows after the write.
   - Expanded write verification inserted/updated 1000 sampled rows, confirmed 0 invalid rows, 0 failed rows, 0 duplicate source keys, 0 duplicate target `FENTRYID` groups, and repeat-write row delta 0.
+  - Formal incremental sync entrypoint verification recorded success in `sync_runs`, `sync_logs`, `logs/sync_stats.db`, `logs/app.log`, and `logs/app.jsonl`.
 
 ## Issues
 
@@ -87,7 +97,7 @@ None.
 
 ### SUGGESTION
 
-- For production-scale enablement, switch from harness-level sampling to the normal scheduled/incremental sync entrypoint and capture application file logs (reason: the 1000-row writer path and idempotency are verified, but scheduler/checkpoint observability should be validated through the production entrypoint).
+- Optional follow-up: populate `form_stats.table_name` for form-level local stats (reason: the formal entrypoint recorded the purchase instock form row, but the table name field is currently blank in `logs/sync_stats.db`).
 
 ## Final Assessment
 

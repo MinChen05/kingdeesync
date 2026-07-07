@@ -2,7 +2,7 @@
 
 ## 验证结论
 
-本轮验证覆盖采购入库单配置注册、writer 注册、字段准备、SQL Server upsert/staging、SQL Server 业务列顺序、相邻表单回归、OpenSpec 严格校验，以及 2026-07-08 的真实金蝶 dry-run、SQL Server 10 行小批量写入验证和 1000 行增量放大验证。真实写入仅新增或更新采购入库单样例行；未清空、未删除任何生产数据（原因：本轮目标是字段校准、最小写入闭环和幂等性验证）。
+本轮验证覆盖采购入库单配置注册、writer 注册、字段准备、SQL Server upsert/staging、SQL Server 业务列顺序、相邻表单回归、OpenSpec 严格校验，以及 2026-07-08 的真实金蝶 dry-run、SQL Server 10 行小批量写入验证、1000 行增量放大验证和正式增量同步入口验证。真实写入仅新增或更新采购入库单样例行；未清空、未删除任何生产数据（原因：本轮目标是字段校准、最小写入闭环、幂等性和正式入口可观测性验证）。
 
 ## 已执行命令
 
@@ -28,6 +28,15 @@
   - 重复写入：writer 返回 1000；目标表总行数保持 1000；本批匹配行数保持 1000；总行数变化 0（原因：`FENTRYID` 幂等合并生效）。
   - 只读核对：关键字段异常行数 0；重复 `FENTRYID` 组数 0；`FSRCENTRYSEQ` 已由 `FInStockEntry_fseq` 正常写入。
   - 命令 stdout 出现两次 `成功插入/更新 1000 条记录 (SQL Server)`；`logs/app.log` 未捕获本次记录（原因：验证 harness 的 logging 输出到 stdout，未接入应用文件日志 handler）。
+- 2026-07-08 正式增量同步入口验证
+  - 通过 `run_sync` / `DataSyncManager.sync_data` 正式路径运行“采购入库单”增量同步，并启用应用文件日志。
+  - `run_id=453d49a964dd476ba5ab49c5dc11d263`，同步状态为 `success`。
+  - 增量字段使用 `FModifyDate`；金蝶返回 0 条新数据，目标表 `dbo.STK_InStock` 保持 1000 行。
+  - SQL Server `sync_runs` 记录：`total_records=0`、`success_count=1`、`failure_count=0`。
+  - SQL Server `sync_logs` 记录：`table_name=STK_InStock`、`record_count=0`、`status=success`。
+  - 本地 `logs/sync_stats.db` 已记录 `run_stats` 与 `form_stats`；其中 `form_stats.table_name` 当前为空（原因：现有统计落库未填充该字段，不影响 SQL Server 同步日志）。
+  - `logs/app.log` 命中 19 条本次采购入库单/run 日志，`logs/app.jsonl` 命中 5 条审计/完成日志。
+  - 成功同步后未留下 pending checkpoint 文件。
 - `python -m pytest tests/test_config_manager.py tests/test_purchase_instock_write_validation.py tests/test_writers_registry.py tests/test_upsert_engine_sqlserver.py::UpsertEngineSqlServerTests::test_stk_instock_filters_missing_entryid tests/test_sqlserver_business_layout.py::SqlServerBusinessLayoutTests::test_stk_instock_places_material_and_source_fields_before_modifydate -q`
   - 结果：`19 passed in 0.25s`
 - `python -m pytest tests/test_config_manager.py tests/test_purchase_instock_write_validation.py tests/test_writers_registry.py tests/test_upsert_engine_sqlserver.py::UpsertEngineSqlServerTests::test_stk_instock_filters_missing_entryid tests/test_sqlserver_business_layout.py::SqlServerBusinessLayoutTests::test_stk_instock_places_material_and_source_fields_before_modifydate -q`
@@ -44,6 +53,7 @@
 - SQL Server upsert 阶段已按 `FENTRYID` 幂等合并，并过滤空 `FID/FENTRYID` 记录。
 - 目标表已具备 `UX_STK_InStock_fentryid` 唯一索引，`FModifyDate` 可用于增量/排查。
 - 1000 行重复写入验证显示目标表总行数不再增长，重复 `FENTRYID` 组数为 0（原因：证明分录级幂等键在当前目标库生效）。
+- 正式入口验证显示 `sync_runs`、`sync_logs`、`sync_stats.db`、`app.log` 和 `app.jsonl` 均可观测到本次增量同步；checkpoint 成功清理或未生成 pending 文件。
 
 ## 既有改动归因
 

@@ -8,7 +8,7 @@ design_doc: docs/superpowers/specs/2026-07-07-purchase-instock-sync-design.md
 plan: docs/superpowers/plans/2026-07-08-purchase-instock-sync.md
 verify_result: pending
 verification_report: docs/superpowers/reports/2026-07-08-add-purchase-instock-sync-verify.md
-branch_status: pending
+branch_status: handled
 created_at: 2026-07-07
 verified_at: null
 archived: false

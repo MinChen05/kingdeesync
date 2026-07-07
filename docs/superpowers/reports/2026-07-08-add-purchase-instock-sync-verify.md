@@ -25,6 +25,14 @@
   - SQL Server target table `dbo.STK_InStock` did not exist before the write verification, so the non-report business table and unique index `UX_STK_InStock_fentryid` were created.
   - Before write: 0 matching `FENTRYID` rows. Writer result: 10 rows. After write: 10 matching rows and 10 total rows.
   - SQL Server log evidence: `成功插入/更新 10 条记录 (SQL Server)`.
+- 2026-07-08 expanded incremental write verification:
+  - `STK_InStock` query with `Limit=1000` returned 1000 rows.
+  - Prepared rows: 1000 valid, 0 invalid/skipped, 0 duplicate source `FENTRYID`.
+  - Before expanded write: target total rows 10, matching rows 10.
+  - First write result: writer returned 1000, target total rows became 1000, matching rows became 1000, and total row delta was +990.
+  - Idempotency check: second write returned 1000, target total rows stayed 1000, matching rows stayed 1000, and total row delta was 0.
+  - Target validation: 0 rows with missing key fields, 0 duplicate `FENTRYID` groups, and `FSRCENTRYSEQ` values were populated from `FInStockEntry_fseq`.
+  - Command stdout showed `成功插入/更新 1000 条记录 (SQL Server)` twice; `logs/app.log` did not capture this run because the verification harness logged to stdout instead of the application file handler.
 
 ## Requirement Mapping
 
@@ -51,6 +59,7 @@
   - `src/core/upsert_engine_sqlserver.py` requires `FID` and `FENTRYID` for `stk_instock`.
   - `src/tools/sqlserver_business_layout.py` defines `UX_STK_InStock_fentryid`.
   - `tests/test_upsert_engine_sqlserver.py` verifies blank entry ids are filtered.
+  - Expanded SQL Server verification wrote the same 1000-row sample twice; the second write left `dbo.STK_InStock` at 1000 rows with 0 duplicate `FENTRYID` groups.
 
 ### 无效采购入库单记录处理
 
@@ -64,6 +73,7 @@
   - Writer registry tests confirm `insert_purchase_instock` is registered and bound to the expected callable.
   - SQL Server upsert and layout tests pass.
   - Real write verification created `dbo.STK_InStock` and `UX_STK_InStock_fentryid`, inserted/updated 10 sampled rows, and confirmed 10 matching target rows after the write.
+  - Expanded write verification inserted/updated 1000 sampled rows, confirmed 0 invalid rows, 0 failed rows, 0 duplicate source keys, 0 duplicate target `FENTRYID` groups, and repeat-write row delta 0.
 
 ## Issues
 
@@ -77,7 +87,7 @@ None.
 
 ### SUGGESTION
 
-- For production-scale enablement, run a larger incremental batch after confirming the first 10-row write sample with the business owner (reason: the target field path has been calibrated, but broader data distribution may expose optional/custom fields).
+- For production-scale enablement, switch from harness-level sampling to the normal scheduled/incremental sync entrypoint and capture application file logs (reason: the 1000-row writer path and idempotency are verified, but scheduler/checkpoint observability should be validated through the production entrypoint).
 
 ## Final Assessment
 

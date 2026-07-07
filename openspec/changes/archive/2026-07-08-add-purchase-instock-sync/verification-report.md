@@ -2,7 +2,7 @@
 
 ## 验证结论
 
-本轮验证覆盖采购入库单配置注册、writer 注册、字段准备、SQL Server upsert/staging、SQL Server 业务列顺序、相邻表单回归、OpenSpec 严格校验，以及 2026-07-08 的真实金蝶 dry-run 与 SQL Server 小批量写入验证。真实写入仅限 10 行采购入库单样例；未清空、未删除任何生产数据（原因：本轮目标是字段校准和最小写入闭环验证）。
+本轮验证覆盖采购入库单配置注册、writer 注册、字段准备、SQL Server upsert/staging、SQL Server 业务列顺序、相邻表单回归、OpenSpec 严格校验，以及 2026-07-08 的真实金蝶 dry-run、SQL Server 10 行小批量写入验证和 1000 行增量放大验证。真实写入仅新增或更新采购入库单样例行；未清空、未删除任何生产数据（原因：本轮目标是字段校准、最小写入闭环和幂等性验证）。
 
 ## 已执行命令
 
@@ -20,8 +20,18 @@
   - 写入前 SQL Server 当前库为 `Kingdee`，目标表 `dbo.STK_InStock` 不存在；已新增非报表业务表 `dbo.STK_InStock` 和唯一索引 `UX_STK_InStock_fentryid`（原因：没有目标表会触发 SQL Server 208“对象名无效”，无法执行 MERGE）。
   - 写入前匹配行数：0；writer 返回写入数：10；写入后匹配行数：10；目标表总行数：10。
   - SQL Server 日志：`成功插入/更新 10 条记录 (SQL Server)`。
+- 2026-07-08 1000 行增量放大与幂等验证
+  - 金蝶 `STK_InStock` 查询 `Limit=1000`，返回 1000 行。
+  - 字段准备结果：有效 1000 行，无效/跳过 0 行，源端重复 `FENTRYID` 0 个。
+  - 写入前目标表总行数：10；本批匹配行数：10。
+  - 首次写入：writer 返回 1000；目标表总行数变为 1000；本批匹配行数变为 1000；总行数变化 +990。
+  - 重复写入：writer 返回 1000；目标表总行数保持 1000；本批匹配行数保持 1000；总行数变化 0（原因：`FENTRYID` 幂等合并生效）。
+  - 只读核对：关键字段异常行数 0；重复 `FENTRYID` 组数 0；`FSRCENTRYSEQ` 已由 `FInStockEntry_fseq` 正常写入。
+  - 命令 stdout 出现两次 `成功插入/更新 1000 条记录 (SQL Server)`；`logs/app.log` 未捕获本次记录（原因：验证 harness 的 logging 输出到 stdout，未接入应用文件日志 handler）。
 - `python -m pytest tests/test_config_manager.py tests/test_purchase_instock_write_validation.py tests/test_writers_registry.py tests/test_upsert_engine_sqlserver.py::UpsertEngineSqlServerTests::test_stk_instock_filters_missing_entryid tests/test_sqlserver_business_layout.py::SqlServerBusinessLayoutTests::test_stk_instock_places_material_and_source_fields_before_modifydate -q`
   - 结果：`19 passed in 0.25s`
+- `python -m pytest tests/test_config_manager.py tests/test_purchase_instock_write_validation.py tests/test_writers_registry.py tests/test_upsert_engine_sqlserver.py::UpsertEngineSqlServerTests::test_stk_instock_filters_missing_entryid tests/test_sqlserver_business_layout.py::SqlServerBusinessLayoutTests::test_stk_instock_places_material_and_source_fields_before_modifydate -q`
+  - 1000 行增量放大后复跑结果：`19 passed in 0.24s`
 
 ## SQL Server 写入验证结果
 
@@ -33,6 +43,7 @@
 - 字段准备阶段应跳过缺少 `FID`、`FENTRYID` 或 `FBILLNO` 的记录，并输出包含单据内码、分录内码和单号的 warning。
 - SQL Server upsert 阶段已按 `FENTRYID` 幂等合并，并过滤空 `FID/FENTRYID` 记录。
 - 目标表已具备 `UX_STK_InStock_fentryid` 唯一索引，`FModifyDate` 可用于增量/排查。
+- 1000 行重复写入验证显示目标表总行数不再增长，重复 `FENTRYID` 组数为 0（原因：证明分录级幂等键在当前目标库生效）。
 
 ## 既有改动归因
 

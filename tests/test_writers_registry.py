@@ -8,6 +8,10 @@ class WriterRegistryTests(unittest.TestCase):
         registry = WriterRegistry()
         self.assertTrue(registry.has("insert_ar_receivable"))
 
+    def test_purchase_instock_writer_is_registered(self) -> None:
+        registry = WriterRegistry()
+        self.assertTrue(registry.has("insert_purchase_instock"))
+
 
 if __name__ == "__main__":
     unittest.main()

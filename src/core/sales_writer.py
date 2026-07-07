@@ -358,6 +358,40 @@ def insert_purchase_order(manager, data: List[Dict]) -> int:
             """
         return manager._batch_insert(sql, data, manager._prepare_purchase_order_data)
 
+
+def insert_purchase_instock(manager, data: List[Dict]) -> int:
+        """插入采购入库单数据（STK_InStock）"""
+        if not data:
+            return 0
+
+        sql = """
+            INSERT INTO STK_InStock (
+                FID, FENTRYID, FSEQ, FBILLNO, FDATE, FDOCUMENTSTATUS, FSUPPLIERNAME,
+                FPURCHASEORGNAME, FMATERIALNUMBER, FMATERIALNAME, FREALQTY, FSRCBILLNO,
+                FSRCENTRYSEQ, FModifyDate
+            ) VALUES (
+                %s, %s, %s, %s, %s, %s, %s,
+                %s, %s, %s, %s, %s, %s, %s
+            )
+            ON DUPLICATE KEY UPDATE
+                FID=VALUES(FID),
+                FSEQ=VALUES(FSEQ),
+                FBILLNO=VALUES(FBILLNO),
+                FDATE=VALUES(FDATE),
+                FDOCUMENTSTATUS=VALUES(FDOCUMENTSTATUS),
+                FSUPPLIERNAME=VALUES(FSUPPLIERNAME),
+                FPURCHASEORGNAME=VALUES(FPURCHASEORGNAME),
+                FMATERIALNUMBER=VALUES(FMATERIALNUMBER),
+                FMATERIALNAME=VALUES(FMATERIALNAME),
+                FREALQTY=VALUES(FREALQTY),
+                FSRCBILLNO=VALUES(FSRCBILLNO),
+                FSRCENTRYSEQ=VALUES(FSRCENTRYSEQ),
+                FModifyDate=VALUES(FModifyDate),
+                SYNC_TIME=CURRENT_TIMESTAMP
+        """
+        return manager._batch_insert(sql, data, manager._prepare_purchase_instock_data)
+
+
 def insert_sub_subreqorder(manager, data: List[Dict]) -> int:
         if not data:
             return 0

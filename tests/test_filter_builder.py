@@ -61,6 +61,28 @@ class FilterBuilderTests(unittest.TestCase):
             self.assertEqual(result, "FBillNo like 'SO%'")
             mock_config_manager.set_increment_field.assert_not_called()
 
+    def test_inventory_incremental_sync_uses_snapshot_filter(self) -> None:
+        fake_db = SimpleNamespace(get_last_modify_time=lambda table_name: datetime(2026, 7, 8, 10, 0, 0))
+
+        with patch("src.core.filter_builder.config_manager") as mock_config_manager:
+            mock_config_manager.get_form_queries.return_value = {
+                "即时库存": {
+                    "FilterString": "1=1",
+                    "FieldKeys": "FID,FBASEQTY,FUPDATETIME",
+                }
+            }
+
+            result = self.builder.build_filter_string(
+                "即时库存",
+                SimpleNamespace(value="incremental"),
+                "stk_inventory",
+                db_manager=fake_db,
+            )
+
+            self.assertEqual(result, "1=1")
+            mock_config_manager.get_increment_field.assert_not_called()
+            mock_config_manager.set_increment_field.assert_not_called()
+
 
 if __name__ == "__main__":
     unittest.main()

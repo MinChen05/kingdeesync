@@ -37,11 +37,7 @@ class FilterBuilder:
 
         modify_field = None
 
-        if form_name == "即时库存":
-            keys = [k.strip().split(".")[-1] for k in field_keys.split(",") if k.strip()]
-            if "FUPDATETIME" in keys:
-                modify_field = "FUPDATETIME"
-        else:
+        if form_name != "即时库存":
             persisted = config_manager.get_increment_field(table_name) or config_manager.get_increment_field(form_name)
             if persisted:
                 modify_field = persisted
@@ -81,6 +77,10 @@ class FilterBuilder:
 
         sync_type_value = self._sync_type_value(sync_type)
         if sync_type_value == "incremental":
+            if form_name == "即时库存":
+                self.logger.info("[%s] 使用当前库存快照同步，跳过增量时间过滤", form_name)
+                return base_filter
+
             last_time = manager.get_last_modify_time(table_name)
             if last_time and modify_field:
                 if isinstance(last_time, str):

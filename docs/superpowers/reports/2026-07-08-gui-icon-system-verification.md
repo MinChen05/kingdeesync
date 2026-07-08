@@ -10,6 +10,12 @@
 
 未发现本次图标系统变更引入的 CRITICAL 阻塞项。（原因：目标验证命令通过，且宽范围 GUI 测试失败在 base-ref `5de8fb44` 已存在）
 
+## Verify 决策记录
+
+- 接受完整 `tests/test_gui_windows11_shell.py` 中的既有非图标失败作为本次 `redesign-gui-icons` 的非阻塞偏差。（原因：当前分支相对 base-ref 未增加完整 GUI 测试失败数量，且失败主题集中在既有布局尺寸、旧属性、历史分页、数据源健康表和 token 治理断言，不属于本次图标注册表、SVG 资产或图标加载路径改造范围）
+- 本次 change 的阻塞验收口径收敛为图标注册表、图标资产规范、shell/topbar/sidebar 图标映射、CSS 图标 URL、打包入口 assets 包含关系和 Python 语法编译。（原因：这些检查直接覆盖 OpenSpec 中 `gui-icon-system` 的新增能力）
+- 不在本次 verify 阶段修复完整 GUI 测试中的既有失败。（原因：跨页面布局、同步页旧属性、数据源健康表行为等修复会扩大需求边界，容易把历史 GUI 债务混入图标系统变更）
+
 ## 自动化验证
 
 - `python -m compileall -q src tests`：通过，未输出编译错误。（原因：验证 Python 源码语法层面可加载）

@@ -5,7 +5,7 @@ isolation: null
 verify_mode: null
 base_ref: 58e5b169c3fbf426d053d86841074e070522b726
 design_doc: docs/superpowers/specs/2026-07-08-extend-sync-data-authenticity-all-forms-design.md
-plan: null
+plan: docs/superpowers/plans/2026-07-08-extend-sync-data-authenticity-all-forms.md
 verify_result: pending
 verification_report: null
 branch_status: pending

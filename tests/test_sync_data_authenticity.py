@@ -1,10 +1,14 @@
 from src.core.sync_data_authenticity import (
     AUDIT_SPECS,
     AuditStatus,
+    RowAuditResult,
     audit_row,
     compare_date,
     compare_decimal,
     compare_string,
+    detail_rows,
+    load_targets_from_difference_csv,
+    summarize_results,
 )
 
 
@@ -82,3 +86,43 @@ def test_audit_row_allows_warning_only_date_mismatch():
     result = audit_row(spec, db_row, api_row)
     assert result.status == AuditStatus.WARNING_ONLY
     assert result.eligible_for_rehydration is True
+
+
+def test_load_targets_from_difference_csv_filters_forms(tmp_path):
+    csv_path = tmp_path / "diff.csv"
+    csv_path.write_text(
+        "form,db_key,status\n采购订单,1|2,needs_fix\n销售订单,3|4,needs_fix\n",
+        encoding="utf-8-sig",
+    )
+    targets = load_targets_from_difference_csv(csv_path, {"采购订单"})
+    assert targets == {"采购订单": {("1", "2")}}
+
+
+def test_summarize_results_counts_statuses():
+    results = [
+        RowAuditResult("采购订单", ("1", "1"), AuditStatus.PASSED, True, tuple()),
+        RowAuditResult("采购订单", ("1", "2"), AuditStatus.WARNING_ONLY, True, tuple()),
+        RowAuditResult("采购订单", ("1", "3"), AuditStatus.DIMENSION_MISMATCH, False, tuple()),
+    ]
+    rows = summarize_results(results)
+    counts = {row["status"]: row["count"] for row in rows}
+    assert counts["passed"] == 1
+    assert counts["warning_only"] == 1
+    assert counts["dimension_mismatch"] == 1
+
+
+def test_detail_rows_keeps_passed_rows_visible():
+    result = RowAuditResult("采购订单", ("1", "2"), AuditStatus.PASSED, True, tuple())
+    rows = detail_rows([result])
+    assert rows == [
+        {
+            "form": "采购订单",
+            "key": "1|2",
+            "status": "passed",
+            "eligible_for_rehydration": "true",
+            "field": "",
+            "severity": "",
+            "db_value": "",
+            "api_value": "",
+        }
+    ]

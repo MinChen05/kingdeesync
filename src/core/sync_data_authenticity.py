@@ -4,6 +4,8 @@ from dataclasses import dataclass
 from datetime import datetime
 from decimal import Decimal, InvalidOperation
 from enum import Enum
+from pathlib import Path
+import csv
 from typing import Any
 
 
@@ -263,3 +265,77 @@ def audit_row(
         eligible = False
 
     return RowAuditResult(spec.form, db_key, status, eligible, tuple(differences))
+
+
+def load_targets_from_difference_csv(
+    path: str | Path,
+    forms: set[str],
+) -> dict[str, set[tuple[str, ...]]]:
+    targets: dict[str, set[tuple[str, ...]]] = {form: set() for form in forms}
+    with Path(path).open("r", encoding="utf-8-sig", newline="") as file:
+        reader = csv.DictReader(file)
+        for row in reader:
+            form = normalize_text(row.get("form"))
+            if form not in forms:
+                continue
+            key_text = normalize_text(row.get("db_key") or row.get("key"))
+            if not key_text:
+                continue
+            targets.setdefault(form, set()).add(tuple(part.strip() for part in key_text.split("|")))
+    return {form: keys for form, keys in targets.items() if keys}
+
+
+def summarize_results(results: list[RowAuditResult]) -> list[dict[str, str | int]]:
+    counts: dict[AuditStatus, int] = {status: 0 for status in AuditStatus}
+    eligible_counts: dict[AuditStatus, int] = {status: 0 for status in AuditStatus}
+    for result in results:
+        counts[result.status] += 1
+        if result.eligible_for_rehydration:
+            eligible_counts[result.status] += 1
+
+    rows: list[dict[str, str | int]] = []
+    for status in AuditStatus:
+        if counts[status] == 0:
+            continue
+        rows.append(
+            {
+                "status": status.value,
+                "count": counts[status],
+                "eligible_for_rehydration": eligible_counts[status],
+            }
+        )
+    return rows
+
+
+def detail_rows(results: list[RowAuditResult]) -> list[dict[str, str]]:
+    rows: list[dict[str, str]] = []
+    for result in results:
+        key = "|".join(result.key)
+        base = {
+            "form": result.form,
+            "key": key,
+            "status": result.status.value,
+            "eligible_for_rehydration": "true" if result.eligible_for_rehydration else "false",
+        }
+        if not result.differences:
+            rows.append(
+                {
+                    **base,
+                    "field": "",
+                    "severity": "",
+                    "db_value": "",
+                    "api_value": "",
+                }
+            )
+            continue
+        for diff in result.differences:
+            rows.append(
+                {
+                    **base,
+                    "field": diff.field,
+                    "severity": diff.severity,
+                    "db_value": diff.db_value,
+                    "api_value": diff.api_value,
+                }
+            )
+    return rows

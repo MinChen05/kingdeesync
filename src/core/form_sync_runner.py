@@ -141,9 +141,9 @@ class FormSyncRunner:
                 }
 
             self.logger.info("开始同步 %s 数据 (类型: %s)", form_name, self._sync_type_value(sync_type))
-            if self._sync_type_value(sync_type) == "complete":
+            if self._sync_type_value(sync_type) == "complete" or form_name == "即时库存":
                 if not self.truncate_table_for_complete(table_name, local_db):
-                    error_msg = f"清空表 {table_name} 失败，终止完全同步"
+                    error_msg = f"清空表 {table_name} 失败，终止同步"
                     self.owner._notify_progress(f"[{form_name}] {error_msg}", 100)
                     emit_audit_log(
                         self.logger,

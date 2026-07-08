@@ -217,6 +217,81 @@ class FormSyncRunnerOutcomeTests(unittest.TestCase):
         self.assertEqual(result["failed"], 1)
         self.assertEqual(captured_sync_log["status"], partial_status)
 
+    def test_inventory_incremental_sync_truncates_snapshot_table_before_insert(self) -> None:
+        with _load_form_sync_runner_module() as form_sync_runner:
+            runner_cls = form_sync_runner.FormSyncRunner
+            owner = SimpleNamespace(
+                DEDUPLICATION_FORMS=set(),
+                INSERT_METHOD_MAP={"即时库存": "insert_stk_inventory"},
+                table_mapping={"即时库存": "stk_inventory"},
+                _notify_progress=Mock(),
+                _checkpoint_manager=SimpleNamespace(
+                    load_checkpoint=Mock(return_value=None),
+                    clear_checkpoint=Mock(),
+                    save_checkpoint=Mock(),
+                ),
+            )
+            filter_builder = SimpleNamespace(build_filter_string=Mock(return_value="1=1"))
+            fake_db = SimpleNamespace(disconnect=Mock(), log_sync_operation=Mock())
+            runner = runner_cls(owner, filter_builder, logger_=logging.getLogger("test.form_sync_runner"))
+
+            with (
+                patch.object(form_sync_runner, "create_shared_db_manager", return_value=fake_db),
+                patch.object(form_sync_runner, "emit_audit_log"),
+                patch.object(form_sync_runner, "metrics_collector", create=True),
+                patch.object(form_sync_runner, "config_manager") as mock_config_manager,
+            ):
+                mock_config_manager.get_form_queries.return_value = {
+                    "即时库存": {"FieldKeys": "FID,FSTOCKORGID,FBASEQTY,FUPDATETIME"}
+                }
+                runner.truncate_table_for_complete = Mock(return_value=True)
+                runner.query_kingdee_data = Mock(
+                    side_effect=lambda *args, **kwargs: kwargs["page_callback"]([{"FID": 1, "FBASEQTY": 3}]) or []
+                )
+                runner.insert_database_data = Mock(return_value=WriteOutcome(inserted=1))
+
+                result = runner.sync_single_form("即时库存", "incremental")
+
+        self.assertEqual(result["status"], "success")
+        runner.truncate_table_for_complete.assert_called_once_with("stk_inventory", fake_db)
+        runner.insert_database_data.assert_called_once()
+
+    def test_regular_incremental_sync_does_not_truncate_table(self) -> None:
+        with _load_form_sync_runner_module() as form_sync_runner:
+            runner_cls = form_sync_runner.FormSyncRunner
+            owner = SimpleNamespace(
+                DEDUPLICATION_FORMS=set(),
+                INSERT_METHOD_MAP={"销售订单": "insert_sales_orders"},
+                table_mapping={"销售订单": "saleorder"},
+                _notify_progress=Mock(),
+                _checkpoint_manager=SimpleNamespace(
+                    load_checkpoint=Mock(return_value=None),
+                    clear_checkpoint=Mock(),
+                    save_checkpoint=Mock(),
+                ),
+            )
+            filter_builder = SimpleNamespace(build_filter_string=Mock(return_value="FModifyDate > '2026-07-08 00:00:00'"))
+            fake_db = SimpleNamespace(disconnect=Mock(), log_sync_operation=Mock())
+            runner = runner_cls(owner, filter_builder, logger_=logging.getLogger("test.form_sync_runner"))
+
+            with (
+                patch.object(form_sync_runner, "create_shared_db_manager", return_value=fake_db),
+                patch.object(form_sync_runner, "emit_audit_log"),
+                patch.object(form_sync_runner, "metrics_collector", create=True),
+                patch.object(form_sync_runner, "config_manager") as mock_config_manager,
+            ):
+                mock_config_manager.get_form_queries.return_value = {"销售订单": {"FieldKeys": "FID,FBillNo,FModifyDate"}}
+                runner.truncate_table_for_complete = Mock(return_value=True)
+                runner.query_kingdee_data = Mock(
+                    side_effect=lambda *args, **kwargs: kwargs["page_callback"]([{"FID": 1, "FBillNo": "SO001"}]) or []
+                )
+                runner.insert_database_data = Mock(return_value=WriteOutcome(inserted=1))
+
+                result = runner.sync_single_form("销售订单", "incremental")
+
+        self.assertEqual(result["status"], "success")
+        runner.truncate_table_for_complete.assert_not_called()
+
     def test_sync_single_form_normalizes_legacy_outcome_before_metrics(self) -> None:
         with _load_form_sync_runner_module() as form_sync_runner:
             runner_cls = form_sync_runner.FormSyncRunner

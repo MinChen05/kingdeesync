@@ -24,13 +24,13 @@
 
 ## 4. Independent Updater
 
-- [ ] Implement updater command arguments.
-- [ ] Wait for main process exit before replacement.
-- [ ] Extract zip safely and reject path traversal.
-- [ ] Preserve `config.local.ini`, `config.ini`, `config.ini.backup`, and `logs/`.
-- [ ] Back up current application files before replacement.
-- [ ] Restore backup on failure.
-- [ ] Add dry-run tests for preserve and rollback behavior.
+- [x] Implement updater command arguments.
+- [x] Wait for main process exit before replacement.
+- [x] Extract zip safely and reject path traversal.
+- [x] Preserve `config.local.ini`, `config.ini`, `config.ini.backup`, and `logs/`.
+- [x] Back up current application files before replacement.
+- [x] Restore backup on failure.
+- [x] Add dry-run tests for preserve and rollback behavior.
 
 ## 5. Packaging
 

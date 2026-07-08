@@ -2,6 +2,7 @@
 change: verify-sync-data-authenticity
 design-doc: docs/superpowers/specs/2026-07-08-sync-data-authenticity-design.md
 base-ref: 7642b2b4dcf1b7cf02a50286dcb2cfcad0fd7849
+archived-with: 2026-07-08-verify-sync-data-authenticity
 ---
 
 # Sync Data Authenticity Implementation Plan
@@ -14,6 +15,7 @@ base-ref: 7642b2b4dcf1b7cf02a50286dcb2cfcad0fd7849
 
 **Tech Stack:** Python standard library, existing `MySQLManager`, existing `KingdeeAPIClient`, pytest.
 
+archived-with: 2026-07-08-verify-sync-data-authenticity
 ---
 
 ## File Structure

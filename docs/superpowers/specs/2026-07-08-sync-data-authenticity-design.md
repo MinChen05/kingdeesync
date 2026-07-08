@@ -2,6 +2,8 @@
 comet_change: verify-sync-data-authenticity
 role: technical-design
 canonical_spec: openspec
+archived-with: 2026-07-08-verify-sync-data-authenticity
+status: final
 ---
 
 # 同步数据真实性校验技术设计

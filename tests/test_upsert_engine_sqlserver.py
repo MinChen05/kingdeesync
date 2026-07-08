@@ -355,9 +355,40 @@ class UpsertEngineSqlServerTests(unittest.TestCase):
         staging_sql = manager.cursor.executemany_calls[0][0]
         self.assertIn("INSERT INTO [dbo].[__stage_", staging_sql)
         self.assertIn("TRY_CONVERT(DATETIME, ?) AS FDATE", staging_sql)
-        self.assertIn("TRY_CONVERT(DECIMAL(23,10), CONVERT(NVARCHAR(64), ?)), 0) AS FTAXPRICE", staging_sql)
-        self.assertIn("TRY_CONVERT(DECIMAL(23,10), CONVERT(NVARCHAR(64), ?)), 0) AS FPRICEQTY", staging_sql)
+        self.assertIn("TRY_CONVERT(DECIMAL(23,10), ?), 0) AS FTAXPRICE", staging_sql)
+        self.assertIn("TRY_CONVERT(DECIMAL(23,10), ?), 0) AS FPRICEQTY", staging_sql)
         self.assertIn("TRY_CONVERT(DATETIME, ?) AS FModifyDate", staging_sql)
+
+    def test_decimal_source_conversion_does_not_stringify_float_parameters(self) -> None:
+        manager = FakeSqlServerManager()
+        manager.config["force_staging_tables"] = "stk_instock"
+        manager.cursor._fetchone_queue = [(1,)]
+        manager.cursor._fetchall_queue = [
+            [
+                ("FENTRYID", "bigint", None),
+                ("FREALQTY", "decimal", None),
+            ]
+        ]
+        manager._parse_insert_sql = lambda sql: ("STK_InStock", ["FENTRYID", "FREALQTY"])
+        manager._get_table_columns_info = lambda table: {
+            "FENTRYID": "bigint",
+            "FREALQTY": "decimal",
+            "SYNC_TIME": "datetime",
+        }
+        manager._get_primary_key = lambda table: "FENTRYID"
+        engine = UpsertEngineSqlServer(manager)
+
+        inserted = engine.execute(
+            sql="INSERT INTO STK_InStock (FENTRYID, FREALQTY) VALUES (%s, %s)",
+            values=[[900064, 1872000.0]],
+            batch_size=10000,
+            commit_every_n_batches=0,
+        )
+
+        self.assertEqual(inserted, 1)
+        staging_sql = manager.cursor.executemany_calls[0][0]
+        self.assertIn("TRY_CONVERT(DECIMAL(23,10), ?), 0) AS FREALQTY", staging_sql)
+        self.assertNotIn("TRY_CONVERT(DECIMAL(23,10), CONVERT(NVARCHAR(64), ?)), 0) AS FREALQTY", staging_sql)
 
     def test_ap_payable_uses_manager_column_types_when_information_schema_type_map_is_empty(self) -> None:
         manager = FakeSqlServerManager()
@@ -394,7 +425,7 @@ class UpsertEngineSqlServerTests(unittest.TestCase):
         self.assertEqual(inserted, 1)
         staging_sql = manager.cursor.executemany_calls[0][0]
         self.assertIn("TRY_CONVERT(DATETIME, ?) AS FDATE", staging_sql)
-        self.assertIn("TRY_CONVERT(DECIMAL(23,10), CONVERT(NVARCHAR(64), ?)), 0) AS FPRICEQTY", staging_sql)
+        self.assertIn("TRY_CONVERT(DECIMAL(23,10), ?), 0) AS FPRICEQTY", staging_sql)
         self.assertIn("TRY_CONVERT(DATETIME, ?) AS FModifyDate", staging_sql)
 
     def test_ap_payable_parameter_merge_uses_manager_column_type_fallback(self) -> None:
@@ -430,7 +461,7 @@ class UpsertEngineSqlServerTests(unittest.TestCase):
         self.assertEqual(inserted, 1)
         merge_sql = manager.cursor.executemany_calls[0][0]
         self.assertIn("TRY_CONVERT(DATETIME, ?) AS FDATE", merge_sql)
-        self.assertIn("TRY_CONVERT(DECIMAL(23,10), CONVERT(NVARCHAR(64), ?)), 0) AS FALLAMOUNTFOR_D", merge_sql)
+        self.assertIn("TRY_CONVERT(DECIMAL(23,10), ?), 0) AS FALLAMOUNTFOR_D", merge_sql)
 
     def test_text_fallback_uses_max_length_when_information_schema_map_is_empty(self) -> None:
         manager = FakeSqlServerManager()

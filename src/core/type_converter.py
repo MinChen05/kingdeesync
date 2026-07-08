@@ -57,7 +57,7 @@ class TypeConverter:
             if dtype in self.INT_TYPES:
                 source_parts.append(f"COALESCE(TRY_CONVERT(BIGINT, CONVERT(NVARCHAR(64), ?)), 0) AS {c}")
             elif dtype in self.DEC_TYPES:
-                source_parts.append(f"COALESCE(TRY_CONVERT(DECIMAL(23,10), CONVERT(NVARCHAR(64), ?)), 0) AS {c}")
+                source_parts.append(f"COALESCE(TRY_CONVERT(DECIMAL(23,10), ?), 0) AS {c}")
             elif dtype in self.DT_TYPES:
                 source_parts.append(f"TRY_CONVERT(DATETIME, ?) AS {c}")
             elif dtype in self.TEXT_TYPES:

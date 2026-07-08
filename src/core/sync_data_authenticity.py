@@ -146,7 +146,7 @@ def _field(
 AUDIT_SPECS: dict[str, AuthenticitySpec] = {
     "采购入库单": AuthenticitySpec(
         form="采购入库单",
-        table="T_STK_INSTOCK",
+        table="STK_InStock",
         db_identity=("FID", "FENTRYID"),
         api_identity=("FID", "FInStockEntry_FENTRYID"),
         fields={
@@ -168,7 +168,7 @@ AUDIT_SPECS: dict[str, AuthenticitySpec] = {
     ),
     "采购订单": AuthenticitySpec(
         form="采购订单",
-        table="T_PUR_POORDER",
+        table="PUR_PurchaseOrder",
         db_identity=("FID", "FENTRYID"),
         api_identity=("FID", "FPOOrderEntry_FENTRYID"),
         fields={

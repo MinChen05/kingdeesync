@@ -1,4 +1,5 @@
-from scripts.maintenance.audit_sync_data_authenticity import run_audit
+from src.core.sync_data_authenticity import AUDIT_SPECS
+from scripts.maintenance.audit_sync_data_authenticity import build_api_filter, build_db_query, run_audit
 
 
 def test_run_audit_writes_summary_and_detail(tmp_path):
@@ -39,3 +40,18 @@ def test_run_audit_writes_summary_and_detail(tmp_path):
     assert result["total"] == 1
     assert (out_dir / "sync_data_authenticity_summary.csv").exists()
     assert (out_dir / "sync_data_authenticity_detail.csv").exists()
+
+
+def test_build_db_query_uses_fid_and_fentryid():
+    spec = AUDIT_SPECS["采购订单"]
+    sql, params = build_db_query(spec, {("1", "2"), ("3", "4")})
+    assert "FROM [PUR_PurchaseOrder]" in sql
+    assert "[FID] = ? AND [FENTRYID] = ?" in sql
+    assert params == ["1", "2", "3", "4"]
+
+
+def test_build_api_filter_uses_fid_in_clause():
+    spec = AUDIT_SPECS["采购入库单"]
+    filter_string = build_api_filter(spec, {"100", "200"}, "FPurchaseOrgId = 171190")
+    assert "FPurchaseOrgId = 171190" in filter_string
+    assert "FID IN (100,200)" in filter_string

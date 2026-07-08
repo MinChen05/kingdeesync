@@ -11,9 +11,11 @@ sys.path.insert(0, ".")
 from src.config.config_manager import config_manager  # noqa: E402
 from src.core.sync_data_authenticity import (  # noqa: E402
     AUDIT_SPECS,
+    FORM_BATCHES,
     AuthenticitySpec,
     RowAuditResult,
     audit_row,
+    blocker_rows,
     build_mapping_draft_rows,
     detail_rows,
     load_targets_from_difference_csv,
@@ -42,6 +44,17 @@ DISCOVERY_FIELDNAMES = [
     "missing_api_fields",
     "unsupported_reason",
     "db_columns_available",
+]
+
+DETAIL_FIELDNAMES = [
+    "form",
+    "key",
+    "status",
+    "eligible_for_rehydration",
+    "field",
+    "severity",
+    "db_value",
+    "api_value",
 ]
 
 
@@ -271,6 +284,7 @@ def run_audit(
     out_dir: str | Path,
     db_fetcher: Fetcher | None = None,
     api_fetcher: Fetcher | None = None,
+    write_blockers: bool = False,
 ) -> dict[str, object]:
     targets = load_targets_from_difference_csv(source, forms)
     db_rows = (db_fetcher or fetch_db_rows)(targets)
@@ -295,23 +309,19 @@ def run_audit(
     _write_csv(
         detail_path,
         detail_rows(results),
-        [
-            "form",
-            "key",
-            "status",
-            "eligible_for_rehydration",
-            "field",
-            "severity",
-            "db_value",
-            "api_value",
-        ],
+        DETAIL_FIELDNAMES,
     )
 
-    return {
+    report: dict[str, object] = {
         "total": len(results),
         "summary": summary_path,
         "detail": detail_path,
     }
+    if write_blockers:
+        blockers_path = output_dir / "sync_data_authenticity_blockers.csv"
+        _write_csv(blockers_path, blocker_rows(results), DETAIL_FIELDNAMES)
+        report["blockers"] = blockers_path
+    return report
 
 
 def _parse_forms(raw: str) -> set[str]:
@@ -321,7 +331,8 @@ def _parse_forms(raw: str) -> set[str]:
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="审计同步数据与金蝶源数据的一致性")
     parser.add_argument("--source", default="logs/all_sync_document_zero_vs_kingdee_detail.csv")
-    parser.add_argument("--forms", default="采购入库单,采购订单")
+    parser.add_argument("--forms", default=None)
+    parser.add_argument("--batch", choices=tuple(FORM_BATCHES))
     parser.add_argument("--mode", choices=("dry-run", "verify"), default="dry-run")
     parser.add_argument("--out-dir", default="logs/sync_data_authenticity")
     parser.add_argument("--discover", action="store_true")
@@ -332,10 +343,19 @@ def main(argv: list[str] | None = None) -> int:
         print(f"discovery: wrote {result['mapping_draft']}")
         return 0
 
-    result = run_audit(args.source, _parse_forms(args.forms), args.out_dir)
+    if args.forms:
+        forms = _parse_forms(args.forms)
+    elif args.batch:
+        forms = set(FORM_BATCHES[args.batch])
+    else:
+        forms = _parse_forms("采购入库单,采购订单")
+
+    result = run_audit(args.source, forms, args.out_dir, write_blockers=True)
     print(f"{args.mode}: audited {result['total']} rows")
     print(f"summary: {result['summary']}")
     print(f"detail: {result['detail']}")
+    if "blockers" in result:
+        print(f"blockers: {result['blockers']}")
     return 0
 
 

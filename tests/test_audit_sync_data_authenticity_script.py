@@ -1,3 +1,5 @@
+import csv
+
 from src.core.sync_data_authenticity import AUDIT_SPECS
 from scripts.maintenance.audit_sync_data_authenticity import (
     _execute_query,
@@ -5,6 +7,7 @@ from scripts.maintenance.audit_sync_data_authenticity import (
     iter_db_queries,
     build_api_filter,
     build_db_query,
+    main,
     run_audit,
     run_discovery,
 )
@@ -48,6 +51,101 @@ def test_run_audit_writes_summary_and_detail(tmp_path):
     assert result["total"] == 1
     assert (out_dir / "sync_data_authenticity_summary.csv").exists()
     assert (out_dir / "sync_data_authenticity_detail.csv").exists()
+
+
+def test_run_audit_writes_blockers_when_requested(tmp_path):
+    source = tmp_path / "targets.csv"
+    source.write_text(
+        "form,db_key,status\n采购订单,1|1,needs_fix\n采购订单,1|2,needs_fix\n",
+        encoding="utf-8-sig",
+    )
+    out_dir = tmp_path / "out"
+    db_rows = {
+        "采购订单": {
+            ("1", "1"): {
+                "FID": 1,
+                "FENTRYID": 1,
+                "FBillNo": "PO1",
+                "FNUMBER": "A",
+                "FSupplier": "S",
+                "FQTY": "10",
+            },
+            ("1", "2"): {
+                "FID": 1,
+                "FENTRYID": 2,
+                "FBillNo": "PO2",
+                "FNUMBER": "A",
+                "FSupplier": "S",
+                "FQTY": "10",
+            },
+        }
+    }
+    api_rows = {
+        "采购订单": {
+            ("1", "1"): {
+                "FID": 1,
+                "FPOOrderEntry_FENTRYID": 1,
+                "FBillNo": "PO1",
+                "FMaterialId.FNUMBER": "A",
+                "FSupplierId.FNAME": "S",
+                "FQTY": "10",
+            }
+        }
+    }
+
+    result = run_audit(
+        source,
+        {"采购订单"},
+        out_dir,
+        db_fetcher=lambda *_: db_rows,
+        api_fetcher=lambda *_: api_rows,
+        write_blockers=True,
+    )
+
+    blockers_path = out_dir / "sync_data_authenticity_blockers.csv"
+    with blockers_path.open("r", encoding="utf-8-sig", newline="") as file:
+        rows = list(csv.DictReader(file))
+
+    assert result["blockers"] == blockers_path
+    assert [row["status"] for row in rows] == ["missing_api"]
+
+
+def test_main_uses_batch_when_forms_are_omitted(monkeypatch):
+    calls = []
+
+    def fake_run_audit(source, forms, out_dir, write_blockers=False):
+        calls.append((source, forms, out_dir, write_blockers))
+        return {"total": 0, "summary": "summary.csv", "detail": "detail.csv"}
+
+    monkeypatch.setattr("scripts.maintenance.audit_sync_data_authenticity.run_audit", fake_run_audit)
+
+    exit_code = main(["--batch", "production_documents", "--source", "source.csv"])
+
+    assert exit_code == 0
+    assert calls[0][1] == {
+        "生产入库单",
+        "生产订单主表",
+        "生产订单明细",
+        "生产用料清单主表",
+        "生产用料清单明细表",
+        "预测订单",
+    }
+    assert calls[0][3] is True
+
+
+def test_main_explicit_forms_override_batch(monkeypatch):
+    calls = []
+
+    def fake_run_audit(source, forms, out_dir, write_blockers=False):
+        calls.append(forms)
+        return {"total": 0, "summary": "summary.csv", "detail": "detail.csv"}
+
+    monkeypatch.setattr("scripts.maintenance.audit_sync_data_authenticity.run_audit", fake_run_audit)
+
+    exit_code = main(["--batch", "production_documents", "--forms", "采购订单", "--source", "source.csv"])
+
+    assert exit_code == 0
+    assert calls == [{"采购订单"}]
 
 
 def test_run_discovery_writes_mapping_draft(tmp_path):

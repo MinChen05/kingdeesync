@@ -1,8 +1,10 @@
 from src.core.sync_data_authenticity import (
     AUDIT_SPECS,
     AuditStatus,
+    AuditDifference,
     RowAuditResult,
     audit_row,
+    blocker_rows,
     build_mapping_draft_rows,
     compare_date,
     compare_decimal,
@@ -224,5 +226,67 @@ def test_detail_rows_keeps_passed_rows_visible():
             "severity": "",
             "db_value": "",
             "api_value": "",
+        }
+    ]
+
+
+def test_blocker_rows_excludes_passed_rows():
+    results = [
+        RowAuditResult("采购订单", ("1", "1"), AuditStatus.PASSED, True, tuple()),
+        RowAuditResult("采购订单", ("1", "2"), AuditStatus.MISSING_API, False, tuple()),
+    ]
+
+    rows = blocker_rows(results)
+
+    assert len(rows) == 1
+    assert rows[0]["status"] == "missing_api"
+
+
+def test_blocker_rows_keeps_field_level_blockers():
+    results = [
+        RowAuditResult(
+            "采购订单",
+            ("1", "2"),
+            AuditStatus.VALUE_MISMATCH,
+            True,
+            (
+                AuditDifference(
+                    field="FQTY",
+                    severity="blocker",
+                    db_value="0",
+                    api_value="10",
+                    matched=False,
+                ),
+            ),
+        ),
+        RowAuditResult(
+            "采购订单",
+            ("1", "3"),
+            AuditStatus.WARNING_ONLY,
+            True,
+            (
+                AuditDifference(
+                    field="FModifyDate",
+                    severity="warning",
+                    db_value="2026-07-01",
+                    api_value="2026-07-02",
+                    matched=False,
+                ),
+            ),
+        ),
+    ]
+
+    rows = blocker_rows(results)
+
+    assert rows == [
+        {
+            "form": "采购订单",
+            "key": "1|2",
+            "status": "value_mismatch",
+            "eligible_for_rehydration": "true",
+            "field": "FQTY",
+            "severity": "blocker",
+            "db_value": "0",
+            "api_value": "10",
         }
     ]

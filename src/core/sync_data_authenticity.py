@@ -97,6 +97,15 @@ class AuditStatus(str, Enum):
     IDENTITY_MISMATCH = "identity_mismatch"
 
 
+BLOCKER_STATUSES = {
+    AuditStatus.MISSING_DB,
+    AuditStatus.MISSING_API,
+    AuditStatus.IDENTITY_MISMATCH,
+    AuditStatus.DIMENSION_MISMATCH,
+    AuditStatus.VALUE_MISMATCH,
+}
+
+
 @dataclass(frozen=True)
 class AuthenticityField:
     name: str
@@ -455,3 +464,7 @@ def detail_rows(results: list[RowAuditResult]) -> list[dict[str, str]]:
                 }
             )
     return rows
+
+
+def blocker_rows(results: list[RowAuditResult]) -> list[dict[str, str]]:
+    return detail_rows([result for result in results if result.status in BLOCKER_STATUSES])

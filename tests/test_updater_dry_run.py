@@ -160,6 +160,26 @@ def test_install_rejects_package_missing_app_exe_before_removing_old_files(tmp_p
     assert not (install_dir / "new.dll").exists()
 
 
+def test_install_rejects_package_with_app_exe_directory_before_removing_old_files(tmp_path: Path) -> None:
+    install_dir = tmp_path / "app"
+    install_dir.mkdir()
+    (install_dir / "金蝶数据同步工具.exe").write_bytes(b"old exe")
+    (install_dir / "old.dll").write_bytes(b"old dll")
+
+    package = tmp_path / "bad-dir-exe.zip"
+    with zipfile.ZipFile(package, "w") as zf:
+        zf.writestr("金蝶数据同步工具.exe/", b"")
+        zf.writestr("new.dll", b"new dll")
+    plan = InstallPlan(package_path=package, install_dir=install_dir, app_exe_name="金蝶数据同步工具.exe")
+
+    with pytest.raises(FileNotFoundError, match="更新包缺少主程序"):
+        install_package(plan)
+
+    assert (install_dir / "金蝶数据同步工具.exe").read_bytes() == b"old exe"
+    assert (install_dir / "old.dll").read_bytes() == b"old dll"
+    assert not (install_dir / "new.dll").exists()
+
+
 def test_install_restores_backup_when_replacement_fails(tmp_path: Path) -> None:
     install_dir = tmp_path / "app"
     install_dir.mkdir()

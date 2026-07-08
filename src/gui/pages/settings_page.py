@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import logging
 import os
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -38,6 +39,7 @@ logger = logging.getLogger(__name__)
 DEFAULT_UPDATE_MANIFEST_URL = "https://intranet.example.com/kingdee-sync/updates/stable/latest.json"
 UPDATE_MANIFEST_URL_ENV = "KINGDEE_SYNC_UPDATE_MANIFEST_URL"
 DEFAULT_APP_EXE_NAME = "金蝶数据同步工具.exe"
+UPDATER_RUNNER_PREFIX = "kingdee-updater-runner-"
 
 
 def get_update_manifest_url() -> str:
@@ -58,6 +60,13 @@ def _current_app_exe_name() -> str:
     if getattr(sys, "frozen", False):
         return Path(sys.executable).name
     return DEFAULT_APP_EXE_NAME
+
+
+def _copy_updater_runner(install_dir: Path) -> Path:
+    runner_root = Path(tempfile.mkdtemp(prefix=UPDATER_RUNNER_PREFIX))
+    runner_dir = runner_root / install_dir.name
+    shutil.copytree(install_dir, runner_dir)
+    return runner_dir
 
 
 def launch_updater_process(
@@ -81,10 +90,14 @@ def launch_updater_process(
         str(resolved_pid),
     ]
     if getattr(sys, "frozen", False):
-        command = [sys.executable, "updater", *args]
+        runner_dir = _copy_updater_runner(resolved_install_dir)
+        runner_exe = runner_dir / resolved_app_exe_name
+        command = [str(runner_exe), "updater", *args]
+        cwd = runner_dir
     else:
         command = [sys.executable, str(_source_root() / "main.py"), "updater", *args]
-    subprocess.Popen(command, cwd=str(resolved_install_dir), close_fds=True)
+        cwd = resolved_install_dir
+    subprocess.Popen(command, cwd=str(cwd), close_fds=True)
 
 
 class SettingsPage(Win11PageScaffold):

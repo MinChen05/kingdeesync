@@ -475,6 +475,29 @@ class Win11SettingsAndFormsResponsiveTests(QtAppTestCase):
         self.assertIn("--pid", command)
         self.assertIn("1234", command)
 
+    def test_launch_updater_process_uses_external_runner_in_frozen_mode(self) -> None:
+        from src.gui.pages.settings_page import launch_updater_process
+
+        package_path = Path(tempfile.gettempdir()) / "kingdee-sync-1.4.0.zip"
+        install_dir = Path(tempfile.gettempdir()) / "kingdee-install"
+        runner_dir = Path(tempfile.gettempdir()) / "kingdee-updater-runner" / "kingdee-install"
+
+        with (
+            patch("src.gui.pages.settings_page.getattr", return_value=True),
+            patch("src.gui.pages.settings_page._copy_updater_runner", return_value=runner_dir) as copy_runner,
+            patch("src.gui.pages.settings_page.subprocess.Popen") as popen,
+            patch("src.gui.pages.settings_page.os.getpid", return_value=1234),
+        ):
+            launch_updater_process(package_path, install_dir=install_dir, app_exe_name="app.exe")
+
+        copy_runner.assert_called_once_with(install_dir)
+        command = popen.call_args.args[0]
+        self.assertEqual(command[0], str(runner_dir / "app.exe"))
+        self.assertEqual(command[1], "updater")
+        self.assertIn("--install-dir", command)
+        self.assertIn(str(install_dir), command)
+        self.assertEqual(popen.call_args.kwargs["cwd"], str(runner_dir))
+
     def test_settings_page_check_update_reports_failure(self) -> None:
         page = self._create_settings_page()
 

@@ -100,7 +100,8 @@ def install_package(plan: InstallPlan) -> None:
     with tempfile.TemporaryDirectory(prefix="kingdee-update-") as temp_dir:
         extract_dir = Path(temp_dir) / "package"
         safe_extract_zip(plan.package_path, extract_dir)
-        if not (extract_dir / plan.app_exe_name).exists():
+        package_app = extract_dir / plan.app_exe_name
+        if not package_app.is_file():
             raise FileNotFoundError(f"更新包缺少主程序: {plan.app_exe_name}")
 
         backup_dir = _backup_install_dir(install_dir)

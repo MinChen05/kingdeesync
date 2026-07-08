@@ -4,7 +4,7 @@ import argparse
 import csv
 import sys
 from pathlib import Path
-from typing import Callable, Iterable
+from typing import Any, Callable, Iterable
 
 sys.path.insert(0, ".")
 
@@ -14,6 +14,7 @@ from src.core.sync_data_authenticity import (  # noqa: E402
     AuthenticitySpec,
     RowAuditResult,
     audit_row,
+    build_mapping_draft_rows,
     detail_rows,
     load_targets_from_difference_csv,
     normalize_text,
@@ -23,6 +24,25 @@ from src.core.sync_data_authenticity import (  # noqa: E402
 Targets = dict[str, set[tuple[str, ...]]]
 RowsByForm = dict[str, dict[tuple[str, ...], dict[str, object]]]
 Fetcher = Callable[[Targets], RowsByForm]
+
+DISCOVERY_FIELDNAMES = [
+    "form",
+    "table",
+    "form_id",
+    "batch",
+    "identity_kind",
+    "identity_confirmed",
+    "db_identity",
+    "api_identity",
+    "blocker_fields",
+    "warning_fields",
+    "api_field_keys",
+    "db_columns",
+    "missing_db_fields",
+    "missing_api_fields",
+    "unsupported_reason",
+    "db_columns_available",
+]
 
 
 def _write_csv(path: Path, rows: list[dict[str, object]], fieldnames: list[str]) -> None:
@@ -169,6 +189,82 @@ def fetch_api_rows(targets: Targets) -> RowsByForm:
         client.logout()
 
 
+def _column_value(row: object, cursor, name: str, index: int) -> str:
+    if isinstance(row, dict):
+        return normalize_text(row.get(name))
+    if hasattr(row, name):
+        return normalize_text(getattr(row, name))
+    try:
+        return normalize_text(row[index])  # type: ignore[index]
+    except (IndexError, TypeError):
+        columns = [column[0] for column in cursor.description]
+        row_dict = dict(zip(columns, row))  # type: ignore[arg-type]
+        return normalize_text(row_dict.get(name))
+
+
+def fetch_db_columns() -> dict[str, set[str]]:
+    from src.core.mysql_manager import MySQLManager
+
+    sql = """
+    SELECT TABLE_NAME, COLUMN_NAME
+    FROM INFORMATION_SCHEMA.COLUMNS
+    ORDER BY TABLE_NAME, ORDINAL_POSITION
+    """
+    manager = MySQLManager()
+    columns_by_table: dict[str, set[str]] = {}
+    try:
+        if not manager.connect():
+            raise RuntimeError("数据库连接失败")
+        manager.cursor.execute(sql)
+        for row in manager.cursor.fetchall() or []:
+            table = _column_value(row, manager.cursor, "TABLE_NAME", 0)
+            column = _column_value(row, manager.cursor, "COLUMN_NAME", 1)
+            if table and column:
+                columns_by_table.setdefault(table, set()).add(column)
+        return columns_by_table
+    finally:
+        manager.disconnect()
+
+
+def _table_entries_from_config() -> dict[str, dict[str, str]]:
+    table_mapping = config_manager.get_table_mapping()
+    insert_methods = config_manager.get_insert_method_map()
+    return {
+        form: {
+            "table": table,
+            "insert_method": insert_methods.get(form, ""),
+        }
+        for form, table in table_mapping.items()
+    }
+
+
+def run_discovery(
+    out_dir: str | Path,
+    form_queries: dict[str, dict[str, Any]] | None = None,
+    tables: dict[str, dict[str, Any]] | None = None,
+    db_columns: dict[str, set[str]] | None = None,
+) -> dict[str, object]:
+    discovered_form_queries = form_queries if form_queries is not None else config_manager.get_form_queries()
+    discovered_tables = tables if tables is not None else _table_entries_from_config()
+    discovered_db_columns = db_columns if db_columns is not None else fetch_db_columns()
+
+    rows = build_mapping_draft_rows(
+        discovered_form_queries,
+        discovered_tables,
+        discovered_db_columns,
+    )
+    configured_forms = set(discovered_form_queries) | set(discovered_tables)
+    if configured_forms:
+        rows = [row for row in rows if row.get("form") in configured_forms]
+    output_dir = Path(out_dir)
+    mapping_path = output_dir / "authenticity_mapping_draft.csv"
+    _write_csv(mapping_path, rows, DISCOVERY_FIELDNAMES)
+    return {
+        "rows": len(rows),
+        "mapping_draft": mapping_path,
+    }
+
+
 def run_audit(
     source: str | Path,
     forms: set[str],
@@ -228,7 +324,13 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--forms", default="采购入库单,采购订单")
     parser.add_argument("--mode", choices=("dry-run", "verify"), default="dry-run")
     parser.add_argument("--out-dir", default="logs/sync_data_authenticity")
+    parser.add_argument("--discover", action="store_true")
     args = parser.parse_args(argv)
+
+    if args.discover:
+        result = run_discovery(args.out_dir)
+        print(f"discovery: wrote {result['mapping_draft']}")
+        return 0
 
     result = run_audit(args.source, _parse_forms(args.forms), args.out_dir)
     print(f"{args.mode}: audited {result['total']} rows")

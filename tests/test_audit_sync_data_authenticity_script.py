@@ -1,10 +1,12 @@
 from src.core.sync_data_authenticity import AUDIT_SPECS
 from scripts.maintenance.audit_sync_data_authenticity import (
     _execute_query,
+    fetch_db_columns,
     iter_db_queries,
     build_api_filter,
     build_db_query,
     run_audit,
+    run_discovery,
 )
 
 
@@ -46,6 +48,71 @@ def test_run_audit_writes_summary_and_detail(tmp_path):
     assert result["total"] == 1
     assert (out_dir / "sync_data_authenticity_summary.csv").exists()
     assert (out_dir / "sync_data_authenticity_detail.csv").exists()
+
+
+def test_run_discovery_writes_mapping_draft(tmp_path):
+    form_queries = {
+        "采购订单": {
+            "FormId": "PUR_PurchaseOrder",
+            "FieldKeys": "FID,FPOOrderEntry_FENTRYID,FBillNo",
+        }
+    }
+    tables = {"采购订单": {"table": "PUR_PurchaseOrder", "insert_method": "insert_purchase_order"}}
+    db_columns = {"PUR_PurchaseOrder": {"FID", "FENTRYID", "FBillNo"}}
+
+    result = run_discovery(
+        tmp_path,
+        form_queries=form_queries,
+        tables=tables,
+        db_columns=db_columns,
+    )
+
+    draft_path = tmp_path / "authenticity_mapping_draft.csv"
+    assert result["rows"] == 1
+    assert result["mapping_draft"] == draft_path
+    assert draft_path.exists()
+    content = draft_path.read_text(encoding="utf-8-sig")
+    assert "form,table,form_id" in content
+    assert "采购订单,PUR_PurchaseOrder,PUR_PurchaseOrder" in content
+
+
+def test_fetch_db_columns_uses_information_schema_select(monkeypatch):
+    class Cursor:
+        description = [("TABLE_NAME",), ("COLUMN_NAME",)]
+
+        def __init__(self):
+            self.sql = ""
+
+        def execute(self, sql):
+            self.sql = sql
+
+        def fetchall(self):
+            return [("PUR_PurchaseOrder", "FID"), ("PUR_PurchaseOrder", "FBillNo")]
+
+    class Manager:
+        instances = []
+
+        def __init__(self):
+            self.cursor = Cursor()
+            self.disconnected = False
+            Manager.instances.append(self)
+
+        def connect(self):
+            return True
+
+        def disconnect(self):
+            self.disconnected = True
+
+    monkeypatch.setattr("src.core.mysql_manager.MySQLManager", Manager)
+
+    columns = fetch_db_columns()
+
+    sql = Manager.instances[0].cursor.sql.lower()
+    assert columns == {"PUR_PurchaseOrder": {"FID", "FBillNo"}}
+    assert "information_schema.columns" in sql
+    assert sql.lstrip().startswith("select")
+    assert not any(keyword in sql for keyword in ("insert", "update", "delete", "merge", "truncate", "drop"))
+    assert Manager.instances[0].disconnected is True
 
 
 def test_build_db_query_uses_fid_and_fentryid():

@@ -41,10 +41,29 @@ def test_purchase_instock_spec_marks_date_as_warning():
 
 def test_build_mapping_draft_rows_reports_supported_purchase_form():
     form_queries = {
-        "采购订单": {"FormId": "PUR_PurchaseOrder", "FieldKeys": "FID,FPOOrderEntry_FENTRYID,FBillNo,FQTY"}
+        "采购订单": {
+            "FormId": "PUR_PurchaseOrder",
+            "FieldKeys": (
+                "FID,FPOOrderEntry_FENTRYID,FBillNo,FMaterialId.FNUMBER,FSupplierId.FNAME,"
+                "FQTY,FDocumentStatus,FCreateDate,FModifyDate,FApproveDate"
+            ),
+        }
     }
     tables = {"采购订单": {"table": "PUR_PurchaseOrder", "insert_method": "insert_purchase_order"}}
-    db_columns = {"PUR_PurchaseOrder": {"FID", "FENTRYID", "FBillNo", "FQTY"}}
+    db_columns = {
+        "PUR_PurchaseOrder": {
+            "FID",
+            "FENTRYID",
+            "FBillNo",
+            "FNUMBER",
+            "FSupplier",
+            "FQTY",
+            "FDocumentStatus",
+            "FCreateDate",
+            "FModifyDate",
+            "FApproveDate",
+        }
+    }
 
     rows = build_mapping_draft_rows(form_queries, tables, db_columns)
 
@@ -52,6 +71,21 @@ def test_build_mapping_draft_rows_reports_supported_purchase_form():
     assert rows[0]["identity_confirmed"] == "true"
     assert rows[0]["missing_db_fields"] == ""
     assert rows[0]["missing_api_fields"] == ""
+
+
+def test_build_mapping_draft_rows_reports_all_configured_mapping_gaps():
+    form_queries = {
+        "采购订单": {"FormId": "PUR_PurchaseOrder", "FieldKeys": "FID,FPOOrderEntry_FENTRYID,FBillNo,FQTY"}
+    }
+    tables = {"采购订单": {"table": "PUR_PurchaseOrder", "insert_method": "insert_purchase_order"}}
+    db_columns = {"PUR_PurchaseOrder": {"FID", "FENTRYID", "FBillNo", "FQTY"}}
+
+    rows = build_mapping_draft_rows(form_queries, tables, db_columns)
+
+    missing_db_fields = set(rows[0]["missing_db_fields"].split(","))
+    missing_api_fields = set(rows[0]["missing_api_fields"].split(","))
+    assert "FNUMBER" in missing_db_fields
+    assert "FMaterialId.FNUMBER" in missing_api_fields
 
 
 def test_build_mapping_draft_rows_marks_unsupported_report_form():

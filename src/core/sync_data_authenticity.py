@@ -274,16 +274,8 @@ def build_mapping_draft_rows(
         db_identity = spec.db_identity if spec else tuple()
         api_identity = spec.api_identity if spec else tuple()
         fields = spec.fields if spec else {}
-        api_field_keys_lower = {field.casefold() for field in api_field_keys}
-        db_columns_lower = {field.casefold() for field in table_db_columns}
-        required_db_fields = {
-            *db_identity,
-            *(field.db_field for field in fields.values() if field.api_field.casefold() in api_field_keys_lower),
-        }
-        required_api_fields = {
-            *api_identity,
-            *(field.api_field for field in fields.values() if field.db_field.casefold() in db_columns_lower),
-        }
+        required_db_fields = {*db_identity, *(field.db_field for field in fields.values())}
+        required_api_fields = {*api_identity, *(field.api_field for field in fields.values())}
         blocker_fields = {key for key, field in fields.items() if field.severity == "blocker"}
         warning_fields = {key for key, field in fields.items() if field.severity == "warning"}
 

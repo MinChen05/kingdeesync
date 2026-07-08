@@ -3,7 +3,7 @@ import json
 import zipfile
 from pathlib import Path
 
-from create_deploy import create_update_release, should_exclude_from_release
+from create_deploy import create_update_release, resolve_release_base_url, should_exclude_from_release
 
 
 def test_release_package_excludes_local_config_and_logs() -> None:
@@ -84,3 +84,13 @@ def test_create_update_release_generates_zip_hash_and_manifest(tmp_path: Path) -
     assert latest["size"] == zip_path.stat().st_size
     assert latest["force"] is False
     assert latest["notes"] == []
+
+
+def test_release_base_url_prefers_cli_then_environment(monkeypatch) -> None:
+    monkeypatch.setenv("KINGDEE_SYNC_RELEASE_BASE_URL", "https://env.example.com/releases")
+
+    assert (
+        resolve_release_base_url("https://cli.example.com/releases")
+        == "https://cli.example.com/releases"
+    )
+    assert resolve_release_base_url(None) == "https://env.example.com/releases"

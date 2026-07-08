@@ -10,6 +10,8 @@ from urllib.request import urlopen
 
 from src.version import APP_NAME, get_app_version
 
+SUPPORTED_CHANNEL = "stable"
+
 
 class ManifestValidationError(ValueError):
     pass
@@ -62,6 +64,10 @@ def parse_manifest(data: dict[str, Any]) -> UpdateManifest:
     if data.get("app") != APP_NAME:
         raise ManifestValidationError("manifest app 不匹配")
 
+    channel = str(data.get("channel", ""))
+    if channel != SUPPORTED_CHANNEL:
+        raise ManifestValidationError(f"manifest channel 必须为 {SUPPORTED_CHANNEL}")
+
     version = str(data.get("version", ""))
     min_supported_version = str(data.get("min_supported_version", ""))
     _version_tuple(version)
@@ -90,7 +96,7 @@ def parse_manifest(data: dict[str, Any]) -> UpdateManifest:
     return UpdateManifest(
         app=APP_NAME,
         version=version,
-        channel=str(data.get("channel", "stable")),
+        channel=channel,
         release_date=str(data.get("release_date", "")),
         min_supported_version=min_supported_version,
         package_url=package_url,

@@ -1,7 +1,9 @@
 """创建服务器部署包。"""
 
+import argparse
 import hashlib
 import json
+import os
 import shutil
 import zipfile
 from datetime import date
@@ -11,6 +13,7 @@ from src.version import APP_CHANNEL, APP_NAME, APP_VERSION
 
 RELEASE_EXCLUDES = {"config.ini", "config.local.ini", "config.ini.backup", "logs"}
 DEFAULT_RELEASE_BASE_URL = "https://intranet.example.com/kingdee-sync/updates/stable"
+RELEASE_BASE_URL_ENV = "KINGDEE_SYNC_RELEASE_BASE_URL"
 
 
 def should_exclude_from_release(path: Path) -> bool:
@@ -53,7 +56,11 @@ def create_update_release(deploy_dir: Path, version: str, base_url: str) -> None
     )
 
 
-def create_deploy_package():
+def resolve_release_base_url(cli_value: str | None) -> str:
+    return (cli_value or os.environ.get(RELEASE_BASE_URL_ENV) or DEFAULT_RELEASE_BASE_URL).strip()
+
+
+def create_deploy_package(release_base_url: str | None = None):
     """创建部署包"""
     print("=" * 50)
     print("  金蝶数据同步工具 - 创建部署包")
@@ -103,7 +110,7 @@ def create_deploy_package():
     else:
         print("[5/5] 警告: 未找到 config.example.ini")
 
-    create_update_release(deploy_dir, APP_VERSION, DEFAULT_RELEASE_BASE_URL)
+    create_update_release(deploy_dir, APP_VERSION, resolve_release_base_url(release_base_url))
 
     print()
     print("=" * 50)
@@ -127,4 +134,9 @@ def create_deploy_package():
 
 
 if __name__ == "__main__":
-    create_deploy_package()
+    parser = argparse.ArgumentParser(description="创建金蝶数据同步工具部署包")
+    parser.add_argument(
+        "--release-base-url",
+        help=f"在线更新 release 根地址；也可通过 {RELEASE_BASE_URL_ENV} 设置",
+    )
+    create_deploy_package(parser.parse_args().release_base_url)

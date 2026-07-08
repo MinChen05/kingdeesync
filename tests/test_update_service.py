@@ -8,6 +8,7 @@ from unittest.mock import patch
 import pytest
 
 from src.services.update_service import (
+    SUPPORTED_CHANNEL,
     ManifestValidationError,
     UpdateManifest,
     UpdateService,
@@ -95,6 +96,14 @@ def test_parse_manifest_rejects_wrong_app() -> None:
     data["app"] = "other-app"
 
     with pytest.raises(ManifestValidationError, match="app"):
+        parse_manifest(data)
+
+
+def test_parse_manifest_rejects_non_stable_channel() -> None:
+    data = dict(VALID_MANIFEST)
+    data["channel"] = "beta"
+
+    with pytest.raises(ManifestValidationError, match=SUPPORTED_CHANNEL):
         parse_manifest(data)
 
 

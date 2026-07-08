@@ -2,13 +2,15 @@ from __future__ import annotations
 
 import argparse
 import ctypes
+import json
 import os
 import shutil
+import subprocess
 import tempfile
 import time
 import zipfile
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import UTC, datetime
 from pathlib import Path
 
 PROTECTED_NAMES = {"config.local.ini", "config.ini", "config.ini.backup", "logs", "backups"}
@@ -23,6 +25,13 @@ class InstallPlan:
     package_path: Path
     install_dir: Path
     app_exe_name: str
+
+
+class UpdateInstallError(RuntimeError):
+    def __init__(self, message: str, stage: str, rollback_success: bool) -> None:
+        super().__init__(message)
+        self.stage = stage
+        self.rollback_success = rollback_success
 
 
 def _is_protected(relative_path: Path) -> bool:
@@ -88,12 +97,14 @@ def install_package(plan: InstallPlan) -> None:
     if not (install_dir / plan.app_exe_name).exists():
         raise FileNotFoundError(f"主程序不存在: {install_dir / plan.app_exe_name}")
 
-    backup_dir = _backup_install_dir(install_dir)
-    try:
-        with tempfile.TemporaryDirectory(prefix="kingdee-update-") as temp_dir:
-            extract_dir = Path(temp_dir) / "package"
-            safe_extract_zip(plan.package_path, extract_dir)
+    with tempfile.TemporaryDirectory(prefix="kingdee-update-") as temp_dir:
+        extract_dir = Path(temp_dir) / "package"
+        safe_extract_zip(plan.package_path, extract_dir)
+        if not (extract_dir / plan.app_exe_name).exists():
+            raise FileNotFoundError(f"更新包缺少主程序: {plan.app_exe_name}")
 
+        backup_dir = _backup_install_dir(install_dir)
+        try:
             _remove_unprotected_items(install_dir)
             for source in sorted(extract_dir.rglob("*")):
                 if source.is_dir():
@@ -106,9 +117,12 @@ def install_package(plan: InstallPlan) -> None:
                     shutil.rmtree(target)
                 target.parent.mkdir(parents=True, exist_ok=True)
                 shutil.copy2(source, target)
-    except Exception:
-        _restore_backup(backup_dir, install_dir)
-        raise
+        except Exception as exc:
+            try:
+                _restore_backup(backup_dir, install_dir)
+            except Exception as restore_exc:
+                raise UpdateInstallError(str(exc), "install", False) from restore_exc
+            raise UpdateInstallError(str(exc), "install", True) from exc
 
 
 def wait_for_process_exit(pid: int, timeout_seconds: int = 60) -> None:
@@ -137,6 +151,30 @@ def wait_for_process_exit(pid: int, timeout_seconds: int = 60) -> None:
     raise TimeoutError(f"主进程未退出: {pid}")
 
 
+def write_update_failure(
+    install_dir: Path,
+    stage: str,
+    message: str,
+    rollback_success: bool,
+) -> Path:
+    failure_path = install_dir / "update-failed.json"
+    payload = {
+        "stage": stage,
+        "message": message,
+        "timestamp": datetime.now(UTC).isoformat(),
+        "rollback_success": rollback_success,
+    }
+    failure_path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+    return failure_path
+
+
+def start_application(install_dir: Path, app_exe_name: str) -> None:
+    app_path = install_dir / app_exe_name
+    if not app_path.exists():
+        raise FileNotFoundError(f"主程序不存在: {app_path}")
+    subprocess.Popen([str(app_path)], cwd=str(install_dir), close_fds=True)
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description="Kingdee Sync updater")
     parser.add_argument("--package", required=True, help="已校验更新包 zip 路径")
@@ -145,16 +183,24 @@ def main() -> None:
     parser.add_argument("--pid", type=int, help="需要等待退出的主进程 PID")
     args = parser.parse_args()
 
-    if args.pid:
-        wait_for_process_exit(args.pid)
+    install_dir = Path(args.install_dir)
+    try:
+        if args.pid:
+            wait_for_process_exit(args.pid)
 
-    install_package(
-        InstallPlan(
-            package_path=Path(args.package),
-            install_dir=Path(args.install_dir),
-            app_exe_name=args.app_exe,
+        install_package(
+            InstallPlan(
+                package_path=Path(args.package),
+                install_dir=install_dir,
+                app_exe_name=args.app_exe,
+            )
         )
-    )
+        start_application(install_dir, args.app_exe)
+    except Exception as exc:
+        stage = getattr(exc, "stage", "install")
+        rollback_success = bool(getattr(exc, "rollback_success", False))
+        write_update_failure(install_dir, stage, str(exc), rollback_success)
+        raise SystemExit(1) from exc
 
 
 if __name__ == "__main__":

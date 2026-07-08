@@ -372,6 +372,8 @@ class Win11SettingsAndFormsResponsiveTests(QtAppTestCase):
         self.assertTrue(page.btn_check_update.isEnabled())
 
     def test_settings_page_check_update_reports_available_update(self) -> None:
+        from PySide6.QtWidgets import QMessageBox
+
         page = self._create_settings_page()
         result = SimpleNamespace(
             update_available=True,
@@ -384,19 +386,94 @@ class Win11SettingsAndFormsResponsiveTests(QtAppTestCase):
 
         with (
             patch("src.gui.pages.settings_page.UpdateService") as service_cls,
+            patch("src.gui.pages.settings_page.QMessageBox.question") as question,
             patch("src.gui.pages.settings_page.UiFeedback.info") as feedback,
             patch("src.gui.pages.settings_page.UiFeedback.error") as error_feedback,
         ):
             service_cls.return_value.check_for_update.return_value = result
+            question.return_value = QMessageBox.StandardButton.No
             page.check_update()
 
-        feedback.assert_called_once()
-        message = feedback.call_args.args[2]
+        question.assert_called_once()
+        message = question.call_args.args[2]
         self.assertIn("1.4.0", message)
         self.assertIn("2026-07-09", message)
         self.assertIn("修复同步异常提示", message)
+        service_cls.return_value.download_package.assert_not_called()
+        feedback.assert_not_called()
         error_feedback.assert_not_called()
         self.assertTrue(page.btn_check_update.isEnabled())
+
+    def test_settings_page_confirmed_update_downloads_launches_updater_and_exits(self) -> None:
+        from PySide6.QtWidgets import QMessageBox
+
+        page = self._create_settings_page()
+        manifest = SimpleNamespace(
+            version="1.4.0",
+            release_date="2026-07-09",
+            notes=("修复同步异常提示",),
+        )
+        result = SimpleNamespace(update_available=True, manifest=manifest)
+        package_path = Path(tempfile.gettempdir()) / "kingdee-sync-1.4.0.zip"
+
+        with (
+            patch("src.gui.pages.settings_page.UpdateService") as service_cls,
+            patch("src.gui.pages.settings_page.QMessageBox.question") as question,
+            patch("src.gui.pages.settings_page.launch_updater_process") as launch_updater,
+            patch("src.gui.pages.settings_page.QApplication.quit") as app_quit,
+            patch("src.gui.pages.settings_page.UiFeedback.error") as error_feedback,
+        ):
+            service = service_cls.return_value
+            service.check_for_update.return_value = result
+            service.download_package.return_value = package_path
+            question.return_value = QMessageBox.StandardButton.Yes
+
+            page.check_update()
+
+        service.download_package.assert_called_once()
+        self.assertIs(service.download_package.call_args.args[0], manifest)
+        self.assertEqual(service.download_package.call_args.args[1], Path(tempfile.gettempdir()))
+        launch_updater.assert_called_once()
+        self.assertEqual(launch_updater.call_args.kwargs["package_path"], package_path)
+        app_quit.assert_called_once_with()
+        error_feedback.assert_not_called()
+        self.assertTrue(page.btn_check_update.isEnabled())
+
+    def test_get_update_manifest_url_prefers_environment(self) -> None:
+        from src.gui.pages.settings_page import get_update_manifest_url
+
+        with patch.dict(
+            "src.gui.pages.settings_page.os.environ",
+            {"KINGDEE_SYNC_UPDATE_MANIFEST_URL": "https://updates.example.com/latest.json"},
+        ):
+            self.assertEqual(
+                get_update_manifest_url(),
+                "https://updates.example.com/latest.json",
+            )
+
+    def test_launch_updater_process_uses_main_updater_subcommand_in_source_mode(self) -> None:
+        import sys
+
+        from src.gui.pages.settings_page import launch_updater_process
+
+        package_path = Path(tempfile.gettempdir()) / "kingdee-sync-1.4.0.zip"
+        install_dir = Path(tempfile.gettempdir()) / "kingdee-install"
+
+        with (
+            patch("src.gui.pages.settings_page.getattr", return_value=False),
+            patch("src.gui.pages.settings_page.subprocess.Popen") as popen,
+            patch("src.gui.pages.settings_page.os.getpid", return_value=1234),
+        ):
+            launch_updater_process(package_path, install_dir=install_dir, app_exe_name="app.exe")
+
+        command = popen.call_args.args[0]
+        self.assertEqual(command[0], sys.executable)
+        self.assertTrue(command[1].endswith("main.py"))
+        self.assertEqual(command[2], "updater")
+        self.assertIn("--package", command)
+        self.assertIn(str(package_path), command)
+        self.assertIn("--pid", command)
+        self.assertIn("1234", command)
 
     def test_settings_page_check_update_reports_failure(self) -> None:
         page = self._create_settings_page()

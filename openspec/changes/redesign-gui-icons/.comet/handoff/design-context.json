@@ -1,0 +1,14 @@
+{
+  "change": "redesign-gui-icons",
+  "phase": "design",
+  "mode": "compact",
+  "canonical_spec": "openspec",
+  "generated_by": "comet-handoff.sh",
+  "context_hash": "e2eda34743412154853e026a2b12ff86be04fc6255455b54bf81578d5383dac5",
+  "files": [
+    { "path": "openspec/changes/redesign-gui-icons/proposal.md", "sha256": "c60822bf25985814387e44835410390fd2436457f0e0cf71c0dd1a68b033bbf0" },
+    { "path": "openspec/changes/redesign-gui-icons/design.md", "sha256": "b48ce81be72010dfd79c7bb05593e7a0136060537ed708a2ba39a7d189206fc7" },
+    { "path": "openspec/changes/redesign-gui-icons/tasks.md", "sha256": "e3c23859367ffff5646f42e8d63d33cb680d7a9c69ede789838038b2d7efe1b5" },
+    { "path": "openspec/changes/redesign-gui-icons/specs/gui-icon-system/spec.md", "sha256": "54096728250d6baef5e15053d0b26e23e5e95d995dce997e27ea720deee0402e" }
+  ]
+}

@@ -1,0 +1,16 @@
+workflow: full
+phase: build
+build_mode: null
+isolation: null
+verify_mode: null
+base_ref: 5de8fb44c124dc7baf2cac94bdaa5e78d65b178a
+design_doc: docs/superpowers/specs/2026-07-08-gui-icon-system-design.md
+plan: docs/superpowers/plans/2026-07-08-gui-icon-system.md
+verify_result: pending
+verification_report: null
+branch_status: pending
+created_at: 2026-07-08
+verified_at: null
+archived: false
+handoff_context: openspec/changes/redesign-gui-icons/.comet/handoff/design-context.json
+handoff_hash: e2eda34743412154853e026a2b12ff86be04fc6255455b54bf81578d5383dac5

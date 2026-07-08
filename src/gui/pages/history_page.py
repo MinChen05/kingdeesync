@@ -6,7 +6,7 @@ import logging
 from datetime import datetime, timedelta
 
 from PySide6.QtCore import QSize, Qt
-from PySide6.QtGui import QColor, QIcon, QPainter, QPainterPath, QPalette, QPen
+from PySide6.QtGui import QColor, QPainter, QPainterPath, QPalette, QPen
 from PySide6.QtWidgets import (
     QApplication,
     QFrame,
@@ -21,6 +21,7 @@ from PySide6.QtWidgets import (
 )
 
 from src.core.history_manager import history_manager
+from src.gui import icon_registry
 from src.gui.components.common import StatusChip, SvgIconLabel
 from src.gui.components.data_table import DataTable
 from src.gui.components.page_shell import Win11PageScaffold
@@ -458,8 +459,8 @@ class HistoryPage(Win11PageScaffold):
         self.btn_export = QPushButton(ButtonText.EXPORT)
         self.btn_export.setProperty("class", "secondary")
         self.btn_export.setObjectName("history_export_btn")
-        self.btn_export.setProperty("icon-source", "export.svg")
-        self.btn_export.setIcon(QIcon(str(SvgIconLabel._ASSETS_DIR / "icons" / "export.svg")))
+        self.btn_export.setProperty("icon-source", icon_registry.icon_source("export.svg"))
+        self.btn_export.setIcon(icon_registry.qicon("export.svg"))
         self.btn_export.setIconSize(QSize(15, 15))
         self.btn_export.setFixedSize(SizeTokens.HISTORY_EXPORT_BUTTON_WIDTH, SizeTokens.HISTORY_EXPORT_BUTTON_HEIGHT)
         self.btn_export.clicked.connect(self.export_data)

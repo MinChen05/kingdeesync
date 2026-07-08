@@ -10,7 +10,7 @@ from pathlib import Path
 from typing import Any
 
 from PySide6.QtCore import QEvent, QSize, Qt, Signal
-from PySide6.QtGui import QColor, QIcon, QPainter, QPainterPath, QPalette, QPen, QPixmap
+from PySide6.QtGui import QColor, QPainter, QPainterPath, QPalette, QPen, QPixmap
 from PySide6.QtWidgets import (
     QAbstractItemView,
     QApplication,
@@ -33,7 +33,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from src.gui.components.common import SvgIconLabel
+from src.gui import icon_registry
 from src.gui.components.data_table import DataTable
 from src.gui.components.page_shell import Win11PageScaffold
 from src.gui.design_tokens import ColorTokens, SizeTokens, SpacingTokens
@@ -132,8 +132,8 @@ class TaskMetricIcon(QLabel):
         self.setFixedSize(52, 52)
         self.setAlignment(Qt.AlignmentFlag.AlignCenter)
         icon_file = self._ICON_FILES[icon_type]
-        self.setProperty("icon-source", icon_file)
-        pixmap = QIcon(str(self._ASSETS_DIR / icon_file)).pixmap(QSize(52, 52))
+        self.setProperty("icon-source", icon_registry.icon_source(icon_file))
+        pixmap = icon_registry.qicon(icon_file).pixmap(QSize(52, 52))
         if pixmap.isNull():
             pixmap = QPixmap(52, 52)
             pixmap.fill(Qt.GlobalColor.transparent)
@@ -252,8 +252,8 @@ class TaskActionButton(QPushButton):
         self.setIconSize(QSize(16, 16))
         icon_file = self._ICON_FILES.get(action_type)
         if icon_file:
-            self.setProperty("icon-source", icon_file)
-            self.setIcon(QIcon(str(self._ASSETS_DIR / icon_file)))
+            self.setProperty("icon-source", icon_registry.icon_source(icon_file))
+            self.setIcon(icon_registry.qicon(icon_file))
 
     def paintEvent(self, event) -> None:  # noqa: N802 - Qt API
         super().paintEvent(event)

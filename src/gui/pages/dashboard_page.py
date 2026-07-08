@@ -30,6 +30,7 @@ from PySide6.QtWidgets import (
 from src.config.config_manager import config_manager
 from src.core.history_manager import history_manager
 from src.core.scheduler import auto_scheduler
+from src.gui import icon_registry
 from src.gui.components.buttons import LoadingButton
 from src.gui.components.charts import DashboardDualLineChart
 from src.gui.components.common import SvgIconLabel
@@ -693,8 +694,8 @@ class TrendChartWidget(QFrame):
         range_btn.setObjectName("dashboard_trend_range_btn")
         range_btn.setFixedSize(80, 28)
         range_btn.setProperty("ui", "trend-range-btn")
-        range_btn.setProperty("icon-source", "chevron_down.svg")
-        range_btn.setIcon(QIcon(str(SvgIconLabel._ASSETS_DIR / "icons" / "chevron_down.svg")))
+        range_btn.setProperty("icon-source", icon_registry.icon_source("chevron_down.svg"))
+        range_btn.setIcon(icon_registry.qicon("chevron_down.svg"))
         range_btn.setIconSize(QSize(12, 12))
         range_btn.setLayoutDirection(Qt.RightToLeft)
         header.addWidget(range_btn)

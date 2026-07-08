@@ -5,10 +5,9 @@ from __future__ import annotations
 from typing import Callable
 
 from PySide6.QtCore import Qt
-from PySide6.QtGui import QIcon
 from PySide6.QtWidgets import QComboBox, QFrame, QHBoxLayout, QLabel, QPushButton, QSpinBox, QWidget
 
-from src.gui.components.common import SvgIconLabel
+from src.gui import icon_registry
 from src.gui.design_tokens import SizeTokens, SpacingTokens
 
 
@@ -63,8 +62,8 @@ class HistoryPaginationCard(QFrame):
 
         self.btn_prev = QPushButton("")
         self.btn_prev.setProperty("class", "secondary")
-        self.btn_prev.setProperty("icon-source", "chevron_left.svg")
-        self.btn_prev.setIcon(QIcon(str(SvgIconLabel._ASSETS_DIR / "icons" / "chevron_left.svg")))
+        self.btn_prev.setProperty("icon-source", icon_registry.icon_source("chevron_left.svg"))
+        self.btn_prev.setIcon(icon_registry.qicon("chevron_left.svg"))
         self.btn_prev.setFixedHeight(SizeTokens.PAGINATION_BUTTON_HEIGHT)
         self.btn_prev.setFixedWidth(SizeTokens.PAGINATION_SIZE)
         if on_prev:
@@ -79,8 +78,8 @@ class HistoryPaginationCard(QFrame):
 
         self.btn_next = QPushButton("")
         self.btn_next.setProperty("class", "secondary")
-        self.btn_next.setProperty("icon-source", "chevron_right.svg")
-        self.btn_next.setIcon(QIcon(str(SvgIconLabel._ASSETS_DIR / "icons" / "chevron_right.svg")))
+        self.btn_next.setProperty("icon-source", icon_registry.icon_source("chevron_right.svg"))
+        self.btn_next.setIcon(icon_registry.qicon("chevron_right.svg"))
         self.btn_next.setFixedHeight(SizeTokens.PAGINATION_BUTTON_HEIGHT)
         self.btn_next.setFixedWidth(SizeTokens.PAGINATION_SIZE)
         if on_next:

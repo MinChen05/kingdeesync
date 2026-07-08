@@ -40,6 +40,20 @@ class GuiIconRegistryTests(unittest.TestCase):
         self.assertEqual(icon_registry.icon_source("dashboard.svg"), "icons/dashboard.svg")
         self.assertEqual(icon_registry.icon_source("icons/dashboard.svg"), "icons/dashboard.svg")
 
+    def test_registered_svgs_use_current_color_and_24_viewbox(self) -> None:
+        bad_viewbox = []
+        missing_current_color = []
+
+        for source in sorted(icon_registry.required_icon_files()):
+            text = icon_registry.icon_path(source).read_text(encoding="utf-8")
+            if 'viewBox="0 0 24 24"' not in text:
+                bad_viewbox.append(source)
+            if "currentColor" not in text:
+                missing_current_color.append(source)
+
+        self.assertEqual(bad_viewbox, [])
+        self.assertEqual(missing_current_color, [])
+
 
 if __name__ == "__main__":
     unittest.main()

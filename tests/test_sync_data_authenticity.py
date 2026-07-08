@@ -3,6 +3,7 @@ from src.core.sync_data_authenticity import (
     AuditStatus,
     RowAuditResult,
     audit_row,
+    build_mapping_draft_rows,
     compare_date,
     compare_decimal,
     compare_string,
@@ -36,6 +37,31 @@ def test_purchase_instock_spec_marks_date_as_warning():
     spec = AUDIT_SPECS["采购入库单"]
     assert spec.fields["FDATE"].severity == "warning"
     assert spec.fields["FREALQTY"].severity == "blocker"
+
+
+def test_build_mapping_draft_rows_reports_supported_purchase_form():
+    form_queries = {
+        "采购订单": {"FormId": "PUR_PurchaseOrder", "FieldKeys": "FID,FPOOrderEntry_FENTRYID,FBillNo,FQTY"}
+    }
+    tables = {"采购订单": {"table": "PUR_PurchaseOrder", "insert_method": "insert_purchase_order"}}
+    db_columns = {"PUR_PurchaseOrder": {"FID", "FENTRYID", "FBillNo", "FQTY"}}
+
+    rows = build_mapping_draft_rows(form_queries, tables, db_columns)
+
+    assert rows[0]["form"] == "采购订单"
+    assert rows[0]["identity_confirmed"] == "true"
+    assert rows[0]["missing_db_fields"] == ""
+    assert rows[0]["missing_api_fields"] == ""
+
+
+def test_build_mapping_draft_rows_marks_unsupported_report_form():
+    form_queries = {"科目余额表": {"FormId": "GL_RPT_AccountBalance", "FieldKeys": "FBALANCEID"}}
+    tables = {"科目余额表": {"table": "GL_RPT_AccountBalance", "insert_method": None}}
+
+    rows = build_mapping_draft_rows(form_queries, tables, {})
+
+    assert rows[0]["form"] == "科目余额表"
+    assert rows[0]["unsupported_reason"] == "report_form_requires_separate_design"
 
 
 def test_audit_row_blocks_on_material_mismatch():

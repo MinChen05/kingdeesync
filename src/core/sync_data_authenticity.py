@@ -113,6 +113,10 @@ class AuthenticitySpec:
     db_identity: tuple[str, ...]
     api_identity: tuple[str, ...]
     fields: dict[str, AuthenticityField]
+    identity_confirmed: bool = True
+    identity_kind: str = "entry"
+    batch: str = "business_documents"
+    unsupported_reason: str | None = None
 
 
 @dataclass(frozen=True)
@@ -141,6 +145,41 @@ def _field(
     severity: str,
 ) -> AuthenticityField:
     return AuthenticityField(name, db_field, api_field, field_type, severity)
+
+
+FORM_BATCHES = {
+    "business_documents": (
+        "销售订单",
+        "销售出库单",
+        "销售退货单",
+        "发货通知单",
+        "采购订单",
+        "采购入库单",
+        "委外订单",
+        "应付单",
+        "应收单",
+    ),
+    "production_documents": (
+        "生产入库单",
+        "生产订单主表",
+        "生产订单明细",
+        "生产用料清单主表",
+        "生产用料清单明细表",
+        "预测订单",
+    ),
+    "snapshot_master_data": (
+        "即时库存",
+        "客户资料",
+        "物料",
+        "仓库",
+        "物料清单",
+        "物料清单子项",
+    ),
+}
+
+UNSUPPORTED_FORMS = {
+    "科目余额表": "report_form_requires_separate_design",
+}
 
 
 AUDIT_SPECS: dict[str, AuthenticitySpec] = {
@@ -185,6 +224,91 @@ AUDIT_SPECS: dict[str, AuthenticitySpec] = {
         },
     ),
 }
+
+
+def _csv_join(values: list[str] | set[str] | tuple[str, ...]) -> str:
+    return ",".join(sorted({value for value in values if value}, key=str.casefold))
+
+
+def _split_field_keys(field_keys: Any) -> set[str]:
+    if not field_keys:
+        return set()
+    if isinstance(field_keys, str):
+        return {field.strip() for field in field_keys.split(",") if field.strip()}
+    return {normalize_text(field) for field in field_keys if normalize_text(field)}
+
+
+def _missing_fields(required_fields: set[str], available_fields: set[str]) -> str:
+    available_lower = {field.casefold() for field in available_fields}
+    missing = {field for field in required_fields if field.casefold() not in available_lower}
+    return _csv_join(missing)
+
+
+def _batch_for_form(form: str) -> str:
+    for batch, forms in FORM_BATCHES.items():
+        if form in forms:
+            return batch
+    return ""
+
+
+def build_mapping_draft_rows(
+    form_queries: dict[str, dict[str, Any]],
+    tables: dict[str, dict[str, Any]],
+    db_columns: dict[str, set[str]],
+    audit_specs: dict[str, AuthenticitySpec] = AUDIT_SPECS,
+) -> list[dict[str, str]]:
+    forms = list(dict.fromkeys([*form_queries.keys(), *tables.keys(), *audit_specs.keys()]))
+    rows: list[dict[str, str]] = []
+
+    for form in forms:
+        query = form_queries.get(form, {})
+        table_config = tables.get(form, {})
+        spec = audit_specs.get(form)
+        table = normalize_text(table_config.get("table") or (spec.table if spec else ""))
+        form_id = normalize_text(query.get("FormId"))
+        api_field_keys = _split_field_keys(query.get("FieldKeys"))
+        table_db_columns = {normalize_text(column) for column in db_columns.get(table, set())}
+        db_columns_available = table in db_columns
+        unsupported_reason = UNSUPPORTED_FORMS.get(form) or (spec.unsupported_reason if spec else None)
+
+        db_identity = spec.db_identity if spec else tuple()
+        api_identity = spec.api_identity if spec else tuple()
+        fields = spec.fields if spec else {}
+        api_field_keys_lower = {field.casefold() for field in api_field_keys}
+        db_columns_lower = {field.casefold() for field in table_db_columns}
+        required_db_fields = {
+            *db_identity,
+            *(field.db_field for field in fields.values() if field.api_field.casefold() in api_field_keys_lower),
+        }
+        required_api_fields = {
+            *api_identity,
+            *(field.api_field for field in fields.values() if field.db_field.casefold() in db_columns_lower),
+        }
+        blocker_fields = {key for key, field in fields.items() if field.severity == "blocker"}
+        warning_fields = {key for key, field in fields.items() if field.severity == "warning"}
+
+        rows.append(
+            {
+                "form": form,
+                "table": table,
+                "form_id": form_id,
+                "batch": spec.batch if spec else _batch_for_form(form),
+                "identity_kind": spec.identity_kind if spec else ("report" if unsupported_reason else ""),
+                "identity_confirmed": "true" if spec and spec.identity_confirmed else "false",
+                "db_identity": _csv_join(db_identity),
+                "api_identity": _csv_join(api_identity),
+                "blocker_fields": _csv_join(blocker_fields),
+                "warning_fields": _csv_join(warning_fields),
+                "api_field_keys": _csv_join(api_field_keys),
+                "db_columns": _csv_join(table_db_columns),
+                "missing_db_fields": _missing_fields(required_db_fields, table_db_columns),
+                "missing_api_fields": _missing_fields(required_api_fields, api_field_keys),
+                "unsupported_reason": unsupported_reason or "",
+                "db_columns_available": "true" if db_columns_available else "false",
+            }
+        )
+
+    return rows
 
 
 def _get_value(row: dict[str, Any], field: str) -> Any:

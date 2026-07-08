@@ -2,6 +2,8 @@
 comet_change: redesign-gui-icons
 role: technical-design
 canonical_spec: openspec
+archived-with: 2026-07-08-redesign-gui-icons
+status: final
 ---
 
 # GUI 全页面图标系统技术设计

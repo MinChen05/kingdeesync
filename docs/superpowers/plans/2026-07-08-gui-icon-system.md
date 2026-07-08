@@ -2,6 +2,7 @@
 change: redesign-gui-icons
 design-doc: docs/superpowers/specs/2026-07-08-gui-icon-system-design.md
 base-ref: 5de8fb44c124dc7baf2cac94bdaa5e78d65b178a
+archived-with: 2026-07-08-redesign-gui-icons
 ---
 
 # GUI Icon System Implementation Plan
@@ -14,6 +15,7 @@ base-ref: 5de8fb44c124dc7baf2cac94bdaa5e78d65b178a
 
 **Tech Stack:** Python、PySide6、Qt SVG、本地 SVG assets、pytest/unittest 风格 GUI 测试、PyInstaller assets 打包。
 
+archived-with: 2026-07-08-redesign-gui-icons
 ---
 
 ## File Structure
@@ -38,6 +40,7 @@ base-ref: 5de8fb44c124dc7baf2cac94bdaa5e78d65b178a
 - Modify: `openspec/changes/redesign-gui-icons/tasks.md`
   - 每完成阶段性任务后勾选。
 
+archived-with: 2026-07-08-redesign-gui-icons
 ---
 
 ### Task 1: Build Icon Registry Test First
@@ -232,6 +235,7 @@ git add src/gui/icon_registry.py tests/test_gui_icon_registry.py openspec/change
 git commit -m "feat(gui): add icon registry coverage"
 ```
 
+archived-with: 2026-07-08-redesign-gui-icons
 ---
 
 ### Task 2: Migrate Shared Rendering Helpers And Shell Icons
@@ -353,6 +357,7 @@ git add src/gui/components/common.py src/gui/kingdee_sync_gui.py tests/test_gui_
 git commit -m "feat(gui): route shell icons through registry"
 ```
 
+archived-with: 2026-07-08-redesign-gui-icons
 ---
 
 ### Task 3: Redesign Core SVG Assets
@@ -436,6 +441,7 @@ git add assets/icons tests/test_gui_icon_registry.py openspec/changes/redesign-g
 git commit -m "style(gui): unify icon svg assets"
 ```
 
+archived-with: 2026-07-08-redesign-gui-icons
 ---
 
 ### Task 4: Migrate Page-Level Icon Usage
@@ -593,6 +599,7 @@ git add src/gui/icon_registry.py src/gui/pages tests/test_gui_windows11_shell.py
 git commit -m "feat(gui): migrate page icons to registry"
 ```
 
+archived-with: 2026-07-08-redesign-gui-icons
 ---
 
 ### Task 5: Style, Packaging, And Visual Verification
@@ -720,6 +727,7 @@ git add assets/styles.css tests/test_gui_icon_registry.py docs/superpowers/repor
 git commit -m "test(gui): verify redesigned icon system"
 ```
 
+archived-with: 2026-07-08-redesign-gui-icons
 ---
 
 ## Self-Review

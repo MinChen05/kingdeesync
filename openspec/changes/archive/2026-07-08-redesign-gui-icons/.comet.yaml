@@ -11,6 +11,6 @@ verification_report: docs/superpowers/reports/2026-07-08-gui-icon-system-verific
 branch_status: handled
 created_at: 2026-07-08
 verified_at: 2026-07-08
-archived: false
+archived: true
 handoff_context: openspec/changes/redesign-gui-icons/.comet/handoff/design-context.json
 handoff_hash: e2eda34743412154853e026a2b12ff86be04fc6255455b54bf81578d5383dac5

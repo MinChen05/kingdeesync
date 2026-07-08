@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-# -*- coding: utf-8 -*-
 """
 Kingdee data sync tool entrypoint.
 
@@ -17,6 +16,7 @@ import logging
 import os
 import subprocess
 import sys
+from pathlib import Path
 
 if getattr(sys, "frozen", False):
     project_root = os.path.dirname(sys.executable)
@@ -133,6 +133,43 @@ def run_check(_args: argparse.Namespace) -> None:
     logger.info("Checks completed successfully.")
 
 
+def run_updater(args: argparse.Namespace) -> None:
+    """Run the independent updater workflow from this executable."""
+    setup_cli_logging()
+    logger = logging.getLogger("CLI.Updater")
+
+    try:
+        from src.updater import (
+            InstallPlan,
+            install_package,
+            start_application,
+            wait_for_process_exit,
+            write_update_failure,
+        )
+
+        install_dir = Path(args.install_dir)
+        if args.pid:
+            wait_for_process_exit(args.pid)
+        install_package(
+            InstallPlan(
+                package_path=Path(args.package),
+                install_dir=install_dir,
+                app_exe_name=args.app_exe,
+            )
+        )
+        start_application(install_dir, args.app_exe)
+    except Exception as exc:
+        logger.error("Updater failed: %s", exc, exc_info=True)
+        try:
+            install_dir = Path(args.install_dir)
+            stage = getattr(exc, "stage", "install")
+            rollback_success = bool(getattr(exc, "rollback_success", False))
+            write_update_failure(install_dir, stage, str(exc), rollback_success)
+        except Exception as write_exc:
+            logger.error("Failed to write update failure record: %s", write_exc, exc_info=True)
+        sys.exit(1)
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description="Kingdee data sync tool")
     subparsers = parser.add_subparsers(dest="command", help="Available commands")
@@ -164,6 +201,12 @@ def main() -> None:
 
     subparsers.add_parser("check", help="Run lint and type checks")
 
+    updater_parser = subparsers.add_parser("updater", help="Install a verified update package")
+    updater_parser.add_argument("--package", required=True, help="Verified update package zip path")
+    updater_parser.add_argument("--install-dir", required=True, help="Current application install directory")
+    updater_parser.add_argument("--app-exe", default="金蝶数据同步工具.exe", help="Application executable name")
+    updater_parser.add_argument("--pid", type=int, help="Main process PID to wait for")
+
     if len(sys.argv) == 1:
         run_gui()
         return
@@ -177,6 +220,8 @@ def main() -> None:
         run_maintenance(args)
     elif args.command == "check":
         run_check(args)
+    elif args.command == "updater":
+        run_updater(args)
     else:
         parser.print_help()
 

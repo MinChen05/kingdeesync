@@ -289,7 +289,7 @@ class Win11DashboardAndSyncResponsiveTests(QtAppTestCase):
 
     def test_sync_page_uses_setting_rows_for_config(self) -> None:
         from src.gui.pages.sync_page import SyncPage
-    
+
         gui = SimpleNamespace()
         with (
             patch("src.gui.pages.sync_page.sync_service.get_available_forms", return_value=["Customers", "Orders"]),
@@ -299,14 +299,14 @@ class Win11DashboardAndSyncResponsiveTests(QtAppTestCase):
             ),
         ):
             page = SyncPage(gui)
-    
+
         self.addCleanup(cleanup_widget, page)
-    
+
         self.assertTrue(hasattr(page, "form_selector"))
         self.assertTrue(hasattr(page, "sync_type_combo"))
     def test_sync_page_visual_alignment_structure(self) -> None:
         from src.gui.pages.sync_page import SyncPage
-    
+
         gui = SimpleNamespace()
         with (
             patch("src.gui.pages.sync_page.sync_service.get_available_forms", return_value=["Customers", "Orders"]),
@@ -316,18 +316,204 @@ class Win11DashboardAndSyncResponsiveTests(QtAppTestCase):
             ),
         ):
             page = SyncPage(gui)
-    
+
         self.addCleanup(cleanup_widget, page)
         page.resize(1440, 900)
         page.show()
         self._app.processEvents()
-    
+
         self.assertEqual(page.objectName(), "sync_execution_page")
         self.assertTrue(page.form_selector.isVisible())
         self.assertTrue(page.sync_type_combo.isVisible())
         self.assertTrue(page.start_sync_btn.isVisible())
         self.assertTrue(page.log_panel.isVisible())
 class Win11SettingsAndFormsResponsiveTests(QtAppTestCase):
+    def _create_settings_page(self):
+        from src.gui.pages.settings_page import SettingsPage
+
+        gui = SimpleNamespace()
+        with patch(
+            "src.gui.pages.settings_page.settings_service.get_settings_snapshot",
+            return_value={"kingdee": {}, "database": {}},
+        ):
+            page = SettingsPage(gui)
+
+        self.addCleanup(cleanup_widget, page)
+        return page
+
+    def test_settings_page_shows_version_and_update_button(self) -> None:
+        from src.version import get_app_version
+
+        page = self._create_settings_page()
+
+        self.assertIn("当前版本", page.version_label.text())
+        self.assertIn(get_app_version(), page.version_label.text())
+        self.assertEqual(page.btn_check_update.text(), "检查更新")
+
+    def test_settings_page_check_update_reports_no_update(self) -> None:
+        page = self._create_settings_page()
+        result = SimpleNamespace(
+            update_available=False,
+            manifest=SimpleNamespace(version="1.0.0", release_date="2026-07-09", notes=()),
+        )
+
+        with (
+            patch("src.gui.pages.settings_page.UpdateService") as service_cls,
+            patch("src.gui.pages.settings_page.UiFeedback.info") as feedback,
+            patch("src.gui.pages.settings_page.UiFeedback.error") as error_feedback,
+        ):
+            service_cls.return_value.check_for_update.return_value = result
+            page.check_update()
+
+        service_cls.return_value.check_for_update.assert_called_once_with()
+        feedback.assert_called_once()
+        self.assertIn("最新版本", feedback.call_args.args[2])
+        error_feedback.assert_not_called()
+        self.assertTrue(page.btn_check_update.isEnabled())
+
+    def test_settings_page_check_update_reports_available_update(self) -> None:
+        from PySide6.QtWidgets import QMessageBox
+
+        page = self._create_settings_page()
+        result = SimpleNamespace(
+            update_available=True,
+            manifest=SimpleNamespace(
+                version="1.4.0",
+                release_date="2026-07-09",
+                notes=("修复同步异常提示", "优化界面反馈"),
+            ),
+        )
+
+        with (
+            patch("src.gui.pages.settings_page.UpdateService") as service_cls,
+            patch("src.gui.pages.settings_page.QMessageBox.question") as question,
+            patch("src.gui.pages.settings_page.UiFeedback.info") as feedback,
+            patch("src.gui.pages.settings_page.UiFeedback.error") as error_feedback,
+        ):
+            service_cls.return_value.check_for_update.return_value = result
+            question.return_value = QMessageBox.StandardButton.No
+            page.check_update()
+
+        question.assert_called_once()
+        message = question.call_args.args[2]
+        self.assertIn("1.4.0", message)
+        self.assertIn("2026-07-09", message)
+        self.assertIn("修复同步异常提示", message)
+        service_cls.return_value.download_package.assert_not_called()
+        feedback.assert_not_called()
+        error_feedback.assert_not_called()
+        self.assertTrue(page.btn_check_update.isEnabled())
+
+    def test_settings_page_confirmed_update_downloads_launches_updater_and_exits(self) -> None:
+        from PySide6.QtWidgets import QMessageBox
+
+        page = self._create_settings_page()
+        manifest = SimpleNamespace(
+            version="1.4.0",
+            release_date="2026-07-09",
+            notes=("修复同步异常提示",),
+        )
+        result = SimpleNamespace(update_available=True, manifest=manifest)
+        package_path = Path(tempfile.gettempdir()) / "kingdee-sync-1.4.0.zip"
+
+        with (
+            patch("src.gui.pages.settings_page.UpdateService") as service_cls,
+            patch("src.gui.pages.settings_page.QMessageBox.question") as question,
+            patch("src.gui.pages.settings_page.launch_updater_process") as launch_updater,
+            patch("src.gui.pages.settings_page.QApplication.quit") as app_quit,
+            patch("src.gui.pages.settings_page.UiFeedback.error") as error_feedback,
+        ):
+            service = service_cls.return_value
+            service.check_for_update.return_value = result
+            service.download_package.return_value = package_path
+            question.return_value = QMessageBox.StandardButton.Yes
+
+            page.check_update()
+
+        service.download_package.assert_called_once()
+        self.assertIs(service.download_package.call_args.args[0], manifest)
+        self.assertEqual(service.download_package.call_args.args[1], Path(tempfile.gettempdir()))
+        launch_updater.assert_called_once()
+        self.assertEqual(launch_updater.call_args.kwargs["package_path"], package_path)
+        app_quit.assert_called_once_with()
+        error_feedback.assert_not_called()
+        self.assertTrue(page.btn_check_update.isEnabled())
+
+    def test_get_update_manifest_url_prefers_environment(self) -> None:
+        from src.gui.pages.settings_page import get_update_manifest_url
+
+        with patch.dict(
+            "src.gui.pages.settings_page.os.environ",
+            {"KINGDEE_SYNC_UPDATE_MANIFEST_URL": "https://updates.example.com/latest.json"},
+        ):
+            self.assertEqual(
+                get_update_manifest_url(),
+                "https://updates.example.com/latest.json",
+            )
+
+    def test_launch_updater_process_uses_main_updater_subcommand_in_source_mode(self) -> None:
+        import sys
+
+        from src.gui.pages.settings_page import launch_updater_process
+
+        package_path = Path(tempfile.gettempdir()) / "kingdee-sync-1.4.0.zip"
+        install_dir = Path(tempfile.gettempdir()) / "kingdee-install"
+
+        with (
+            patch("src.gui.pages.settings_page.getattr", return_value=False),
+            patch("src.gui.pages.settings_page.subprocess.Popen") as popen,
+            patch("src.gui.pages.settings_page.os.getpid", return_value=1234),
+        ):
+            launch_updater_process(package_path, install_dir=install_dir, app_exe_name="app.exe")
+
+        command = popen.call_args.args[0]
+        self.assertEqual(command[0], sys.executable)
+        self.assertTrue(command[1].endswith("main.py"))
+        self.assertEqual(command[2], "updater")
+        self.assertIn("--package", command)
+        self.assertIn(str(package_path), command)
+        self.assertIn("--pid", command)
+        self.assertIn("1234", command)
+
+    def test_launch_updater_process_uses_external_runner_in_frozen_mode(self) -> None:
+        from src.gui.pages.settings_page import launch_updater_process
+
+        package_path = Path(tempfile.gettempdir()) / "kingdee-sync-1.4.0.zip"
+        install_dir = Path(tempfile.gettempdir()) / "kingdee-install"
+        runner_dir = Path(tempfile.gettempdir()) / "kingdee-updater-runner" / "kingdee-install"
+
+        with (
+            patch("src.gui.pages.settings_page.getattr", return_value=True),
+            patch("src.gui.pages.settings_page._copy_updater_runner", return_value=runner_dir) as copy_runner,
+            patch("src.gui.pages.settings_page.subprocess.Popen") as popen,
+            patch("src.gui.pages.settings_page.os.getpid", return_value=1234),
+        ):
+            launch_updater_process(package_path, install_dir=install_dir, app_exe_name="app.exe")
+
+        copy_runner.assert_called_once_with(install_dir)
+        command = popen.call_args.args[0]
+        self.assertEqual(command[0], str(runner_dir / "app.exe"))
+        self.assertEqual(command[1], "updater")
+        self.assertIn("--install-dir", command)
+        self.assertIn(str(install_dir), command)
+        self.assertEqual(popen.call_args.kwargs["cwd"], str(runner_dir))
+
+    def test_settings_page_check_update_reports_failure(self) -> None:
+        page = self._create_settings_page()
+
+        with (
+            patch("src.gui.pages.settings_page.UpdateService") as service_cls,
+            patch("src.gui.pages.settings_page.UiFeedback.info") as feedback,
+            patch("src.gui.pages.settings_page.UiFeedback.error") as error_feedback,
+        ):
+            service_cls.return_value.check_for_update.side_effect = RuntimeError("网络不可用")
+            page.check_update()
+
+        feedback.assert_not_called()
+        error_feedback.assert_called_once()
+        self.assertIn("网络不可用", error_feedback.call_args.args[2])
+        self.assertTrue(page.btn_check_update.isEnabled())
+
     def test_settings_page_keeps_actions_visible_and_rows_compact_at_1266x768(self) -> None:
         from src.gui.pages.settings_page import SettingsPage
 
@@ -421,8 +607,9 @@ class Win11SettingsAndFormsResponsiveTests(QtAppTestCase):
             page = SettingsPage(gui)
 
         self.addCleanup(cleanup_widget, page)
-        self.assertEqual(page.btn_test.height(), 28)
-        self.assertEqual(page.btn_save.height(), 28)
+        self.assertEqual(page.btn_test.height(), 38)
+        self.assertEqual(page.btn_save.height(), 38)
+        self.assertEqual(page.btn_check_update.height(), 34)
 
     def test_settings_page_1266x768_integration(self) -> None:
         from src.gui.pages.settings_page import SettingsPage

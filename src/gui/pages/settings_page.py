@@ -3,12 +3,20 @@
 from __future__ import annotations
 
 import logging
+import os
+import shutil
+import subprocess
+import sys
+import tempfile
+from pathlib import Path
 
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
+    QApplication,
     QHBoxLayout,
     QLabel,
     QLineEdit,
+    QMessageBox,
     QPushButton,
     QScrollArea,
     QSpinBox,
@@ -23,8 +31,73 @@ from src.gui.design_tokens import ColorTokens, SizeTokens, SpacingTokens, qcolor
 from src.gui.feedback import UiFeedback
 from src.gui.ui_text import ButtonText, LoadingText
 from src.services.settings_service import settings_service
+from src.services.update_service import UpdateService
+from src.version import get_app_version
 
 logger = logging.getLogger(__name__)
+
+DEFAULT_UPDATE_MANIFEST_URL = "https://intranet.example.com/kingdee-sync/updates/stable/latest.json"
+UPDATE_MANIFEST_URL_ENV = "KINGDEE_SYNC_UPDATE_MANIFEST_URL"
+DEFAULT_APP_EXE_NAME = "金蝶数据同步工具.exe"
+UPDATER_RUNNER_PREFIX = "kingdee-updater-runner-"
+
+
+def get_update_manifest_url() -> str:
+    return os.environ.get(UPDATE_MANIFEST_URL_ENV, DEFAULT_UPDATE_MANIFEST_URL).strip()
+
+
+def _source_root() -> Path:
+    return Path(__file__).resolve().parents[3]
+
+
+def _current_install_dir() -> Path:
+    if getattr(sys, "frozen", False):
+        return Path(sys.executable).resolve().parent
+    return _source_root()
+
+
+def _current_app_exe_name() -> str:
+    if getattr(sys, "frozen", False):
+        return Path(sys.executable).name
+    return DEFAULT_APP_EXE_NAME
+
+
+def _copy_updater_runner(install_dir: Path) -> Path:
+    runner_root = Path(tempfile.mkdtemp(prefix=UPDATER_RUNNER_PREFIX))
+    runner_dir = runner_root / install_dir.name
+    shutil.copytree(install_dir, runner_dir)
+    return runner_dir
+
+
+def launch_updater_process(
+    package_path: Path,
+    install_dir: Path | None = None,
+    app_exe_name: str | None = None,
+    pid: int | None = None,
+) -> None:
+    resolved_install_dir = install_dir or _current_install_dir()
+    resolved_app_exe_name = app_exe_name or _current_app_exe_name()
+    resolved_pid = pid or os.getpid()
+
+    args = [
+        "--package",
+        str(package_path),
+        "--install-dir",
+        str(resolved_install_dir),
+        "--app-exe",
+        resolved_app_exe_name,
+        "--pid",
+        str(resolved_pid),
+    ]
+    if getattr(sys, "frozen", False):
+        runner_dir = _copy_updater_runner(resolved_install_dir)
+        runner_exe = runner_dir / resolved_app_exe_name
+        command = [str(runner_exe), "updater", *args]
+        cwd = runner_dir
+    else:
+        command = [sys.executable, str(_source_root() / "main.py"), "updater", *args]
+        cwd = resolved_install_dir
+    subprocess.Popen(command, cwd=str(cwd), close_fds=True)
 
 
 class SettingsPage(Win11PageScaffold):
@@ -97,8 +170,15 @@ class SettingsPage(Win11PageScaffold):
         left_col.setSpacing(16)
 
         basic_card = Win11SectionCard("基础设置", "用于识别当前客户端与配置来源")
+        self.version_label = self._make_info_label(f"当前版本：{get_app_version()}")
+        self.btn_check_update = LoadingButton("检查更新")
+        self.btn_check_update.setProperty("class", "secondary")
+        self.btn_check_update.setFixedHeight(34)
+        self.btn_check_update.clicked.connect(self.check_update)
         basic_rows = [
             self._create_setting_row("系统名称", "用于标识本系统的名称", self._make_info_label("金蝶数据同步工具")),
+            self._create_setting_row("当前版本", "当前客户端程序版本", self.version_label),
+            self._create_setting_row("在线更新", "从内网 HTTPS 地址检查新版本", self.btn_check_update),
             self._create_setting_row("配置来源", "当前读写的配置文件", self._make_info_label(settings_service.get_config_source_name())),
             self._create_setting_row("数据库类型", "当前同步使用的数据库类型", self._make_info_label(settings_service.get_database_type())),
         ]
@@ -308,3 +388,40 @@ class SettingsPage(Win11PageScaffold):
             UiFeedback.error(self, "测试失败", f"连接测试未完成：\n{exc}")
         finally:
             self.btn_test.set_loading(False)
+
+    def check_update(self) -> None:
+        self.btn_check_update.set_loading(True, "检查中...")
+        try:
+            service = UpdateService(get_update_manifest_url())
+            result = service.check_for_update()
+            if not result.update_available:
+                UiFeedback.info(self, "检查更新", "当前已是最新版本。")
+                return
+
+            notes = "\n".join(f"- {note}" for note in result.manifest.notes)
+            message_parts = [
+                f"版本：{result.manifest.version}",
+                f"发布日期：{result.manifest.release_date}",
+            ]
+            if notes:
+                message_parts.extend(["更新说明：", notes])
+            message_parts.append("")
+            message_parts.append("是否立即下载并安装？")
+            choice = QMessageBox.question(
+                self,
+                "发现新版本",
+                "\n".join(message_parts),
+                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+                QMessageBox.StandardButton.No,
+            )
+            if choice != QMessageBox.StandardButton.Yes:
+                return
+
+            package_path = service.download_package(result.manifest, Path(tempfile.gettempdir()))
+            launch_updater_process(package_path=package_path)
+            QApplication.quit()
+        except Exception as exc:
+            logger.error("Check update failed: %s", exc)
+            UiFeedback.error(self, "检查更新失败", f"无法检查更新：\n{exc}")
+        finally:
+            self.btn_check_update.set_loading(False)

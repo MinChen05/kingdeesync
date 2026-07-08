@@ -1,7 +1,7 @@
 workflow: full
 phase: build
-build_mode: null
-isolation: null
+build_mode: subagent-driven-development
+isolation: branch
 verify_mode: null
 base_ref: 58e5b169c3fbf426d053d86841074e070522b726
 design_doc: docs/superpowers/specs/2026-07-08-extend-sync-data-authenticity-all-forms-design.md

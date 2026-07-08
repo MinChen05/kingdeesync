@@ -114,6 +114,19 @@ nssm start KingdeeSync
 - `app.jsonl` - JSON格式日志
 - `debug_startup.txt` - 启动调试信息
 
+## 在线更新发布
+
+第一版在线更新使用内网 HTTPS 静态 `latest.json` 和完整 zip 包。（原因：不需要新增服务端程序，便于服务器部署）
+
+发布步骤：
+
+1. 运行 `build_exe.bat` 生成 PyInstaller 输出。（原因：确保 release zip 包含最新程序文件）
+2. 运行 `python create_deploy.py` 生成部署目录和 release 产物。（原因：由脚本统一生成 zip、SHA256 和 manifest，避免人工填错）
+3. 将 `deploy/release/latest.json` 和 `deploy/release/kingdee-sync-<version>.zip` 上传到内网 HTTPS 静态目录。（原因：客户端只信任 HTTPS manifest 和包地址）
+4. 确认发布包不包含 `config.ini`、`config.local.ini`、`config.ini.backup`、`logs/`。（原因：避免覆盖现场配置和泄露敏感信息）
+
+SQL Server 影响：在线更新流程不改 SQL Server 表结构，不执行 SQL 脚本，不写同步业务表。（原因：数据库变更必须走独立评审、备份和行数校验）
+
 ## 联系支持
 
 如遇问题，请提供以下信息：

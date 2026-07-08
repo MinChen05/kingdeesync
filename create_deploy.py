@@ -1,7 +1,56 @@
 """创建服务器部署包。"""
 
+import hashlib
+import json
 import shutil
+import zipfile
+from datetime import date
 from pathlib import Path
+
+from src.version import APP_CHANNEL, APP_NAME, APP_VERSION
+
+RELEASE_EXCLUDES = {"config.ini", "config.local.ini", "config.ini.backup", "logs"}
+DEFAULT_RELEASE_BASE_URL = "https://intranet.example.com/kingdee-sync/updates/stable"
+
+
+def should_exclude_from_release(path: Path) -> bool:
+    """判断路径是否应从在线更新 release 包排除。"""
+    return bool(path.parts) and path.parts[0].lower() in RELEASE_EXCLUDES
+
+
+def create_update_release(deploy_dir: Path, version: str, base_url: str) -> None:
+    """生成在线更新完整包、SHA256 和 latest.json。"""
+    release_dir = deploy_dir.parent / "release"
+    release_dir.mkdir(parents=True, exist_ok=True)
+    zip_path = release_dir / f"{APP_NAME}-{version}.zip"
+
+    with zipfile.ZipFile(zip_path, "w", zipfile.ZIP_DEFLATED) as zf:
+        for item in deploy_dir.rglob("*"):
+            if item.is_dir():
+                continue
+            relative = item.relative_to(deploy_dir)
+            if should_exclude_from_release(relative):
+                continue
+            zf.write(item, relative.as_posix())
+
+    sha256 = hashlib.sha256(zip_path.read_bytes()).hexdigest()
+    latest = {
+        "app": APP_NAME,
+        "version": version,
+        "channel": APP_CHANNEL,
+        "release_date": date.today().isoformat(),
+        "min_supported_version": "1.0.0",
+        "package_url": f"{base_url.rstrip('/')}/{zip_path.name}",
+        "sha256": sha256,
+        "size": zip_path.stat().st_size,
+        "force": False,
+        "notes": [],
+    }
+    latest_path = release_dir / "latest.json"
+    latest_path.write_text(
+        json.dumps(latest, ensure_ascii=False, indent=2),
+        encoding="utf-8",
+    )
 
 
 def create_deploy_package():
@@ -54,12 +103,15 @@ def create_deploy_package():
     else:
         print("[5/5] 警告: 未找到 config.example.ini")
 
+    create_update_release(deploy_dir, APP_VERSION, DEFAULT_RELEASE_BASE_URL)
+
     print()
     print("=" * 50)
     print("  部署包创建完成！")
     print("=" * 50)
     print()
     print(f"  部署目录: {deploy_dir}")
+    print(f"  在线更新目录: {deploy_dir.parent / 'release'}")
     print()
     print("  目录内容:")
     for item in sorted(deploy_dir.iterdir()):

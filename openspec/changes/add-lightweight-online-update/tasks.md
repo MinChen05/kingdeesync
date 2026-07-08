@@ -34,11 +34,11 @@
 
 ## 5. Packaging
 
-- [ ] Update packaging script to produce a full release zip.
-- [ ] Generate SHA256 checksum.
-- [ ] Generate or document `latest.json`.
-- [ ] Ensure local config files are excluded from release packages.
-- [ ] Update `DEPLOY.md` with release publishing steps.
+- [x] Update packaging script to produce a full release zip.
+- [x] Generate SHA256 checksum.
+- [x] Generate or document `latest.json`.
+- [x] Ensure local config files are excluded from release packages.
+- [x] Update `DEPLOY.md` with release publishing steps.
 
 ## 6. Verification
 

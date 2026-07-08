@@ -1,4 +1,6 @@
 import unittest
+import re
+from pathlib import Path
 
 from PySide6.QtGui import QIcon
 
@@ -53,6 +55,22 @@ class GuiIconRegistryTests(unittest.TestCase):
 
         self.assertEqual(bad_viewbox, [])
         self.assertEqual(missing_current_color, [])
+
+
+class GuiIconCssAssetTests(unittest.TestCase):
+    def test_css_icon_urls_exist(self) -> None:
+        root = Path(__file__).resolve().parents[1]
+        css = (root / "assets" / "styles.css").read_text(encoding="utf-8")
+        refs = re.findall(r'url\("assets/icons/([^"]+)"\)', css)
+        missing = [ref for ref in refs if not icon_registry.icon_path(ref).exists()]
+
+        self.assertEqual(missing, [])
+
+    def test_pyinstaller_build_script_includes_assets(self) -> None:
+        root = Path(__file__).resolve().parents[1]
+        build_script = (root / "build.bat").read_text(encoding="utf-8")
+
+        self.assertIn("--add-data assets;assets", build_script)
 
 
 if __name__ == "__main__":

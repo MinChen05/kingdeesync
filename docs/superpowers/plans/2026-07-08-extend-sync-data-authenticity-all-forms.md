@@ -2,6 +2,7 @@
 change: extend-sync-data-authenticity-all-forms
 design-doc: docs/superpowers/specs/2026-07-08-extend-sync-data-authenticity-all-forms-design.md
 base-ref: 98ed7a30a7fa64d9da1ec046db487cc8d3c2b4fa
+archived-with: 2026-07-08-extend-sync-data-authenticity-all-forms
 ---
 
 # All-Form Sync Authenticity Implementation Plan
@@ -14,6 +15,7 @@ base-ref: 98ed7a30a7fa64d9da1ec046db487cc8d3c2b4fa
 
 **Tech Stack:** Python standard library, existing `config_manager`, existing `MySQLManager`, pytest.
 
+archived-with: 2026-07-08-extend-sync-data-authenticity-all-forms
 ---
 
 ## File Structure

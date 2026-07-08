@@ -11,6 +11,6 @@ verification_report: docs/superpowers/reports/2026-07-08-extend-sync-data-authen
 branch_status: handled
 created_at: 2026-07-08
 verified_at: 2026-07-08
-archived: false
+archived: true
 handoff_context: openspec/changes/extend-sync-data-authenticity-all-forms/.comet/handoff/design-context.json
 handoff_hash: b042c4cf2160b67868a52541644fbb80d8d1f69d3fad0f406c5583cc011c04a2

@@ -2,6 +2,8 @@
 comet_change: extend-sync-data-authenticity-all-forms
 role: technical-design
 canonical_spec: openspec
+archived-with: 2026-07-08-extend-sync-data-authenticity-all-forms
+status: final
 ---
 
 # 全同步表单真实性校验扩展设计

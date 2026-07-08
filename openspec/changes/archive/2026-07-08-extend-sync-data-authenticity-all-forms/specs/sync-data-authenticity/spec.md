@@ -24,6 +24,29 @@ The system SHALL compare synchronized database rows with Kingdee source rows usi
 - **AND** base quantity MUST be treated as a blocker value field
 - **AND** update time MUST be reported as a warning field when it differs
 
+### Requirement: Authenticity audit classifies differences
+The system SHALL classify each audited row and field into actionable statuses.
+
+#### Scenario: Source row is missing
+- **WHEN** a database row cannot be found in Kingdee by configured identity keys
+- **THEN** the audit result MUST be `missing_api` and the row MUST NOT be eligible for automated rehydration
+
+#### Scenario: Database row is missing
+- **WHEN** a Kingdee target identity cannot be found in the database
+- **THEN** the audit result MUST be `missing_db` and the row MUST NOT be updated as an existing-row repair
+
+#### Scenario: Blocker dimension mismatch
+- **WHEN** identity keys match but blocker fields such as material, bill number, supplier, customer, organization, entry sequence, or quantity do not match
+- **THEN** the audit result MUST be `dimension_mismatch` or `identity_mismatch` and automated rehydration MUST be blocked for that row
+
+#### Scenario: Warning field mismatch
+- **WHEN** identity keys and blocker fields match but warning fields such as date or document status differ
+- **THEN** the audit result MUST include field-level warnings and automated rehydration MUST NOT be blocked solely by those warnings
+
+#### Scenario: Repairable value mismatch
+- **WHEN** identity and blocker business dimensions match but a configured quantity, amount, price, or repair target field differs
+- **THEN** the audit result MUST identify the field-level difference and MAY mark the row as eligible for rehydration
+
 ### Requirement: Rehydration requires authenticity gate
 The system SHALL require authenticity audit evidence before and after any automated historical rehydration.
 

@@ -1,3 +1,6 @@
+import json
+from pathlib import Path
+
 from src.core.sync_data_authenticity import (
     AUDIT_SPECS,
     AuditStatus,
@@ -13,6 +16,11 @@ from src.core.sync_data_authenticity import (
     load_targets_from_difference_csv,
     summarize_results,
 )
+
+
+def _load_table_config():
+    config_path = Path(__file__).parents[1] / "src" / "config" / "tables.json"
+    return json.loads(config_path.read_text(encoding="utf-8"))
 
 
 def test_compare_decimal_accepts_equivalent_scale():
@@ -98,6 +106,55 @@ def test_build_mapping_draft_rows_marks_unsupported_report_form():
 
     assert rows[0]["form"] == "科目余额表"
     assert rows[0]["unsupported_reason"] == "report_form_requires_separate_design"
+
+
+def test_build_mapping_draft_rows_has_specs_for_all_synchronized_forms():
+    tables = _load_table_config()
+    synchronized_forms = {form for form, config in tables.items() if config.get("insert_method")}
+
+    rows = build_mapping_draft_rows({}, tables, {})
+    rows_by_form = {row["form"]: row for row in rows}
+
+    assert synchronized_forms <= set(rows_by_form)
+    assert "科目余额表" in rows_by_form
+    assert "科目余额表" not in AUDIT_SPECS
+    for form in synchronized_forms:
+        assert rows_by_form[form]["db_identity"], form
+        assert rows_by_form[form]["api_identity"], form
+        assert rows_by_form[form]["blocker_fields"], form
+        assert rows_by_form[form]["warning_fields"], form
+        assert rows_by_form[form]["batch"] in {
+            "business_documents",
+            "production_documents",
+            "snapshot_master_data",
+        }
+
+
+def test_inventory_spec_uses_confirmed_snapshot_identity():
+    spec = AUDIT_SPECS["即时库存"]
+
+    assert spec.identity_kind == "snapshot"
+    assert spec.identity_confirmed is True
+    assert spec.db_identity == (
+        "FSTOCKORGID",
+        "FSTOCKID",
+        "FSTOCKLOCID",
+        "FSTOCKSTATUSID",
+        "FMATERIALID",
+        "FBASEUNITID",
+    )
+    assert spec.api_identity == spec.db_identity
+
+
+def test_unconfirmed_identity_form_is_marked_in_discovery():
+    tables = _load_table_config()
+
+    rows = build_mapping_draft_rows({}, tables, {})
+    row = next(row for row in rows if row["form"] == "销售出库单")
+
+    assert AUDIT_SPECS["销售出库单"].identity_confirmed is False
+    assert row["identity_confirmed"] == "false"
+    assert "eligible_for_rehydration" not in row
 
 
 def test_audit_row_blocks_on_material_mismatch():

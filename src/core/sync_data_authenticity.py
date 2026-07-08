@@ -156,6 +156,49 @@ def _field(
     return AuthenticityField(name, db_field, api_field, field_type, severity)
 
 
+def _field_type(field: str) -> str:
+    upper_field = field.upper()
+    if "DATE" in upper_field or "TIME" in upper_field:
+        return "date"
+    if any(marker in upper_field for marker in ("SEQ", "QTY", "AMOUNT", "PRICE", "RATE")):
+        return "decimal"
+    return "string"
+
+
+def _same_name_fields(
+    blockers: tuple[str, ...],
+    warnings: tuple[str, ...],
+) -> dict[str, AuthenticityField]:
+    fields: dict[str, AuthenticityField] = {}
+    for severity, names in (("blocker", blockers), ("warning", warnings)):
+        for name in names:
+            fields[name] = _field(name, name, name, _field_type(name), severity)
+    return fields
+
+
+def _spec(
+    form: str,
+    table: str,
+    identity: tuple[str, ...],
+    blockers: tuple[str, ...],
+    warnings: tuple[str, ...],
+    *,
+    identity_confirmed: bool = True,
+    identity_kind: str = "entry",
+    batch: str = "business_documents",
+) -> AuthenticitySpec:
+    return AuthenticitySpec(
+        form=form,
+        table=table,
+        db_identity=identity,
+        api_identity=identity,
+        fields=_same_name_fields(blockers, warnings),
+        identity_confirmed=identity_confirmed,
+        identity_kind=identity_kind,
+        batch=batch,
+    )
+
+
 FORM_BATCHES = {
     "business_documents": (
         "销售订单",
@@ -192,6 +235,36 @@ UNSUPPORTED_FORMS = {
 
 
 AUDIT_SPECS: dict[str, AuthenticitySpec] = {
+    "销售订单": _spec(
+        "销售订单",
+        "saleorder",
+        ("FID", "FSaleOrderEntry_FENTRYID"),
+        ("FBillNo", "FSaleOrderEntry_FSEQ", "FMaterialId.FNumber", "FCustId.FName", "FQTY"),
+        ("FDate", "FDeliveryDate", "FCloseStatus", "FMrpCloseStatus", "FDocumentStatus", "FModifyDate"),
+    ),
+    "销售出库单": _spec(
+        "销售出库单",
+        "sal_outstock",
+        ("FEntity_FENTRYID",),
+        ("FBillNO", "FEntity_FSEQ", "FMaterialID.FNUMBER", "FCustomerID.FNAME", "FRealQty"),
+        ("FDate", "FModifyDate"),
+        identity_confirmed=False,
+    ),
+    "销售退货单": _spec(
+        "销售退货单",
+        "sal_returnstock",
+        ("FEntity_FENTRYID",),
+        ("FBillNo", "FMaterialId.FNUMBER", "FRetcustId.FNAME", "FRealQty"),
+        ("FDATE", "FDeliveryDate", "FModifyDate"),
+        identity_confirmed=False,
+    ),
+    "发货通知单": _spec(
+        "发货通知单",
+        "sal_deliverynotice",
+        ("FID", "FEntity_FENTRYID"),
+        ("FBillNo", "FEntity_FSEQ", "FMaterialID.FNUMBER", "FCustomerID.FNAME", "FQTY", "FSumOutQty"),
+        ("FDate", "FCLOSESTATUS_MX", "FModifyDate"),
+    ),
     "采购入库单": AuthenticitySpec(
         form="采购入库单",
         table="STK_InStock",
@@ -231,6 +304,128 @@ AUDIT_SPECS: dict[str, AuthenticitySpec] = {
             "FModifyDate": _field("修改日期", "FModifyDate", "FModifyDate", "date", "warning"),
             "FApproveDate": _field("审核日期", "FApproveDate", "FApproveDate", "date", "warning"),
         },
+    ),
+    "生产入库单": _spec(
+        "生产入库单",
+        "prd_instock",
+        ("FID", "FEntity_FENTRYID"),
+        ("FBILLNO", "FMATERIALID", "FREALQTY", "FSRCBILLNO"),
+        ("FDATE", "FDOCUMENTSTATUS", "FModifyDate"),
+        batch="production_documents",
+    ),
+    "生产订单主表": _spec(
+        "生产订单主表",
+        "prd_mo",
+        ("FID",),
+        ("FBILLNO", "FPRDORGID"),
+        ("FDATE", "FDOCUMENTSTATUS", "FCREATEDATE", "FMODIFYDATE", "FCANCELSTATUS"),
+        batch="production_documents",
+    ),
+    "生产订单明细": _spec(
+        "生产订单明细",
+        "prd_moentry",
+        ("FID", "FTreeEntity_FENTRYID"),
+        ("FTreeEntity_FSEQ", "FMATERIALID", "FQTY", "FSALEORDERNO", "FSrcBillNo"),
+        ("FPLANSTARTDATE", "FPLANFINISHDATE", "FSTATUS", "FMODIFYDATE"),
+        batch="production_documents",
+    ),
+    "生产用料清单主表": _spec(
+        "生产用料清单主表",
+        "prd_ppbom",
+        ("FID",),
+        ("FBILLNO", "FMATERIALID", "FPRDORGID", "FQTY", "FMOBILLNO"),
+        ("FDOCUMENTSTATUS", "FCREATEDATE", "FMODIFYDATE", "FAPPROVEDATE"),
+        batch="production_documents",
+    ),
+    "生产用料清单明细表": _spec(
+        "生产用料清单明细表",
+        "prd_ppbomentry",
+        ("FID", "FEntity_FENTRYID"),
+        ("FEntity_FSEQ", "FMATERIALID2", "FBASESTDQTY", "FNEEDQTY2", "FMUSTQTY"),
+        ("FNEEDDATE2", "F_ORA_DATETIME", "FMODIFYDATE"),
+        batch="production_documents",
+    ),
+    "预测订单": _spec(
+        "预测订单",
+        "pln_forecast",
+        ("FEntity_FENTRYID",),
+        ("FBillNo", "FMaterialId.FNUMBER", "FCustId.FNAME", "FQty"),
+        ("F_ora_Date", "FModifyDate"),
+        identity_confirmed=False,
+        batch="production_documents",
+    ),
+    "委外订单": _spec(
+        "委外订单",
+        "sub_subreqorder",
+        ("FID", "FTreeEntity_FENTRYID"),
+        ("FBillNo", "FSrcBillNO", "FSRCBILLENTRYSEQ", "FMaterialId.FNUMBER", "FSupplierId.FNAME", "FQty", "FStockInQty"),
+        ("FDATE", "FDOCUMENTSTATUS", "FModifyDate"),
+    ),
+    "应付单": _spec(
+        "应付单",
+        "AP_Payable",
+        ("FID", "FEntityDetail_FENTRYID"),
+        ("FBillNo", "FSUPPLIERID.FNAME", "FMATERIALID.FNUMBER", "FPRICEQTY", "FALLAMOUNTFOR_D", "FNoTaxAmountFor_D", "FENTRYTAXRATE"),
+        ("FDATE", "FModifyDate"),
+    ),
+    "应收单": _spec(
+        "应收单",
+        "AR_receivable",
+        ("FID", "FEntityDetail_FENTRYID"),
+        ("FBillNo", "FCUSTOMERID.FNAME", "FMATERIALID.FNUMBER", "FPriceQty", "FTaxPrice", "FALLAMOUNTFOR_D"),
+        ("FDATE", "FModifyDate"),
+    ),
+    "即时库存": _spec(
+        "即时库存",
+        "stk_inventory",
+        ("FSTOCKORGID", "FSTOCKID", "FSTOCKLOCID", "FSTOCKSTATUSID", "FMATERIALID", "FBASEUNITID"),
+        ("FBASEQTY",),
+        ("FUPDATETIME",),
+        identity_kind="snapshot",
+        batch="snapshot_master_data",
+    ),
+    "客户资料": _spec(
+        "客户资料",
+        "customer",
+        ("FCUSTID",),
+        ("FNumber", "FNAME"),
+        ("FCreateDate", "FModifyDate"),
+        identity_kind="master",
+        batch="snapshot_master_data",
+    ),
+    "物料": _spec(
+        "物料",
+        "bd_material",
+        ("FMATERIALID",),
+        ("FNUMBER", "FNAME", "FUSEORGID", "FDOCUMENTSTATUS", "FFORBIDSTATUS"),
+        ("FCREATEDATE", "FMODIFYDATE", "FAPPROVEDATE"),
+        identity_kind="master",
+        batch="snapshot_master_data",
+    ),
+    "仓库": _spec(
+        "仓库",
+        "bd_stock",
+        ("FSTOCKID",),
+        ("FNUMBER", "FUSEORGID", "FDOCUMENTSTATUS", "FFORBIDSTATUS", "FNAME"),
+        ("FMODIFYDATE",),
+        identity_kind="master",
+        batch="snapshot_master_data",
+    ),
+    "物料清单": _spec(
+        "物料清单",
+        "eng_bom",
+        ("FID",),
+        ("FNUMBER", "FMATERIALID", "FQTY"),
+        ("FDOCUMENTSTATUS", "FFORBIDSTATUS", "FMODIFYDATE"),
+        batch="snapshot_master_data",
+    ),
+    "物料清单子项": _spec(
+        "物料清单子项",
+        "eng_bomchild",
+        ("FID", "FTreeEntity_FENTRYID"),
+        ("FTreeEntity_FSEQ", "FMATERIALID", "FMATERIALIDCHILD.FNUMBER", "FQTY", "FACTUALQTY"),
+        ("FMODIFYDATE",),
+        batch="snapshot_master_data",
     ),
 }
 

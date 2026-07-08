@@ -88,6 +88,46 @@ def test_audit_row_allows_warning_only_date_mismatch():
     assert result.eligible_for_rehydration is True
 
 
+def test_audit_row_marks_quantity_difference_as_value_mismatch():
+    spec = AUDIT_SPECS["采购订单"]
+    db_row = {
+        "FID": 1,
+        "FENTRYID": 2,
+        "FBillNo": "PO1",
+        "FNUMBER": "A",
+        "FSupplier": "S",
+        "FQTY": "0",
+    }
+    api_row = {
+        "FID": 1,
+        "FPOOrderEntry_FENTRYID": 2,
+        "FBillNo": "PO1",
+        "FMaterialId.FNUMBER": "A",
+        "FSupplierId.FNAME": "S",
+        "FQTY": "10",
+    }
+    result = audit_row(spec, db_row, api_row)
+    assert result.status == AuditStatus.VALUE_MISMATCH
+    assert result.eligible_for_rehydration is True
+    assert result.differences[0].field == "FQTY"
+
+
+def test_audit_row_blocks_missing_api_row():
+    spec = AUDIT_SPECS["采购订单"]
+    db_row = {"FID": 1, "FENTRYID": 2}
+    result = audit_row(spec, db_row, None)
+    assert result.status == AuditStatus.MISSING_API
+    assert result.eligible_for_rehydration is False
+
+
+def test_audit_row_blocks_missing_db_row():
+    spec = AUDIT_SPECS["采购订单"]
+    api_row = {"FID": 1, "FPOOrderEntry_FENTRYID": 2}
+    result = audit_row(spec, None, api_row)
+    assert result.status == AuditStatus.MISSING_DB
+    assert result.eligible_for_rehydration is False
+
+
 def test_load_targets_from_difference_csv_filters_forms(tmp_path):
     csv_path = tmp_path / "diff.csv"
     csv_path.write_text(

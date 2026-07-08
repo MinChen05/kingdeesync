@@ -42,8 +42,8 @@
 
 ## 6. Verification
 
-- [ ] Run ruff.
-- [ ] Run update service tests.
-- [ ] Run updater dry-run tests.
-- [ ] Run relevant GUI tests.
-- [ ] Confirm SQL Server write impact is none.
+- [x] Run ruff.
+- [x] Run update service tests.
+- [x] Run updater dry-run tests.
+- [x] Run relevant GUI tests.
+- [x] Confirm SQL Server write impact is none.

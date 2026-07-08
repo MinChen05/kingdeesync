@@ -1,7 +1,7 @@
 workflow: full
 phase: build
-build_mode: null
-isolation: null
+build_mode: subagent-driven-development
+isolation: worktree
 verify_mode: null
 base_ref: 5de8fb44c124dc7baf2cac94bdaa5e78d65b178a
 design_doc: docs/superpowers/specs/2026-07-08-gui-icon-system-design.md

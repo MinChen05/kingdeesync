@@ -182,7 +182,7 @@ class Win11ResponsiveShellSmokeTests(QtAppTestCase):
         self.assertEqual(window.nav_buttons["dashboard"].height(), 48)
         self.assertEqual(window.nav_buttons["dashboard"].iconSize().width(), 20)
         self.assertEqual(window.sidebar_collapse_btn.objectName(), "sidebar_collapse_btn")
-        self.assertEqual(window.sidebar_collapse_btn.property("icon-source"), "menu_fold.svg")
+        self.assertEqual(window.sidebar_collapse_btn.property("icon-source"), "icons/menu_fold.svg")
         self.assertFalse(window.sidebar_collapse_btn.icon().isNull())
 
     def test_main_shell_compacts_sidebar_below_1024(self) -> None:
@@ -4325,7 +4325,7 @@ class Win11TaskManagementPageTests(QtAppTestCase):
             css = stylesheet.read()
         self.assertIn('QWidget[page="task-management"] QComboBox[td="win11-input"]::down-arrow', css)
         self.assertIn('image: url("assets/icons/下_down.svg")', css)
-        self.assertIn("padding: 0px 22px 0px 14px", css)
+        self.assertIn("padding: 0px 32px 0px 14px", css)
         self.assertIn("width: 22px", css)
         self.assertIn("width: 10px", css)
 

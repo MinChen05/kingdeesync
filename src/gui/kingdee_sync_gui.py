@@ -53,6 +53,7 @@ from PySide6.QtWidgets import (
 
 from src.config.config_manager import config_manager
 from src.core.scheduler import auto_scheduler
+from src.gui import icon_registry
 from src.gui.components.buttons import ClickableLabel
 from src.gui.components.common import SvgIconLabel
 from src.gui.design_tokens import ColorTokens
@@ -125,16 +126,8 @@ def _make_nav_icon(icon_id: str, size: int = 18, color: str = "#41607B") -> QIco
 
 
 SIDEBAR_NAV_ICON_FILES = {
-    "dashboard": "icons/dashboard.svg",
-    "sync": "icons/sync.svg",
-    "history": "icons/history.svg",
-    "task_management": "icons/task_management.svg",
-    "data_source": "icons/data_source.svg",
-    "forms": "icons/forms.svg",
-    "schedule": "icons/schedule.svg",
-    "diagnostics": "icons/diagnostics.svg",
-    "log_center": "icons/log_center.svg",
-    "settings": "icons/settings.svg",
+    page_id: icon_registry.icon_source(source)
+    for page_id, source in icon_registry.PAGE_ICONS.items()
 }
 
 
@@ -382,11 +375,11 @@ class KingdeeSyncGUI(QMainWindow):
             btn.setProperty("class", "sidebar-nav-btn")
             btn.setCheckable(True)
             btn.setFixedHeight(48)
-            icon_file = SIDEBAR_NAV_ICON_FILES.get(page_id)
-            icon_path = os.path.join(self.assets_dir, icon_file) if icon_file else ""
-            if icon_file and os.path.exists(icon_path):
-                btn.setProperty("icon-source", icon_file)
-                icon = QIcon(icon_path)
+            icon_file = icon_registry.page_icon_source(page_id)
+            icon_path = icon_registry.icon_path(icon_file)
+            if icon_path.exists():
+                btn.setProperty("icon-source", icon_registry.icon_source(icon_file))
+                icon = icon_registry.qicon(icon_file)
             else:
                 icon = _make_nav_icon(page_id, 18, ColorTokens.NEUTRAL_500)
             btn.setIcon(icon)
@@ -412,8 +405,8 @@ class KingdeeSyncGUI(QMainWindow):
         footer_layout.addStretch(1)
         self.sidebar_collapse_btn = QPushButton("")
         self.sidebar_collapse_btn.setObjectName("sidebar_collapse_btn")
-        self.sidebar_collapse_btn.setProperty("icon-source", "menu_fold.svg")
-        self.sidebar_collapse_btn.setIcon(QIcon(os.path.join(self.assets_dir, "icons", "menu_fold.svg")))
+        self.sidebar_collapse_btn.setProperty("icon-source", icon_registry.icon_source("menu_fold.svg"))
+        self.sidebar_collapse_btn.setIcon(icon_registry.qicon("menu_fold.svg"))
         self.sidebar_collapse_btn.setIconSize(QSize(16, 16))
         self.sidebar_collapse_btn.setFixedSize(24, 24)
         footer_layout.addWidget(self.sidebar_collapse_btn)
@@ -445,19 +438,11 @@ class KingdeeSyncGUI(QMainWindow):
             btn.setFixedSize(30, 30)
             btn.setToolButtonStyle(Qt.ToolButtonIconOnly)
 
-            icon_name = {
-                "dashboard": "dashboard.svg",
-                "history": "history.svg",
-                "task_management": "dashboard.svg",
-                "forms": "forms.svg",
-                "schedule": "schedule.svg",
-                "settings": "settings.svg",
-            }.get(page_id)
-            if icon_name:
-                icon_path = os.path.join(self.assets_dir, "icons", icon_name)
-                if os.path.exists(icon_path):
-                    btn.setIcon(QIcon(icon_path))
-                    btn.setIconSize(QSize(16, 16))
+            icon_name = icon_registry.page_icon_source(page_id)
+            if icon_registry.icon_path(icon_name).exists():
+                btn.setProperty("icon-source", icon_registry.icon_source(icon_name))
+                btn.setIcon(icon_registry.qicon(icon_name))
+                btn.setIconSize(QSize(16, 16))
             btn.setToolTip(self.page_meta.get(page_id, (page_id, ""))[0])
             btn.clicked.connect(lambda _checked=False, pid=page_id: self.switch_to_page(pid))
             self.nav_tool_buttons[page_id] = btn
@@ -660,7 +645,8 @@ class KingdeeSyncGUI(QMainWindow):
         self.btn_setting = QPushButton("设置")
         self.btn_setting.setFixedHeight(36)
         self.btn_setting.setObjectName("topbar_action_text_btn")
-        self.btn_setting.setIcon(QIcon(os.path.join(self.assets_dir, "icons", "topbar_settings.svg")))
+        self.btn_setting.setProperty("icon-source", icon_registry.icon_source("topbar_settings.svg"))
+        self.btn_setting.setIcon(icon_registry.qicon("topbar_settings.svg"))
         self.btn_setting.setIconSize(QSize(18, 18))
         self.btn_setting.clicked.connect(lambda: self.switch_to_page("settings"))
         action_group.addWidget(self.btn_setting)
@@ -668,7 +654,8 @@ class KingdeeSyncGUI(QMainWindow):
         self.btn_help = QPushButton("帮助")
         self.btn_help.setFixedHeight(36)
         self.btn_help.setObjectName("topbar_action_text_btn")
-        self.btn_help.setIcon(QIcon(os.path.join(self.assets_dir, "icons", "topbar_help.svg")))
+        self.btn_help.setProperty("icon-source", icon_registry.icon_source("topbar_help.svg"))
+        self.btn_help.setIcon(icon_registry.qicon("topbar_help.svg"))
         self.btn_help.setIconSize(QSize(18, 18))
         self.btn_help.clicked.connect(lambda: UiFeedback.info(self, "帮助", "金蝶数据同步工具 v2.0"))
         action_group.addWidget(self.btn_help)
@@ -851,9 +838,9 @@ class KingdeeSyncGUI(QMainWindow):
             return
 
         icon_name = "status_ok.svg" if connected else "status_err.svg"
-        icon_path = os.path.join(self.assets_dir, "icons", icon_name)
-        if os.path.exists(icon_path):
-            icon_label.setPixmap(QIcon(icon_path).pixmap(16, 16))
+        if icon_registry.icon_path(icon_name).exists():
+            icon_label.setProperty("icon-source", icon_registry.icon_source(icon_name))
+            icon_label.setPixmap(icon_registry.qicon(icon_name).pixmap(16, 16))
 
         text_label.setText(message or f"{prefix}: {'已连接' if connected else '未连接'}")
         tag_label.setText("已连接" if connected else "未连接")

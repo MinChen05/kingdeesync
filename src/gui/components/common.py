@@ -21,6 +21,7 @@ from PySide6.QtWidgets import (
 )
 
 from src.gui.design_tokens import ColorTokens, SizeTokens, SpacingTokens
+from src.gui import icon_registry
 from src.gui.ui_text import ButtonText
 
 
@@ -137,7 +138,7 @@ class SvgIconLabel(QLabel):
         self.icon_file = icon_file
         self.icon_color = color
         self.setProperty("ui", "svg-icon")
-        self.setProperty("icon-source", icon_file)
+        self.setProperty("icon-source", icon_registry.icon_source(icon_file))
         self.setFixedSize(size, size)
         self.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.set_icon(icon_file, icon_size or size)
@@ -146,10 +147,10 @@ class SvgIconLabel(QLabel):
         self.icon_file = icon_file
         if color is not None:
             self.icon_color = color
-        self.setProperty("icon-source", icon_file)
-        path = self._ASSETS_DIR / "icons" / icon_file
+        self.setProperty("icon-source", icon_registry.icon_source(icon_file))
+        path = icon_registry.icon_path(icon_file)
         if not path.exists():
-            path = self._ASSETS_DIR / icon_file
+            path = self._ASSETS_DIR / icon_registry.normalize_source(icon_file)
         size = icon_size or min(self.width(), self.height())
         if self.icon_color and path.exists():
             svg = path.read_text(encoding="utf-8").replace("currentColor", self.icon_color)

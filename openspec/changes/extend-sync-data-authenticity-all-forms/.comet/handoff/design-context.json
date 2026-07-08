@@ -1,0 +1,14 @@
+{
+  "change": "extend-sync-data-authenticity-all-forms",
+  "phase": "design",
+  "mode": "compact",
+  "canonical_spec": "openspec",
+  "generated_by": "comet-handoff.sh",
+  "context_hash": "b042c4cf2160b67868a52541644fbb80d8d1f69d3fad0f406c5583cc011c04a2",
+  "files": [
+    { "path": "openspec/changes/extend-sync-data-authenticity-all-forms/proposal.md", "sha256": "d7406d63e392f67384b6c8a2e92f812f0494bd05163e100ae801308859158968" },
+    { "path": "openspec/changes/extend-sync-data-authenticity-all-forms/design.md", "sha256": "8e043f91173d32975c0fe2c01889bc2aac3f50edae60c46a6a8c807accc5eea2" },
+    { "path": "openspec/changes/extend-sync-data-authenticity-all-forms/tasks.md", "sha256": "758dcd16c38744afd48c8db7fd513f237641e300246a60f1f5c31135f237c645" },
+    { "path": "openspec/changes/extend-sync-data-authenticity-all-forms/specs/sync-data-authenticity/spec.md", "sha256": "0b6415f1af191e8bd61a932c5b79e9ee1dc98552eb009ea48dd3a0c91ad44341" }
+  ]
+}

@@ -1,0 +1,46 @@
+## MODIFIED Requirements
+
+### Requirement: Authenticity audit compares identity and business fields
+The system SHALL compare synchronized database rows with Kingdee source rows using configured identity keys, blocker fields, warning fields, value fields, and date fields before declaring data authentic.
+
+#### Scenario: Purchase instock row is authentic
+- **WHEN** a `采购入库单` row is audited
+- **THEN** the system MUST match `FID` and `FENTRYID` against the Kingdee entry identity and compare bill number, entry sequence, material number, supplier, and real quantity as blocker fields
+- **AND** bill date, document status, and modify date MUST be reported as warning fields when they differ
+
+#### Scenario: Purchase order row is authentic
+- **WHEN** a `采购订单` row is audited
+- **THEN** the system MUST match `FID` and `FENTRYID` against the Kingdee entry identity and compare bill number, material number, supplier, and quantity as blocker fields
+- **AND** document status and configured dates MUST be reported as warning fields when they differ
+
+#### Scenario: Non-purchase synchronized form is mapped
+- **WHEN** a synchronized form other than `采购入库单` or `采购订单` is included in authenticity dry-run
+- **THEN** the system MUST define or report candidate identity keys, blocker fields, warning fields, database fields, and Kingdee API fields for that form
+- **AND** rows with unconfirmed identity keys MUST NOT be marked eligible for automated rehydration
+
+#### Scenario: Inventory snapshot row is authentic
+- **WHEN** an `即时库存` row is audited
+- **THEN** the system MUST use stock organization, stock, stock location, stock status, material, and base unit as the snapshot identity
+- **AND** base quantity MUST be treated as a blocker value field
+- **AND** update time MUST be reported as a warning field when it differs
+
+### Requirement: Rehydration requires authenticity gate
+The system SHALL require authenticity audit evidence before and after any automated historical rehydration.
+
+#### Scenario: Dry-run before rehydration
+- **WHEN** a rehydration batch is prepared
+- **THEN** the system MUST output a dry-run summary and detail report including target rows, rows that passed blockers, blocked rows, warning rows, and field-level differences
+
+#### Scenario: Verify after rehydration
+- **WHEN** a rehydration batch completes
+- **THEN** the system MUST rerun authenticity audit for the same target identities and report whether all blocker fields now match Kingdee while preserving warning differences in the report
+
+#### Scenario: All-form mapping discovery
+- **WHEN** the operator prepares to extend authenticity dry-run to all synchronized forms
+- **THEN** the system MUST output a mapping draft report that includes each synchronized form, SQL table, Kingdee FormId, configured API FieldKeys, candidate identity fields, blocker fields, warning fields, and unsupported or unconfirmed fields
+- **AND** the mapping discovery MUST be read-only and MUST NOT write SQL Server data
+
+#### Scenario: Batched all-form dry-run
+- **WHEN** all-form authenticity dry-run is executed
+- **THEN** the system MUST execute forms in documented business batches and output summary, detail, and blocker-only reports per batch
+- **AND** the dry-run MUST NOT execute automatic rehydration or SQL Server writes

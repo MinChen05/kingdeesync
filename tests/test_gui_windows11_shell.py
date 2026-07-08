@@ -289,7 +289,7 @@ class Win11DashboardAndSyncResponsiveTests(QtAppTestCase):
 
     def test_sync_page_uses_setting_rows_for_config(self) -> None:
         from src.gui.pages.sync_page import SyncPage
-    
+
         gui = SimpleNamespace()
         with (
             patch("src.gui.pages.sync_page.sync_service.get_available_forms", return_value=["Customers", "Orders"]),
@@ -299,14 +299,14 @@ class Win11DashboardAndSyncResponsiveTests(QtAppTestCase):
             ),
         ):
             page = SyncPage(gui)
-    
+
         self.addCleanup(cleanup_widget, page)
-    
+
         self.assertTrue(hasattr(page, "form_selector"))
         self.assertTrue(hasattr(page, "sync_type_combo"))
     def test_sync_page_visual_alignment_structure(self) -> None:
         from src.gui.pages.sync_page import SyncPage
-    
+
         gui = SimpleNamespace()
         with (
             patch("src.gui.pages.sync_page.sync_service.get_available_forms", return_value=["Customers", "Orders"]),
@@ -316,18 +316,104 @@ class Win11DashboardAndSyncResponsiveTests(QtAppTestCase):
             ),
         ):
             page = SyncPage(gui)
-    
+
         self.addCleanup(cleanup_widget, page)
         page.resize(1440, 900)
         page.show()
         self._app.processEvents()
-    
+
         self.assertEqual(page.objectName(), "sync_execution_page")
         self.assertTrue(page.form_selector.isVisible())
         self.assertTrue(page.sync_type_combo.isVisible())
         self.assertTrue(page.start_sync_btn.isVisible())
         self.assertTrue(page.log_panel.isVisible())
 class Win11SettingsAndFormsResponsiveTests(QtAppTestCase):
+    def _create_settings_page(self):
+        from src.gui.pages.settings_page import SettingsPage
+
+        gui = SimpleNamespace()
+        with patch(
+            "src.gui.pages.settings_page.settings_service.get_settings_snapshot",
+            return_value={"kingdee": {}, "database": {}},
+        ):
+            page = SettingsPage(gui)
+
+        self.addCleanup(cleanup_widget, page)
+        return page
+
+    def test_settings_page_shows_version_and_update_button(self) -> None:
+        from src.version import get_app_version
+
+        page = self._create_settings_page()
+
+        self.assertIn("当前版本", page.version_label.text())
+        self.assertIn(get_app_version(), page.version_label.text())
+        self.assertEqual(page.btn_check_update.text(), "检查更新")
+
+    def test_settings_page_check_update_reports_no_update(self) -> None:
+        page = self._create_settings_page()
+        result = SimpleNamespace(
+            update_available=False,
+            manifest=SimpleNamespace(version="1.0.0", release_date="2026-07-09", notes=()),
+        )
+
+        with (
+            patch("src.gui.pages.settings_page.UpdateService") as service_cls,
+            patch("src.gui.pages.settings_page.UiFeedback.info") as feedback,
+            patch("src.gui.pages.settings_page.UiFeedback.error") as error_feedback,
+        ):
+            service_cls.return_value.check_for_update.return_value = result
+            page.check_update()
+
+        service_cls.return_value.check_for_update.assert_called_once_with()
+        feedback.assert_called_once()
+        self.assertIn("最新版本", feedback.call_args.args[2])
+        error_feedback.assert_not_called()
+        self.assertTrue(page.btn_check_update.isEnabled())
+
+    def test_settings_page_check_update_reports_available_update(self) -> None:
+        page = self._create_settings_page()
+        result = SimpleNamespace(
+            update_available=True,
+            manifest=SimpleNamespace(
+                version="1.4.0",
+                release_date="2026-07-09",
+                notes=("修复同步异常提示", "优化界面反馈"),
+            ),
+        )
+
+        with (
+            patch("src.gui.pages.settings_page.UpdateService") as service_cls,
+            patch("src.gui.pages.settings_page.UiFeedback.info") as feedback,
+            patch("src.gui.pages.settings_page.UiFeedback.error") as error_feedback,
+        ):
+            service_cls.return_value.check_for_update.return_value = result
+            page.check_update()
+
+        feedback.assert_called_once()
+        message = feedback.call_args.args[2]
+        self.assertIn("1.4.0", message)
+        self.assertIn("2026-07-09", message)
+        self.assertIn("修复同步异常提示", message)
+        error_feedback.assert_not_called()
+        self.assertTrue(page.btn_check_update.isEnabled())
+
+    def test_settings_page_check_update_reports_failure(self) -> None:
+        page = self._create_settings_page()
+
+        with (
+            patch("src.gui.pages.settings_page.UpdateService") as service_cls,
+            patch("src.gui.pages.settings_page.UiFeedback.info") as feedback,
+            patch("src.gui.pages.settings_page.UiFeedback.error") as error_feedback,
+        ):
+            service_cls.return_value.check_for_update.side_effect = RuntimeError("网络不可用")
+            page.check_update()
+
+        feedback.assert_not_called()
+        error_feedback.assert_called_once()
+        self.assertIn("网络不可用", error_feedback.call_args.args[2])
+        self.assertTrue(page.btn_check_update.isEnabled())
+
     def test_settings_page_keeps_actions_visible_and_rows_compact_at_1266x768(self) -> None:
         from src.gui.pages.settings_page import SettingsPage
 
@@ -421,8 +507,9 @@ class Win11SettingsAndFormsResponsiveTests(QtAppTestCase):
             page = SettingsPage(gui)
 
         self.addCleanup(cleanup_widget, page)
-        self.assertEqual(page.btn_test.height(), 28)
-        self.assertEqual(page.btn_save.height(), 28)
+        self.assertEqual(page.btn_test.height(), 38)
+        self.assertEqual(page.btn_save.height(), 38)
+        self.assertEqual(page.btn_check_update.height(), 34)
 
     def test_settings_page_1266x768_integration(self) -> None:
         from src.gui.pages.settings_page import SettingsPage

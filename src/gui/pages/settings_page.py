@@ -23,8 +23,12 @@ from src.gui.design_tokens import ColorTokens, SizeTokens, SpacingTokens, qcolor
 from src.gui.feedback import UiFeedback
 from src.gui.ui_text import ButtonText, LoadingText
 from src.services.settings_service import settings_service
+from src.services.update_service import UpdateService
+from src.version import get_app_version
 
 logger = logging.getLogger(__name__)
+
+UPDATE_MANIFEST_URL = "https://intranet.example.com/kingdee-sync/updates/stable/latest.json"
 
 
 class SettingsPage(Win11PageScaffold):
@@ -97,8 +101,15 @@ class SettingsPage(Win11PageScaffold):
         left_col.setSpacing(16)
 
         basic_card = Win11SectionCard("基础设置", "用于识别当前客户端与配置来源")
+        self.version_label = self._make_info_label(f"当前版本：{get_app_version()}")
+        self.btn_check_update = LoadingButton("检查更新")
+        self.btn_check_update.setProperty("class", "secondary")
+        self.btn_check_update.setFixedHeight(34)
+        self.btn_check_update.clicked.connect(self.check_update)
         basic_rows = [
             self._create_setting_row("系统名称", "用于标识本系统的名称", self._make_info_label("金蝶数据同步工具")),
+            self._create_setting_row("当前版本", "当前客户端程序版本", self.version_label),
+            self._create_setting_row("在线更新", "从内网 HTTPS 地址检查新版本", self.btn_check_update),
             self._create_setting_row("配置来源", "当前读写的配置文件", self._make_info_label(settings_service.get_config_source_name())),
             self._create_setting_row("数据库类型", "当前同步使用的数据库类型", self._make_info_label(settings_service.get_database_type())),
         ]
@@ -308,3 +319,25 @@ class SettingsPage(Win11PageScaffold):
             UiFeedback.error(self, "测试失败", f"连接测试未完成：\n{exc}")
         finally:
             self.btn_test.set_loading(False)
+
+    def check_update(self) -> None:
+        self.btn_check_update.set_loading(True, "检查中...")
+        try:
+            result = UpdateService(UPDATE_MANIFEST_URL).check_for_update()
+            if not result.update_available:
+                UiFeedback.info(self, "检查更新", "当前已是最新版本。")
+                return
+
+            notes = "\n".join(f"- {note}" for note in result.manifest.notes)
+            message_parts = [
+                f"版本：{result.manifest.version}",
+                f"发布日期：{result.manifest.release_date}",
+            ]
+            if notes:
+                message_parts.extend(["更新说明：", notes])
+            UiFeedback.info(self, "发现新版本", "\n".join(message_parts))
+        except Exception as exc:
+            logger.error("Check update failed: %s", exc)
+            UiFeedback.error(self, "检查更新失败", f"无法检查更新：\n{exc}")
+        finally:
+            self.btn_check_update.set_loading(False)

@@ -16,11 +16,11 @@
 
 ## 3. GUI Flow
 
-- [ ] Add current version display.
-- [ ] Add manual "Check for updates" entry.
-- [ ] Add update available dialog or panel with version, date, and notes.
-- [ ] Add visible failure feedback.
-- [ ] Add GUI tests for update states with mocked `UpdateService`.
+- [x] Add current version display.
+- [x] Add manual "Check for updates" entry.
+- [x] Add update available dialog or panel with version, date, and notes.
+- [x] Add visible failure feedback.
+- [x] Add GUI tests for update states with mocked `UpdateService`.
 
 ## 4. Independent Updater
 

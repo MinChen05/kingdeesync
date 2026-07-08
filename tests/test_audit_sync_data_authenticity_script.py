@@ -1,5 +1,11 @@
 from src.core.sync_data_authenticity import AUDIT_SPECS
-from scripts.maintenance.audit_sync_data_authenticity import build_api_filter, build_db_query, run_audit
+from scripts.maintenance.audit_sync_data_authenticity import (
+    _execute_query,
+    iter_db_queries,
+    build_api_filter,
+    build_db_query,
+    run_audit,
+)
 
 
 def test_run_audit_writes_summary_and_detail(tmp_path):
@@ -55,3 +61,24 @@ def test_build_api_filter_uses_fid_in_clause():
     filter_string = build_api_filter(spec, {"100", "200"}, "FPurchaseOrgId = 171190")
     assert "FPurchaseOrgId = 171190" in filter_string
     assert "FID IN (100,200)" in filter_string
+
+
+def test_iter_db_queries_chunks_large_identity_sets_under_sqlserver_param_limit():
+    spec = AUDIT_SPECS["采购订单"]
+    keys = {(str(fid), "1") for fid in range(1060)}
+    queries = list(iter_db_queries(spec, keys, max_params=2000))
+    assert len(queries) == 2
+    assert all(len(params) <= 2000 for _, params in queries)
+
+
+def test_execute_query_expands_pyodbc_params():
+    class Cursor:
+        def __init__(self):
+            self.calls = []
+
+        def execute(self, *args):
+            self.calls.append(args)
+
+    cursor = Cursor()
+    _execute_query(cursor, "SELECT ? WHERE ? = ?", ["1", "2", "3"])
+    assert cursor.calls == [("SELECT ? WHERE ? = ?", "1", "2", "3")]

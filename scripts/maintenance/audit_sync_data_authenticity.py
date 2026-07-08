@@ -64,6 +64,22 @@ def build_db_query(
     return sql, params
 
 
+def iter_db_queries(
+    spec: AuthenticitySpec,
+    keys: set[tuple[str, ...]],
+    max_params: int = 2000,
+) -> Iterable[tuple[str, list[str]]]:
+    identity_width = max(1, len(spec.db_identity))
+    chunk_size = max(1, max_params // identity_width)
+    ordered_keys = _ordered_keys(keys)
+    for index in range(0, len(ordered_keys), chunk_size):
+        yield build_db_query(spec, set(ordered_keys[index : index + chunk_size]))
+
+
+def _execute_query(cursor, sql: str, params: list[str]) -> None:
+    cursor.execute(sql, *params)
+
+
 def _value_literal(value: str) -> str:
     text = normalize_text(value)
     if text.isdigit():
@@ -107,12 +123,12 @@ def fetch_db_rows(targets: Targets) -> RowsByForm:
             if not keys:
                 continue
             spec = AUDIT_SPECS[form]
-            sql, params = build_db_query(spec, keys)
-            manager.cursor.execute(sql, params)
             form_rows: dict[tuple[str, ...], dict[str, object]] = {}
-            for row in manager.cursor.fetchall() or []:
-                row_dict = _row_to_dict(manager.cursor, row)
-                form_rows[_identity_key(row_dict, spec.db_identity)] = row_dict
+            for sql, params in iter_db_queries(spec, keys):
+                _execute_query(manager.cursor, sql, params)
+                for row in manager.cursor.fetchall() or []:
+                    row_dict = _row_to_dict(manager.cursor, row)
+                    form_rows[_identity_key(row_dict, spec.db_identity)] = row_dict
             rows_by_form[form] = form_rows
         return rows_by_form
     finally:

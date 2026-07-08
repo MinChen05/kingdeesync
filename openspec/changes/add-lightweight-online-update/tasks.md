@@ -8,11 +8,11 @@
 
 ## 2. Update Service
 
-- [ ] Implement manifest fetch with timeout and clear errors.
-- [ ] Implement HTTPS-only package URL validation.
-- [ ] Implement package download to temporary path.
-- [ ] Implement SHA256 verification.
-- [ ] Add tests for no update, update available, network failure, invalid manifest, and hash mismatch.
+- [x] Implement manifest fetch with timeout and clear errors.
+- [x] Implement HTTPS-only package URL validation.
+- [x] Implement package download to temporary path.
+- [x] Implement SHA256 verification.
+- [x] Add tests for no update, update available, network failure, invalid manifest, and hash mismatch.
 
 ## 3. GUI Flow
 

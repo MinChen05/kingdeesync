@@ -1,13 +1,21 @@
 from __future__ import annotations
 
+import hashlib
+import json
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Any
 from urllib.parse import urlparse
+from urllib.request import urlopen
 
-from src.version import APP_NAME
+from src.version import APP_NAME, get_app_version
 
 
 class ManifestValidationError(ValueError):
+    pass
+
+
+class UpdateServiceError(RuntimeError):
     pass
 
 
@@ -23,6 +31,12 @@ class UpdateManifest:
     size: int
     force: bool
     notes: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class UpdateCheckResult:
+    update_available: bool
+    manifest: UpdateManifest
 
 
 def _version_tuple(value: str) -> tuple[int, int, int]:
@@ -85,3 +99,71 @@ def parse_manifest(data: dict[str, Any]) -> UpdateManifest:
         force=bool(data.get("force", False)),
         notes=tuple(notes_raw),
     )
+
+
+class UpdateService:
+    def __init__(
+        self,
+        manifest_url: str,
+        current_version: str | None = None,
+        timeout_seconds: int = 5,
+    ) -> None:
+        parsed = urlparse(manifest_url)
+        if parsed.scheme.lower() != "https":
+            raise UpdateServiceError("manifest_url 必须使用 HTTPS")
+        if not parsed.netloc:
+            raise UpdateServiceError("manifest_url 必须包含 host")
+
+        self.manifest_url = manifest_url
+        self.current_version = current_version or get_app_version()
+        self.timeout_seconds = timeout_seconds
+
+    def check_for_update(self) -> UpdateCheckResult:
+        try:
+            with urlopen(self.manifest_url, timeout=self.timeout_seconds) as response:
+                payload = response.read()
+        except Exception as exc:
+            raise UpdateServiceError(f"检查更新失败: {exc}") from exc
+
+        try:
+            data = json.loads(payload.decode("utf-8"))
+            if not isinstance(data, dict):
+                raise ManifestValidationError("manifest 必须是 JSON object")
+            manifest = parse_manifest(data)
+        except Exception as exc:
+            raise UpdateServiceError(f"更新元数据无效: {exc}") from exc
+
+        return UpdateCheckResult(
+            update_available=compare_versions(manifest.version, self.current_version) > 0,
+            manifest=manifest,
+        )
+
+    def download_package(self, manifest: UpdateManifest, target_dir: Path) -> Path:
+        target_dir.mkdir(parents=True, exist_ok=True)
+        package_path = target_dir / f"kingdee-sync-{manifest.version}.zip"
+        temp_path = target_dir / f".{package_path.name}.tmp"
+
+        try:
+            with urlopen(manifest.package_url, timeout=self.timeout_seconds) as response:
+                package_bytes = response.read()
+        except Exception as exc:
+            raise UpdateServiceError(f"下载更新包失败: {exc}") from exc
+
+        temp_path.write_bytes(package_bytes)
+        try:
+            actual_size = temp_path.stat().st_size
+            if actual_size != manifest.size:
+                raise UpdateServiceError(
+                    f"更新包大小校验失败: 期望 {manifest.size} 字节，实际 {actual_size} 字节"
+                )
+
+            actual_hash = hashlib.sha256(temp_path.read_bytes()).hexdigest()
+            if actual_hash.lower() != manifest.sha256.lower():
+                raise UpdateServiceError("更新包 sha256 校验失败")
+        except Exception:
+            temp_path.unlink(missing_ok=True)
+            raise
+
+        temp_path.replace(package_path)
+
+        return package_path

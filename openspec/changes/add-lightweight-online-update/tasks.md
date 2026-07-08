@@ -2,9 +2,9 @@
 
 ## 1. Version And Manifest
 
-- [ ] Add local version source.
-- [ ] Define `latest.json` schema and validation rules.
-- [ ] Add tests for version comparison and manifest validation.
+- [x] Add local version source.
+- [x] Define `latest.json` schema and validation rules.
+- [x] Add tests for version comparison and manifest validation.
 
 ## 2. Update Service
 

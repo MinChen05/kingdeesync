@@ -1,0 +1,23 @@
+{
+  "runs": [
+    {
+      "timestamp": "2026-07-23T00:00:00Z",
+      "scope": "app",
+      "genre": "modern-minimal",
+      "design_system": "design.md",
+      "flag": "designed-as-app",
+      "pages": [
+        "Layout",
+        "OverviewPage",
+        "SyncPage",
+        "HistoryPage",
+        "HistoryDetail",
+        "FormsPage",
+        "SettingsPage",
+        "DiagnosticsPage"
+      ],
+      "components": ["Card", "Badge", "Button"],
+      "summary": "Full frontend Hallmark redesign: OKLCH palette, N3 Side-rail nav, Stat-Led/Workbench/Document macrostructures, Inter + JetBrains Mono typography, microinteraction polish"
+    }
+  ]
+}

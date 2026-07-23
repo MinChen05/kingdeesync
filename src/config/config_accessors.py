@@ -371,3 +371,21 @@ class ConfigAccessors:
         if not isinstance(mappings, dict):
             return {}
         return copy.deepcopy(mappings)
+
+    def get_form_enabled(self, form_name: str) -> bool:
+        """Get enabled state for a form. Defaults to True if not set."""
+        try:
+            section = "FORM_STATE"
+            if section in self.config and form_name in self.config[section]:
+                return _as_bool(self.config[section][form_name], True)
+        except Exception:
+            pass
+        return True
+
+    def set_form_enabled(self, form_name: str, enabled: bool) -> None:
+        """Set enabled state for a form."""
+        if not form_name:
+            return
+        self.reader.ensure_section("FORM_STATE")
+        self.config["FORM_STATE"][form_name] = str(enabled)
+        self.reader.save()

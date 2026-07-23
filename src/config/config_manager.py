@@ -84,5 +84,11 @@ class ConfigManager:
     def get_field_mappings(self) -> dict[str, dict[str, Any]]:
         return self._accessors.get_field_mappings()
 
+    def get_form_enabled(self, form_name: str) -> bool:
+        return self._accessors.get_form_enabled(form_name)
+
+    def set_form_enabled(self, form_name: str, enabled: bool) -> None:
+        self._accessors.set_form_enabled(form_name, enabled)
+
 
 config_manager = ConfigManager()

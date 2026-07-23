@@ -1,0 +1,81 @@
+/* Hallmark · genre: modern-minimal · macrostructure: Workbench/Stat-Led · design-system: design.md · designed-as-app */
+
+@import "tailwindcss";
+
+@theme {
+  /* Colors — OKLCH palette from design.md */
+  --color-paper:    oklch(100% 0 0);
+  --color-paper-2:  oklch(97% 0.004 250);
+  --color-ink:      oklch(17% 0.022 260);
+  --color-ink-2:    oklch(32% 0.03 260);
+  --color-rule:     oklch(88% 0.01 250);
+  --color-accent:   oklch(56% 0.185 255);
+  --color-accent-2: oklch(48% 0.16 255);
+  --color-focus:    oklch(56% 0.185 255);
+  --color-success:  oklch(62% 0.13 145);
+  --color-warning:  oklch(76% 0.14 85);
+  --color-critical: oklch(62% 0.18 25);
+
+  /* Legacy compat aliases (for existing pages) */
+  --color-canvas:         var(--color-paper);
+  --color-surface-soft:   var(--color-paper-2);
+  --color-ink-deep:       var(--color-ink);
+  --color-steel:          var(--color-ink-2);
+  --color-hairline:       var(--color-rule);
+  --color-hairline-soft:  oklch(92% 0.008 250);
+  --color-primary:        var(--color-accent);
+  --color-primary-deep:   var(--color-accent-2);
+  --color-attention:      var(--color-warning);
+
+  /* Typography */
+  --font-sans: "Inter", system-ui, -apple-system, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, Consolas, monospace;
+
+  /* Radius */
+  --radius-sm: 6px;
+  --radius-md: 8px;
+  --radius-lg: 12px;
+  --radius-xl: 16px;
+  --radius-full: 999px;
+}
+
+html, body {
+  overflow-x: clip;
+}
+
+body {
+  background-color: var(--color-paper);
+  color: var(--color-ink);
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  margin: 0;
+}
+
+/* Focus ring */
+:focus-visible {
+  outline: 2px solid var(--color-focus);
+  outline-offset: 2px;
+}
+
+/* Scrollbar */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-thumb {
+  background: var(--color-rule);
+  border-radius: var(--radius-full);
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+/* Reduced motion */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}

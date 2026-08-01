@@ -1,14 +1,15 @@
 FROM docker.m.daocloud.io/library/node:22-alpine AS build
 
-# 国内 npm 镜像源：覆盖 package-lock.json 中写死的 resolved 地址，
-# 下载内容与原官方源逐字节一致，依赖版本与构建结果保持不变。
-ENV NPM_CONFIG_REGISTRY=https://registry.npmmirror.com
+# 国内 npm 镜像源：下载内容与原官方源逐字节一致，依赖版本与构建结果保持不变。
+ENV NPM_CONFIG_REGISTRY=https://registry.npmmirror.com \
+    COREPACK_NPM_REGISTRY=https://registry.npmmirror.com
 
 WORKDIR /src/apps/web
-COPY apps/web/package.json apps/web/package-lock.json apps/web/.npmrc ./
-RUN npm ci --ignore-scripts --legacy-peer-deps --registry=https://registry.npmmirror.com
+RUN corepack enable && corepack prepare pnpm@latest --activate
+# 先复制全部源码再安装：prepare 脚本（husky + max setup）需要完整源码
 COPY apps/web ./
-RUN npm run build
+RUN pnpm install --frozen-lockfile
+RUN pnpm build
 
 FROM docker.m.daocloud.io/library/nginx:1.27-alpine
 COPY deploy/docker/nginx.conf /etc/nginx/conf.d/default.conf

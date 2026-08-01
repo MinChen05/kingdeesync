@@ -52,6 +52,15 @@ import { RunSummary } from './RunSummary';
 
 const { Text } = Typography;
 
+/** 状态 → 标题发光点颜色 */
+const STATUS_DOT_COLOR: Record<string, string> = {
+  success: 'var(--tk-success)',
+  partial: 'var(--tk-warning)',
+  failed: 'var(--tk-error)',
+  failed_abnormal_exit: 'var(--tk-error)',
+  running: 'var(--tk-primary)',
+};
+
 interface RunDetailDrawerProps {
   runId: string | null;
   onClose: () => void;
@@ -71,28 +80,39 @@ const RunDetailDrawer: React.FC<RunDetailDrawerProps> = ({
   });
   const loading = detailReq.isPending;
   const detail: RunDetail | undefined = detailReq.data ? toRunDetail(detailReq.data) : undefined;
+  const dotColor = detail ? STATUS_DOT_COLOR[detail.status] || 'var(--tk-text)' : 'var(--tk-primary)';
 
   return (
     <Drawer
       title={
-        detail ? (
-          <span style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-            运行详情
+        <span style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+          {/* 状态发光点 */}
+          <span
+            style={{
+              width: 8,
+              height: 8,
+              borderRadius: '50%',
+              background: dotColor,
+              boxShadow: `0 0 0 3px ${dotColor}22, 0 0 10px ${dotColor}55`,
+              flexShrink: 0,
+            }}
+          />
+          <span style={{ fontSize: 15, fontWeight: 600 }}>运行详情</span>
+          {detail && (
             <Text code style={{ fontSize: 12 }}>
               {detail.run_id}
             </Text>
-          </span>
-        ) : (
-          '运行详情'
-        )
+          )}
+        </span>
       }
-      width={720}
+      width={760}
       open={!!runId}
       onClose={onClose}
       loading={loading}
+      styles={{ body: { paddingTop: 16 } }}
     >
       {detail ? (
-        <div className="space-y-5">
+        <div className="space-y-4">
           <RunSummary detail={detail} />
           <FormDetailTable forms={detail.forms || []} />
           <RunErrorList errors={detail.errors || []} />

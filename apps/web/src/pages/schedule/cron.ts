@@ -94,6 +94,41 @@ export function chineseToCron(text: string): string | null {
 
 // ---------- Cron -> 中文 ----------
 
+/** 解析 day-of-week 字段为中文，如 "1-6" → "周一至周五"，"0" → "周日" */
+function parseDow(dow: string): string | null {
+  // 单值: 0 → 周日（必须严格匹配，避免 "1-6" 被 parseInt 解析为 1）
+  const single = parseInt(dow, 10);
+  if (!isNaN(single) && single >= 0 && single <= 7 && String(single) === dow) {
+    return DAY_NAMES[single === 7 ? 0 : single];
+  }
+
+  // 范围: 1-6 → 周一至周五
+  const range = dow.match(/^(\d)-(\d)$/);
+  if (range) {
+    const from = parseInt(range[1], 10);
+    const to = parseInt(range[2], 10);
+    if (!isNaN(from) && !isNaN(to) && from >= 0 && from <= 7 && to >= 0 && to <= 7 && from < to) {
+      const f = from === 7 ? 0 : from;
+      const t = to === 7 ? 0 : to;
+      return `${DAY_NAMES[f]}至${DAY_NAMES[t]}`;
+    }
+  }
+
+  // 逗号分隔: 1,3,5 → 周一、周三、周五
+  const list = dow.split(',');
+  if (list.length > 1 && list.every((d) => {
+    const n = parseInt(d, 10);
+    return !isNaN(n) && n >= 0 && n <= 7;
+  })) {
+    return list.map((d) => {
+      const n = parseInt(d, 10);
+      return DAY_NAMES[n === 7 ? 0 : n];
+    }).join('、');
+  }
+
+  return null;
+}
+
 /**
  * 将 Cron 表达式解析为中文自然语言描述。
  * 返回 null 表示无法解析为常见模式，应回退到原始表达式。
@@ -118,6 +153,14 @@ export function cronToChinese(cron: string): string | null {
     return '每小时';
   }
 
+  // 每 N 小时模式: 0 0 */N * * * (dow = *)
+  if (sec === '0' && min === '0' && hour.startsWith(slashStar) && dom === '*' && month === '*' && dow === '*') {
+    const n = parseInt(hour.slice(2), 10);
+    if (n > 0 && n <= 23) {
+      return `每 ${n} 小时`;
+    }
+  }
+
   // 每天 HH:MM 模式 (dow = *)
   if (sec === '0' && dom === '*' && month === '*' && dow === '*') {
     const h = parseInt(hour, 10);
@@ -127,14 +170,23 @@ export function cronToChinese(cron: string): string | null {
     }
   }
 
-  // "0 M H * * D" -> 每周X HH:MM
+  // "0 M H */N * D" -> 周X至周Y 每 N 小时 HH:MM
   if (sec === '0' && dom === '*' && month === '*' && dow !== '*') {
-    const d = parseInt(dow, 10);
+    const dowLabel = parseDow(dow);
     const h = parseInt(hour, 10);
     const m = parseInt(min, 10);
-    if (!isNaN(d) && !isNaN(h) && !isNaN(m) && d >= 0 && d <= 7 && h >= 0 && h <= 23 && m >= 0 && m <= 59) {
-      const dayName = DAY_NAMES[d === 7 ? 0 : d];
-      return `每${dayName} ${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
+
+    // 每 N 小时 + 周范围: 0 0 */2 * * 1-6
+    if (hour.startsWith(slashStar)) {
+      const n = parseInt(hour.slice(2), 10);
+      if (!isNaN(n) && n > 0 && n <= 23 && dowLabel) {
+        return `${dowLabel} 每 ${n} 小时`;
+      }
+    }
+
+    // 固定时间 + 周范围/单值: 0 0 2 * * 0
+    if (!isNaN(h) && !isNaN(m) && h >= 0 && h <= 23 && m >= 0 && m <= 59 && dowLabel) {
+      return `每${dowLabel} ${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
     }
   }
 

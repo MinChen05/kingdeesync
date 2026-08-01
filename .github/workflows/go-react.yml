@@ -1,0 +1,49 @@
+name: Go + React Baseline
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  go:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: apps/server
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: apps/server/go.mod
+          cache: true
+      - name: Go format, vet, race tests
+        run: |
+          unformatted="$(gofmt -l .)"
+          if [ -n "$unformatted" ]; then
+            printf '%s\n' "$unformatted"
+            exit 1
+          fi
+          go vet ./...
+          go test -race ./...
+
+  react:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Install pnpm globally
+        run: npm install -g pnpm
+      - name: Install dependencies
+        working-directory: apps/web
+        run: pnpm install --frozen-lockfile
+      - name: TypeScript type check
+        working-directory: apps/web
+        run: pnpm tsc --noEmit
+      - name: Vitest unit tests
+        working-directory: apps/web
+        run: pnpm test
+      - name: Production build
+        working-directory: apps/web
+        run: pnpm build

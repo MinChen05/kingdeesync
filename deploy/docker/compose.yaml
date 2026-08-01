@@ -1,0 +1,39 @@
+services:
+  kingdee-sync-api:
+    build:
+      context: ../..
+      dockerfile: deploy/docker/Dockerfile
+    container_name: kingdee-sync-api
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    environment:
+      LISTEN_ADDR: 0.0.0.0
+      LISTEN_PORT: "8000"
+    volumes:
+      - ./config.local.ini:/app/config.local.ini:ro,Z
+      - ./packages/sync-config:/app/packages/sync-config:ro,Z
+      - ./.run/logs:/app/logs:Z
+      - ./.run/state:/app/state:Z
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O /dev/null http://127.0.0.1:8000/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+    networks: [kingdee-sync-net]
+
+  kingdee-sync-web:
+    build:
+      context: ../..
+      dockerfile: deploy/docker/web.Dockerfile
+    container_name: kingdee-sync-web
+    restart: unless-stopped
+    depends_on: [kingdee-sync-api]
+    ports:
+      - "8001:80"
+    networks: [kingdee-sync-net]
+
+networks:
+  kingdee-sync-net:
+    driver: bridge

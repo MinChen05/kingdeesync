@@ -1,0 +1,41 @@
+/**
+ * Theme Tokens — CSS Custom Properties
+ *
+ * Central palette for the "Modern Data Operations" dark theme.
+ * All inline-style hex colors in components should reference these variables
+ * via `var(--tk-*)` instead of hardcoded hex values.
+ *
+ * Palette:
+ *   Primary   – sky-400  (#38bdf8)
+ *   Success   – emerald-400 (#34d399)
+ *   Error     – red-400   (#f87171)
+ *   Warning   – amber-400  (#fbbf24)
+ *   Unknown   – slate-600  (#475569)
+ *   Text      – slate-200  (#e2e8f0)
+ *   Muted     – slate-400  (#94a3b8)
+ *   Dim       – slate-500  (#64748b)
+ *   Surface   – slate-900  (#0f172a)
+ */
+
+:root {
+  /* ---- Accent colors ---- */
+  --tk-primary:   #38bdf8;
+  --tk-success:   #34d399;
+  --tk-error:     #f87171;
+  --tk-warning:   #fbbf24;
+  --tk-unknown:   #475569;
+
+  /* ---- Text hierarchy ---- */
+  --tk-text:      #e2e8f0;
+  --tk-text-light: #f1f5f9;
+  --tk-muted:     #94a3b8;
+  --tk-dim:       #64748b;
+  --tk-bright:    #f8fafc;
+
+  /* ---- Surfaces ---- */
+  --tk-bg:        #070b14;
+  --tk-surface:   #0f172a;
+
+  /* ---- Gradient accent (indigo) ---- */
+  --tk-indigo:    #818cf8;
+}

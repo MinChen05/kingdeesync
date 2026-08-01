@@ -1,0 +1,95 @@
+# 虚拟环境
+.venv/
+
+# 缓存文件
+**/__pycache__/
+**/.mypy_cache/
+**/.pytest_cache/
+**/.ruff_cache/
+*.pyc
+
+# 构建和打包目录
+build/
+dist/
+.reasonix/
+
+# PyInstaller spec 文件
+*.spec
+
+# 日志文件
+**/logs/
+# Go API logs 路由是源码，不是运行时日志目录。
+!apps/server/api/routes/logs/
+!apps/server/api/routes/logs/*.go
+log/
+debug_startup.txt
+debug_reporting.txt
+startup_log.txt
+startup_log_v2.txt
+temp_log.txt
+temp_out.txt
+
+# 运行时断点目录
+**/checkpoints/
+
+# 本地协作 / 机器相关文件
+.idea/
+.claude/
+.install_salt
+config.local.ini
+config.ini
+.worktrees/
+.worktrees
+.worktrees/
+.superpowers/
+config.ini.backup
+.run/
+go_state.db
+*.db-shm
+*.db-wal
+apps/server/bin/
+apps/server/*.log
+apps/server/server
+# go build ./cmd/... 在 apps/server 根目录输出的编译产物
+apps/server/check_org
+apps/server/cleanup-shadow
+apps/server/window-sync
+docs/superpowers/reports/
+**/.DS_Store
+tmp-*.png
+
+# 截图过程文件（最终验收图按需单独提交）
+docs/screenshots/current_*.png
+docs/screenshots/target_*.png
+docs/screenshots/*_crop.png
+docs/screenshots/*_before_*.png
+docs/screenshots/*_after_*.png
+docs/screenshots/dashboard_pixel_final_v*.png
+docs/screenshots/*_1366x768.png
+docs/screenshots/*_1920x1080.png
+docs/screenshots/iconpark_round2_*.png
+docs/screenshots/dashboard_*.png
+docs/screenshots/final_dashboard_*.png
+docs/screenshots/final_history_*.png
+
+# 本地设计源素材 / 下载过程素材
+assets/*.png
+assets/*.icns
+assets/*_*.svg
+assets/*_*.SVG
+assets/*-*.svg
+assets/*-*.SVG
+
+# 本地调试脚本（含敏感信息，不应提交）
+apps/server/compare_inv*.py
+apps/server/*.py
+apps/server/form-queries.json
+apps/server/packages/
+
+# zcode plan 文件（含会话上下文，不应提交）
+.zcode/plans/
+
+# 根目录临时文件
+form-queries.json
+form-queries.json.new
+go_state.db.new

@@ -1,0 +1,392 @@
+openapi: 3.0.3
+info:
+  title: Kingdee Sync API
+  version: 1.0.0
+  description: Stable synchronization control contract.
+paths:
+  /health:
+    get:
+      operationId: health
+      responses:
+        '200':
+          description: Process health.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthResponse'
+  /ready:
+    get:
+      operationId: ready
+      responses:
+        '200':
+          description: Application dependencies are ready.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReadyResponse'
+        '503':
+          description: Application dependencies are not ready.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReadyResponse'
+  /api/sync/start:
+    post:
+      operationId: startSync
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SyncStartRequest'
+      responses:
+        '200':
+          description: A new synchronization run was started.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StartResponse'
+        '409':
+          description: Another synchronization run is active.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '400':
+          description: The request body is invalid.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '503':
+          description: The sync engine or state database is unavailable.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+  /api/sync/status:
+    get:
+      operationId: getSyncStatus
+      parameters:
+        - name: run_id
+          in: query
+          required: false
+          schema:
+            type: string
+          description: Run ID. When omitted, the active run is queried.
+      responses:
+        '200':
+          description: Current or completed synchronization state.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StatusResponse'
+        '404':
+          description: The run does not exist.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+  /api/sync/stop:
+    post:
+      operationId: stopSync
+      parameters:
+        - name: run_id
+          in: query
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Cancellation was requested.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StopResponse'
+        '400':
+          description: run_id is missing.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: The run does not exist.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '409':
+          description: The run is already finished or cannot be stopped.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+  /api/sync/logs:
+    get:
+      operationId: getSyncLogs
+      parameters:
+        - name: run_id
+          in: query
+          required: true
+          schema:
+            type: string
+          description: Required run ID; logs are never mixed across runs.
+      responses:
+        '200':
+          description: Logs belonging to the requested run.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LogsResponse'
+        '400':
+          description: run_id is missing.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: The run does not exist.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '503':
+          description: Logs could not be loaded.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+  /api/history/runs/{runId}/details:
+    get:
+      operationId: getRunDetails
+      parameters:
+        - name: runId
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Persistent synchronization run ID.
+      responses:
+        '200':
+          description: Detailed synchronization run data.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HistoryDetailsResponse'
+        '404':
+          description: The database is unavailable or the run does not exist.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HistoryErrorResponse'
+components:
+  schemas:
+    HealthResponse:
+      type: object
+      required: [status]
+      properties:
+        status: {type: string, const: ok}
+    ReadyResponse:
+      type: object
+      required: [status]
+      properties:
+        status:
+          type: string
+          enum: [ready, not_ready]
+    SyncStatus:
+      type: string
+      enum:
+        - running
+        - stopping
+        - success
+        - partial
+        - failed
+        - stopped
+        - failed_abnormal_exit
+    SyncStartRequest:
+      type: object
+      properties:
+        forms:
+          type: array
+          items:
+            type: string
+        sync_type:
+          type: string
+          default: incremental
+        dry_run:
+          type: boolean
+          default: false
+    SyncStartData:
+      type: object
+      required: [run_id, dry_run]
+      properties:
+        run_id:
+          type: string
+        dry_run:
+          type: boolean
+    FormStatus:
+      type: object
+      required: [form_name, fetched, inserted, errors, duration_sec, status]
+      properties:
+        form_name: {type: string}
+        fetched: {type: integer}
+        inserted: {type: integer}
+        errors: {type: integer}
+        duration_sec: {type: number, format: double}
+        status: { $ref: '#/components/schemas/SyncStatus' }
+        error_summary: {type: string}
+    StatusData:
+      type: object
+      required: [run_id, status, progress, current_form, message, error_summary, elapsed_seconds, started_at, form_stats]
+      properties:
+        run_id: {type: string}
+        status: { $ref: '#/components/schemas/SyncStatus' }
+        progress: {type: integer, minimum: 0, maximum: 100}
+        current_form: {type: string}
+        message: {type: string}
+        error_summary: {type: string}
+        elapsed_seconds: {type: number, format: double}
+        started_at: {type: string, format: date-time}
+        form_stats:
+          type: array
+          items: { $ref: '#/components/schemas/FormStatus' }
+    StartResponse:
+      type: object
+      required: [ok, data, error, code]
+      properties:
+        ok: {type: boolean, const: true}
+        data: { $ref: '#/components/schemas/SyncStartData' }
+        error: {type: string}
+        code: {type: string, const: ''}
+    StatusResponse:
+      type: object
+      required: [ok, data, error, code]
+      properties:
+        ok: {type: boolean, const: true}
+        data: { $ref: '#/components/schemas/StatusData' }
+        error: {type: string}
+        code: {type: string, const: ''}
+    StopResponse:
+      type: object
+      required: [ok, data, error, code]
+      properties:
+        ok: {type: boolean, const: true}
+        data: { $ref: '#/components/schemas/SyncStopData' }
+        error: {type: string}
+        code: {type: string, const: ''}
+    SyncStopData:
+      type: object
+      required: [run_id, status]
+      properties:
+        run_id: {type: string}
+        status: { $ref: '#/components/schemas/SyncStatus' }
+    SyncLogEntry:
+      type: object
+      required: [created_at, form_name, level, message, detail]
+      properties:
+        created_at: {type: string, format: date-time}
+        form_name: {type: string}
+        level: {type: string}
+        message: {type: string}
+        detail: {type: string}
+    LogsData:
+      type: object
+      required: [run_id, logs]
+      properties:
+        run_id: {type: string}
+        logs:
+          type: array
+          items: { $ref: '#/components/schemas/SyncLogEntry' }
+    LogsResponse:
+      type: object
+      required: [ok, data, error, code]
+      properties:
+        ok: {type: boolean, const: true}
+        data: { $ref: '#/components/schemas/LogsData' }
+        error: {type: string}
+        code: {type: string, const: ''}
+    HistoryDetailsResponse:
+      type: object
+      required: [ok, data]
+      properties:
+        ok: {type: boolean, const: true}
+        data: { $ref: '#/components/schemas/HistoryDetailsData' }
+    HistoryDetailsData:
+      type: object
+      required: [id, run_id, task_name, sync_type, status, start_time, forms, errors]
+      properties:
+        id: {type: integer, format: int64}
+        run_id: {type: string}
+        task_name: {type: string}
+        sync_type: {type: string}
+        status: { $ref: '#/components/schemas/SyncStatus' }
+        start_time: {type: string}
+        end_time: {type: string}
+        duration_seconds: {type: number, format: double}
+        total_records: {type: integer, format: int64}
+        success_records: {type: integer, format: int64}
+        failed_records: {type: integer, format: int64}
+        form_count: {type: integer}
+        success_forms: {type: integer}
+        failed_forms: {type: integer}
+        error_message: {type: string}
+        forms:
+          type: array
+          items: { $ref: '#/components/schemas/HistoryFormDetails' }
+        errors:
+          type: array
+          items: { $ref: '#/components/schemas/HistoryErrorDetails' }
+    HistoryFormDetails:
+      type: object
+      properties:
+        id: {type: integer, format: int64}
+        run_id: {type: string}
+        form_name: {type: string}
+        status: { $ref: '#/components/schemas/SyncStatus' }
+        total_records: {type: integer, format: int64}
+        inserted: {type: integer, format: int64}
+        updated: {type: integer, format: int64}
+        deleted: {type: integer, format: int64}
+        failed: {type: integer, format: int64}
+        skipped: {type: integer, format: int64}
+        start_time: {type: string, format: date-time, nullable: true}
+        end_time: {type: string, format: date-time, nullable: true}
+        duration_seconds: {type: number, format: double}
+        error_message: {type: string}
+        created_at: {type: string, format: date-time}
+        updated_at: {type: string, format: date-time}
+    HistoryErrorDetails:
+      type: object
+      properties:
+        id: {type: integer, format: int64}
+        run_id: {type: string}
+        form_name: {type: string}
+        level: {type: string}
+        message: {type: string}
+        detail: {type: string}
+        created_at: {type: string, format: date-time}
+    HistoryErrorResponse:
+      type: object
+      required: [ok, error]
+      properties:
+        ok: {type: boolean, const: false}
+        error: {type: string}
+    ErrorResponse:
+      type: object
+      required: [ok, data, error, code]
+      properties:
+        ok: {type: boolean, const: false}
+        data: {nullable: true}
+        error: {type: string}
+        code: { $ref: '#/components/schemas/SyncErrorCode' }
+    SyncErrorCode:
+      type: string
+      enum:
+        - SYNC_ALREADY_RUNNING
+        - SYNC_RUN_ID_REQUIRED
+        - SYNC_NOT_FOUND
+        - SYNC_NOT_ACTIVE
+        - SYNC_INVALID_REQUEST
+        - SYNC_DATABASE_UNAVAILABLE
+        - SYNC_START_FAILED
+        - SYNC_LOGS_FAILED

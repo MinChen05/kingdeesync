@@ -1,0 +1,269 @@
+@font-face {
+  font-family: "AlibabaSans";
+  font-style: normal;
+  font-weight: 300;
+  font-display: swap;
+  src: url("//mdn.alipayobjects.com/huamei_iwk9zp/afts/file/A*1GSgSYDD_aIAAAAAQsAAAAgAegCCAQ/AlibabaSans-Light.woff2")
+    format("woff2");
+}
+@font-face {
+  font-family: "AlibabaSans";
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url("//mdn.alipayobjects.com/huamei_iwk9zp/afts/file/A*2zEUQqnPNesAAAAAQtAAAAgAegCCAQ/AlibabaSans-Regular.woff2")
+    format("woff2");
+}
+@font-face {
+  font-family: "AlibabaSans";
+  font-style: normal;
+  font-weight: 500;
+  font-display: swap;
+  src: url("//mdn.alipayobjects.com/huamei_iwk9zp/afts/file/A*E_cxRbMlZqUAAAAAQuAAAAgAegCCAQ/AlibabaSans-Medium.woff2")
+    format("woff2");
+}
+@font-face {
+  font-family: "AlibabaSans";
+  font-style: normal;
+  font-weight: 600;
+  font-display: swap;
+  src: url("//mdn.alipayobjects.com/huamei_iwk9zp/afts/file/A*E_cxRbMlZqUAAAAAQuAAAAgAegCCAQ/AlibabaSans-Bold.woff2")
+    format("woff2");
+}
+@font-face {
+  font-family: "AlibabaSans";
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: url("//mdn.alipayobjects.com/huamei_iwk9zp/afts/file/A*E_cxRbMlZqUAAAAAQuAAAAgAegCCAQ/AlibabaSans-Heavy.woff2")
+    format("woff2");
+}
+
+html,
+body,
+#root {
+  height: 100%;
+  margin: 0;
+  padding: 0;
+  font-family:
+    AlibabaSans, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, 'Noto Sans',
+    sans-serif, 'Apple Color Emoji', 'Segoe UI Emoji', 'Segoe UI Symbol', 'Noto Color Emoji';
+}
+
+/* 全局深色背景：近黑蓝径向渐变 + 细网格纹理，营造运维监控质感 */
+body {
+  background-color: #070b14;
+  background-image:
+    radial-gradient(1200px 600px at 15% -10%, rgba(56, 189, 248, 0.08), transparent 60%),
+    radial-gradient(1000px 500px at 90% 0%, rgba(99, 102, 241, 0.07), transparent 55%),
+    linear-gradient(rgba(148, 163, 184, 0.045) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(148, 163, 184, 0.045) 1px, transparent 1px);
+  background-size:
+    auto,
+    auto,
+    36px 36px,
+    36px 36px;
+  background-attachment: fixed;
+}
+
+.colorWeak {
+  filter: invert(80%);
+}
+
+.ant-layout {
+  min-height: 100vh;
+}
+.ant-pro-sider.ant-layout-sider.ant-pro-sider-fixed {
+  left: unset;
+}
+
+.ant-pro-sider-collapsed .ant-pro-sider-link span:not([role='img']) {
+  display: none;
+}
+
+canvas {
+  display: block;
+}
+
+ul,
+ol {
+  list-style: none;
+}
+
+@media (max-width: 768px) {
+  .ant-table {
+    width: 100%;
+    overflow-x: auto;
+    &-thead > tr,
+    &-tbody > tr {
+      > th,
+      > td {
+        white-space: pre;
+        > span {
+          display: block;
+        }
+      }
+    }
+  }
+}
+
+/* ========== 深色科技感：视觉层次增强 ========== */
+
+/* 页面内容区：透明背景，透出全局深色渐变 */
+.ant-pro-layout .ant-layout-content {
+  background-color: transparent !important;
+}
+
+/* 卡片：玻璃拟态 —— 半透明 + 细描边 + 内发光，hover 浮起 */
+.ant-pro-card {
+  background: rgba(148, 163, 184, 0.05) !important;
+  border: 1px solid rgba(148, 163, 184, 0.12) !important;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.04),
+    0 4px 16px rgba(2, 6, 23, 0.35) !important;
+  border-radius: 12px !important;
+  backdrop-filter: blur(8px);
+  transition:
+    border-color 0.2s ease,
+    box-shadow 0.2s ease,
+    transform 0.2s ease;
+}
+.ant-pro-card:hover {
+  border-color: rgba(56, 189, 248, 0.28) !important;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.05),
+    0 8px 24px rgba(2, 6, 23, 0.45) !important;
+  transform: translateY(-1px);
+}
+
+/* 卡片标题：加粗 + 浅色 */
+.ant-pro-card .ant-pro-card-header {
+  border-bottom: 1px solid rgba(148, 163, 184, 0.12);
+  padding-bottom: 12px;
+  margin-bottom: 4px;
+}
+.ant-pro-card .ant-pro-card-title {
+  font-weight: 600 !important;
+  color: #e2e8f0 !important;
+}
+
+/* 页面标题区域：大标题更突出 */
+.ant-typography h3.ant-typography {
+  font-size: 20px !important;
+  font-weight: 700 !important;
+  color: #f1f5f9 !important;
+  letter-spacing: -0.01em;
+}
+
+/* ProTable 卡片沿用玻璃拟态 */
+.ant-pro-table .ant-pro-card {
+  background: rgba(148, 163, 184, 0.05) !important;
+  border: 1px solid rgba(148, 163, 184, 0.12) !important;
+  border-radius: 12px !important;
+}
+
+/* StatisticCard 数字：等宽加粗 + 浅色高亮 */
+.ant-pro-statistic-card .ant-statistic-content-value {
+  font-size: 30px !important;
+  font-weight: 700 !important;
+  color: #f8fafc !important;
+  font-variant-numeric: tabular-nums;
+}
+.ant-pro-statistic-card .ant-statistic-title {
+  font-size: 13px !important;
+  color: #94a3b8 !important;
+}
+
+/* Header：深色毛玻璃 + 底部细描边 */
+.ant-pro-layout .ant-pro-layout-header {
+  backdrop-filter: blur(12px);
+  box-shadow: 0 1px 0 rgba(148, 163, 184, 0.1) !important;
+}
+
+/* 侧边栏选中项增强 */
+.ant-pro-sider .ant-menu-item-selected {
+  font-weight: 600 !important;
+}
+
+/* 深色滚动条 */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+::-webkit-scrollbar-thumb {
+  background: rgba(148, 163, 184, 0.25);
+  border-radius: 8px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(148, 163, 184, 0.4);
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+/* Overview 列表行 hover（深色科技感） */
+.quick-link:hover {
+  background: rgba(56, 189, 248, 0.1);
+  color: #7dd3fc !important;
+}
+.recent-run-row {
+  background: rgba(148, 163, 184, 0.06);
+  transition: background 0.2s ease;
+}
+.recent-run-row:hover {
+  background: rgba(56, 189, 248, 0.12);
+}
+
+/* ===== 概览页（重构版） ===== */
+
+/* Hero 脉冲状态指示灯 */
+.status-pulse {
+  display: inline-block;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  animation: pulse-glow 2s ease-in-out infinite;
+}
+@keyframes pulse-glow {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 currentColor, 0 0 10px currentColor;
+    opacity: 1;
+  }
+  50% {
+    box-shadow: 0 0 0 7px transparent, 0 0 18px currentColor;
+    opacity: 0.8;
+  }
+}
+
+/* 通用玻璃拟态小卡片（KPI 指标卡等） */
+.glass-card {
+  background: rgba(148, 163, 184, 0.05);
+  border: 1px solid rgba(148, 163, 184, 0.12);
+  border-radius: 12px;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04), 0 4px 16px rgba(2, 6, 23, 0.35);
+  backdrop-filter: blur(8px);
+  transition: border-color 0.2s ease, box-shadow 0.2s ease, transform 0.2s ease;
+}
+.glass-card:hover {
+  border-color: rgba(56, 189, 248, 0.28);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05), 0 8px 24px rgba(2, 6, 23, 0.45);
+  transform: translateY(-2px);
+}
+
+/* 通用列表行（健康项、异常项等） */
+.list-row {
+  background: rgba(148, 163, 184, 0.06);
+  border: 1px solid rgba(148, 163, 184, 0.08);
+  border-radius: 8px;
+  padding: 10px 12px;
+}
+
+/* 概览面板标题 */
+.overview-panel-title {
+  font-weight: 600;
+  color: #e2e8f0;
+  font-size: 15px;
+  letter-spacing: 0.2px;
+}

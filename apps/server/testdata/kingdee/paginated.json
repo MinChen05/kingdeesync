@@ -1,0 +1,1 @@
+[{"Result":{"Rows":[{"FID":"1001","FNUMBER":"M-001","FNAME":"脱敏物料-1","FDESCRIPTION":null},{"FID":"1002","FNUMBER":"M-002","FNAME":"脱敏物料-2"}],"PageIndex":1,"PageSize":2,"TotalCount":4}},{"Result":{"Rows":[{"FID":"1003","FNUMBER":"M-003","FNAME":"脱敏物料-3"},{"FID":"1004","FNUMBER":"M-004","FNAME":"脱敏物料-4"}],"PageIndex":2,"PageSize":2,"TotalCount":4}}]

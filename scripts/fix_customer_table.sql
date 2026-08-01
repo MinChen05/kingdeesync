@@ -1,0 +1,36 @@
+-- 修复 customer 表：将 FCUSTID 改为允许 NULL
+-- 原因：金蝶 API 不返回 FCUSTID，但原表有 NOT NULL 约束导致同步失败
+-- 执行前请备份数据库！
+
+USE Kingdee;
+GO
+
+-- 1. 检查 FCUSTID 是否为主键
+SELECT 
+    tc.CONSTRAINT_NAME, 
+    kcu.COLUMN_NAME
+FROM INFORMATION_SCHEMA.TABLE_CONSTRAINTS tc
+JOIN INFORMATION_SCHEMA.KEY_COLUMN_USAGE kcu 
+    ON tc.CONSTRAINT_NAME = kcu.CONSTRAINT_NAME
+WHERE tc.TABLE_NAME = 'customer' 
+    AND tc.CONSTRAINT_TYPE = 'PRIMARY KEY';
+GO
+
+-- 2. 如果 FCUSTID 是主键，需要先删除主键约束，再修改列，然后重建主键为 FNumber
+-- 注意：请根据第 1 步的结果选择执行
+
+-- 方案 A：如果 FCUSTID 是主键
+-- ALTER TABLE customer DROP CONSTRAINT PK_customer;  -- 替换为实际的主键约束名
+-- ALTER TABLE customer ALTER COLUMN FCUSTID NVARCHAR(255) NULL;
+-- ALTER TABLE customer ADD CONSTRAINT PK_customer_FNumber PRIMARY KEY (FNumber);
+
+-- 方案 B：如果 FCUSTID 只是 NOT NULL 但不是主键（更可能的情况）
+ALTER TABLE customer ALTER COLUMN FCUSTID NVARCHAR(255) NULL;
+GO
+
+-- 3. 验证修改
+SELECT COLUMN_NAME, IS_NULLABLE, DATA_TYPE
+FROM INFORMATION_SCHEMA.COLUMNS
+WHERE TABLE_NAME = 'customer'
+ORDER BY ORDINAL_POSITION;
+GO

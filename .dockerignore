@@ -1,0 +1,15 @@
+.git
+.gitignore
+node_modules
+dist
+logs
+*.db
+*.log
+.vscode
+.idea
+docs
+apps/web/node_modules
+apps/web/dist
+frontend/node_modules
+go/bin
+go/pkg

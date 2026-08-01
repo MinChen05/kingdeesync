@@ -72,7 +72,7 @@ func ensureDefaultJobs(engine *syncengine.SyncEngine) error {
 		allForms = append(allForms, name)
 	}
 
-	// Default incremental job: every 20 minutes
+	// Default incremental job: every 2 hours
 	var incJob gormdb.ScheduleJob
 	result := db.Where("name = ?", "default_incremental").First(&incJob)
 	if result.Error != nil {
@@ -81,7 +81,7 @@ func ensureDefaultJobs(engine *syncengine.SyncEngine) error {
 
 		incJob = gormdb.ScheduleJob{
 			Name:     "default_incremental",
-			CronExpr: "0 */20 * * * *",
+			CronExpr: "0 0 */2 * * 1-6",
 			SyncType: "incremental",
 			Forms:    string(formsJSON),
 			Enabled:  false, // Disabled by default, user enables via UI

@@ -1338,7 +1338,7 @@ func (e *SyncEngine) runSync(ctx context.Context, runID string, forms []string, 
 								stat.ErrorCount = 1
 								stat.Error = fmt.Sprintf("sync run identity validation failed before cleanup: %v", currentRecoveryErr)
 							} else if syncType == "full" && !currentRecovery && !e.isCleanupDisabled() && len(result.Rows) > 0 {
-								deleted, delErr := e.deleteOrphanedWithSnapshot(ctx, runID, formName, stat.TableName, result.Rows, fieldKeyList, inserted)
+								deleted, delErr := e.deleteOrphanedWithSnapshot(ctx, runID, formName, stat.TableName, result.Rows, fieldKeyList, formQuery.FieldMap, inserted)
 								if delErr != nil {
 									log.Printf("Warning: failed to delete orphaned rows for %s: %v", formName, delErr)
 									e.logMsg(formName, "WARN", "孤儿删除失败: "+delErr.Error())
@@ -1807,6 +1807,7 @@ func (e *SyncEngine) deleteOrphanedWithSnapshot(
 	runID, formName, tableName string,
 	rows []map[string]interface{},
 	fieldKeys []string,
+	fieldMap map[string]string,
 	inserted int,
 ) (int, error) {
 	if e.writer == nil {
@@ -1825,7 +1826,7 @@ func (e *SyncEngine) deleteOrphanedWithSnapshot(
 	}
 
 	// Validate source data has valid PKs
-	if err := ValidateSnapshotData(rows, pkCols, formName); err != nil {
+	if err := ValidateSnapshotData(rows, pkCols, formName, fieldMap); err != nil {
 		return 0, fmt.Errorf("snapshot data validation failed: %w", err)
 	}
 

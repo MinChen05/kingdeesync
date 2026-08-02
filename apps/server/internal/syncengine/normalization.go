@@ -110,19 +110,33 @@ func ComputePkCount(rows []map[string]interface{}, pkCols []string) int {
 }
 
 // ValidateSnapshotData checks the source data for completeness before writing.
-func ValidateSnapshotData(rows []map[string]interface{}, pkCols []string, formName string) error {
+// fieldMap maps source field names (e.g. "FEntity_FENTRYID") to DB column names (e.g. "FENTRYID").
+// （原因：金蝶返回的字段名可能与 Doris 列名不一致，需通过映射查找主键值）
+func ValidateSnapshotData(rows []map[string]interface{}, pkCols []string, formName string, fieldMap map[string]string) error {
 	if len(rows) == 0 {
 		return fmt.Errorf("form %s: no source rows for snapshot", formName)
 	}
 	if len(pkCols) == 0 {
 		return fmt.Errorf("form %s: no primary key columns configured", formName)
 	}
+	// Build reverse map: DB column -> source field name
+	dbToSource := make(map[string]string)
+	for src, dbCol := range fieldMap {
+		dbToSource[strings.ToUpper(dbCol)] = src
+	}
 	for i, row := range rows {
 		for _, col := range pkCols {
+			// Try DB column name directly
 			v := row[col]
 			if v == nil {
 				if colUpper := strings.ToUpper(col); row[colUpper] != nil {
 					v = row[colUpper]
+				}
+			}
+			// Try source field name from mapping
+			if v == nil {
+				if srcField, ok := dbToSource[strings.ToUpper(col)]; ok {
+					v = row[srcField]
 				}
 			}
 			if v == nil {

@@ -122,7 +122,7 @@ func TestComputePkCount(t *testing.T) {
 }
 
 func TestValidateSnapshotDataRejectsEmpty(t *testing.T) {
-	err := ValidateSnapshotData(nil, []string{"FID"}, "test-form")
+	err := ValidateSnapshotData(nil, []string{"FID"}, "test-form", nil)
 	if err == nil {
 		t.Fatal("expected error for empty rows")
 	}
@@ -130,7 +130,7 @@ func TestValidateSnapshotDataRejectsEmpty(t *testing.T) {
 
 func TestValidateSnapshotDataRejectsMissingPK(t *testing.T) {
 	rows := []map[string]interface{}{{"FID": "1"}}
-	err := ValidateSnapshotData(rows, []string{}, "test-form")
+	err := ValidateSnapshotData(rows, []string{}, "test-form", nil)
 	if err == nil {
 		t.Fatal("expected error for missing PK columns")
 	}
@@ -138,7 +138,7 @@ func TestValidateSnapshotDataRejectsMissingPK(t *testing.T) {
 
 func TestValidateSnapshotDataRejectsNilPK(t *testing.T) {
 	rows := []map[string]interface{}{{"FID": nil}}
-	err := ValidateSnapshotData(rows, []string{"FID"}, "test-form")
+	err := ValidateSnapshotData(rows, []string{"FID"}, "test-form", nil)
 	if err == nil {
 		t.Fatal("expected error for nil PK values")
 	}
@@ -149,7 +149,20 @@ func TestValidateSnapshotDataPasses(t *testing.T) {
 		{"FID": "1", "FENTRYID": "A"},
 		{"FID": "2", "FENTRYID": "B"},
 	}
-	err := ValidateSnapshotData(rows, []string{"FID", "FENTRYID"}, "test-form")
+	err := ValidateSnapshotData(rows, []string{"FID", "FENTRYID"}, "test-form", nil)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+func TestValidateSnapshotDataWithFieldMap(t *testing.T) {
+	// 金蝶返回的字段名是 "FEntity_FENTRYID"，但 Doris 列名是 "FENTRYID"
+	rows := []map[string]interface{}{
+		{"FID": "1", "FEntity_FENTRYID": "A"},
+		{"FID": "2", "FEntity_FENTRYID": "B"},
+	}
+	fieldMap := map[string]string{"FEntity_FENTRYID": "FENTRYID"}
+	err := ValidateSnapshotData(rows, []string{"FID", "FENTRYID"}, "test-form", fieldMap)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}

@@ -214,7 +214,7 @@ func GetTopForms7d(limit int) []TopForm {
 
 	var rows []Row
 	gdb.Table("go_sync_errors").
-		Where("created_at >= ?", weekAgo).
+		Where("created_at >= ?", weekAgo.Format("2006-01-02 15:04:05")).
 		Where("level IN ?", []string{"ERROR", "WARNING"}).
 		Select("form_name, COUNT(*) as failure_count, MAX(message) as last_error").
 		Group("form_name").
@@ -398,10 +398,14 @@ func GetRiskItems(limit int) []RiskItem {
 		LastTime     string `gorm:"column:last_time"`
 	}
 
+	// Use strftime to force SQLite to return a plain string for created_at.
+	// （原因：SQLite 中 created_at 存储格式含纳秒和时区，GORM Scan 到 time.Time 会报
+	// "unsupported Scan, storing driver.Value type string into type *time.Time"）
 	var failRows []FailRow
 	gdb.Table("go_sync_errors").
-		Where("created_at >= ?", weekAgo).
-		Select("form_name, COUNT(*) as failure_count, MAX(message) as last_error, MAX(created_at) as last_time").
+		Where("created_at >= ?", weekAgo.Format("2006-01-02 15:04:05")).
+		Select("form_name, COUNT(*) as failure_count, MAX(message) as last_error, " +
+			"strftime('%Y-%m-%d %H:%M:%S', MAX(created_at)) as last_time").
 		Group("form_name").
 		Order("failure_count DESC").
 		Limit(limit).

@@ -21,7 +21,7 @@ var (
 	once                sync.Once
 	mu                  sync.Mutex
 	paused              bool
-	schedulerRunTimeout = 30 * time.Minute
+		schedulerRunTimeout = 2 * time.Hour
 	scheduledSyncRunner = func(ctx context.Context, engine *syncengine.SyncEngine, runID string, forms []string, syncType string) (*syncengine.SyncResult, error) {
 		return engine.SyncDataWithRunID(ctx, runID, forms, syncType, false)
 	}

@@ -14,6 +14,7 @@ var controlCharRe = regexp.MustCompile("[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]")
 // normalizeValue converts float64 whole numbers to int64 and applies the
 // project's text convention: leading/trailing whitespace is removed and an
 // empty result is stored as NULL.
+// （原因：金蝶可能返回超长字符串，需截断到 Doris varchar(500) 限制以内）
 func normalizeValue(v interface{}) interface{} {
 	if v == nil {
 		return nil
@@ -27,12 +28,28 @@ func normalizeValue(v interface{}) interface{} {
 		s = strings.TrimSpace(s)
 		// Strip control characters that cause Doris JSON parse errors.
 		s = controlCharRe.ReplaceAllString(s, "")
+		// Truncate to 500 bytes to match Doris varchar(500) limit.
+		// （原因：金蝶可能返回超过 500 字节的字符串，不截断会导致整个 Stream Load 失败）
+		if len(s) > 500 {
+			s = truncateUTF8(s, 500)
+		}
 		if s == "" {
 			return nil
 		}
 		return s
 	}
 	return v
+}
+
+// truncateUTF8 truncates a string to at most maxBytes without breaking UTF-8 characters.
+func truncateUTF8(s string, maxBytes int) string {
+	if len(s) <= maxBytes {
+		return s
+	}
+	for len(s) > maxBytes {
+		s = s[:len(s)-1]
+	}
+	return s
 }
 
 // NormalizeRow applies consistent normalization to a Kingdee row before

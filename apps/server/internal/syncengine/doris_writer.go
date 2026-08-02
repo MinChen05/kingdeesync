@@ -237,22 +237,28 @@ func (w *DorisWriter) deleteOrphanedBySQL(ctx context.Context, tableName string,
 	}
 
 	// Safety limit: refuse if PK count is too large.
-	const maxTuples = 2000
+	// （原因：防止 SQL 过长导致 Doris 解析失败，2000 对即时库存/物料清单等大数据量表不够）
+	const maxTuples = 500000
 	if len(tuples) > maxTuples {
 		return 0, fmt.Errorf("PK count %d exceeds safe limit %d; orphan deletion refused", len(tuples), maxTuples)
 	}
 
-	// Build parameterized NOT IN using a NULL-byte separator to avoid
+	// Build NOT IN list using a NULL-byte separator to avoid
 	// composite PK collision: ("A|B","C") vs ("A","B|C") would collide
 	// with "|" but never with "\x00" since SQL strings can't contain NUL.
-	//   WHERE CONCAT_WS('\x00', pk1, pk2, ...) NOT IN (?, ?, ...)
-	placeholders := make([]interface{}, 0, len(tuples))
+	// （原因：Doris MySQL 协议不支持 prepare statement，必须使用非参数化 SQL）
+	inValues := make([]string, 0, len(tuples))
 	for _, vals := range tuples {
 		var parts []string
 		for _, v := range vals {
-			parts = append(parts, fmt.Sprintf("%v", v))
+			switch val := v.(type) {
+			case string:
+				parts = append(parts, fmt.Sprintf("'%s'", val))
+			default:
+				parts = append(parts, fmt.Sprintf("%v", val))
+			}
 		}
-		placeholders = append(placeholders, strings.Join(parts, "\x00"))
+		inValues = append(inValues, fmt.Sprintf("'%s'", strings.Join(parts, "\x00")))
 	}
 
 	colExprs := make([]string, len(pkCols))
@@ -262,7 +268,7 @@ func (w *DorisWriter) deleteOrphanedBySQL(ctx context.Context, tableName string,
 	pkConcat := strings.Join(colExprs, ", ")
 
 	deleteSQL := fmt.Sprintf("DELETE FROM `%s` WHERE CONCAT_WS(CHAR(0), %s) NOT IN (%s)",
-		tableName, pkConcat, strings.Repeat("?,", len(placeholders)-1)+"?")
+		tableName, pkConcat, strings.Join(inValues, ", "))
 
 	// Execute via MySQL protocol on Doris (port 9030, not 8030).
 	mysqlURL := fmt.Sprintf("%s:%s@tcp(%s:9030)/kingdee_sync", user, password, host)
@@ -272,7 +278,7 @@ func (w *DorisWriter) deleteOrphanedBySQL(ctx context.Context, tableName string,
 	}
 	defer db.Close()
 
-	result, sqlErr := db.ExecContext(ctx, deleteSQL, placeholders...)
+	result, sqlErr := db.ExecContext(ctx, deleteSQL)
 	if sqlErr != nil {
 		return 0, fmt.Errorf("execute DELETE for %s: %w", tableName, sqlErr)
 	}
@@ -336,6 +342,9 @@ func shouldTruncateDateOnly(tableName, columnName string) bool {
 // truncateDateTimeFraction keeps Go Stream Load compatible with the legacy
 // Python SQL Server writer, which stores Kingdee datetimes at whole-second
 // precision. Doris rounds fractional seconds when coercing JSON strings.
+// If the value cannot be parsed as a valid datetime, returns nil so Doris
+// treats it as NULL instead of rejecting the entire row.
+// （原因：金蝶 API 可能返回 "0000-00-00 00:00:00" 或空字符串，直接传给 Doris 会导致 DATA_QUALITY_ERROR）
 func truncateDateTimeFraction(value interface{}) interface{} {
 	text, ok := value.(string)
 	if !ok || len(text) < len("2006-01-02 15:04:05") {
@@ -346,7 +355,7 @@ func truncateDateTimeFraction(value interface{}) interface{} {
 	}
 	secondPrecision := text[:len("2006-01-02 15:04:05")]
 	if _, err := time.Parse("2006-01-02 15:04:05", secondPrecision); err != nil {
-		return value
+		return nil // invalid datetime → NULL, prevents Doris DATA_QUALITY_ERROR
 	}
 	return secondPrecision
 }

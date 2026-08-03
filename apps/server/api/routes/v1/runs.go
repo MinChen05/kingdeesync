@@ -36,7 +36,9 @@ type activeSyncTask struct {
 }
 
 func configuredSyncExecutionTimeout() time.Duration {
-	const defaultTimeout = 30 * time.Minute
+	// 全量同步数据量可达 400 万+ 条，30 分钟不够；与调度任务保持一致。
+	// （原因：全量同步 403 万条实测需 58 分钟+，30 分钟必然超时中断）
+	const defaultTimeout = 2 * time.Hour
 	raw := os.Getenv("SYNC_EXECUTION_TIMEOUT")
 	if raw == "" {
 		return defaultTimeout

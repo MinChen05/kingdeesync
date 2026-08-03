@@ -21,7 +21,7 @@ const AboutPanel: React.FC<AboutPanelProps> = ({ version }) => {
     { name: 'Gin', color: '#38bdf8' },
     { name: 'React', color: '#61dafb' },
     { name: 'Ant Design Pro', color: '#1677ff' },
-    { name: 'Doris', color: '#f59e0b' },
+    { name: 'SQL Server', color: '#f59e0b' },
     { name: 'SQLite', color: '#003b57' },
   ];
 

@@ -27,7 +27,7 @@ const STATE_META: Record<
   syncing: {
     color: 'var(--tk-primary)',
     label: '同步进行中',
-    desc: '正在从金蝶云星空拉取数据并写入 Doris',
+    desc: '正在从金蝶云星空拉取数据并写入 SQL Server',
     icon: <SyncOutlined spin />,
   },
   healthy: {

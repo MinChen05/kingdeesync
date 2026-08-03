@@ -40,8 +40,11 @@ func findConfigFile() (string, error) {
 func Init() error {
 	// Determine SQLite file path: always place next to config.local.ini (project root)
 	// （原因：go run 的 exe 在临时目录，不能把 DB 放在那里，否则每次重启会丢失数据）
+	// GORM_DB_PATH overrides the location (Docker 部署时指向持久卷，容器重建不丢状态)
 	sqlitePath := "go_state.db"
-	if configPath, err := findConfigFile(); err == nil {
+	if envPath := os.Getenv("GORM_DB_PATH"); envPath != "" {
+		sqlitePath = envPath
+	} else if configPath, err := findConfigFile(); err == nil {
 		dbDir := filepath.Dir(configPath)
 		sqlitePath = filepath.Join(dbDir, "go_state.db")
 	}

@@ -44,7 +44,7 @@ func main() {
 
 	// Init database (sqlx for business tables)
 	if err := db.Init(); err != nil {
-		log.Fatalf("Doris database init failed: %v", err)
+		log.Fatalf("Database init failed: %v", err)
 	} else {
 		defer db.Close()
 	}
@@ -127,34 +127,16 @@ func main() {
 		c.JSON(200, gin.H{"status": "ok"})
 	})
 
-	// Readiness: config, SQLite, Doris connection, and Stream Load HTTP endpoint
+	// Readiness: config, SQLite, SQL Server connection
 	r.GET("/ready", func(c *gin.Context) {
 		notReady := []string{}
 		if gormdb.DB == nil {
 			notReady = append(notReady, "SQLite not initialized")
 		}
 		if db.DB == nil {
-			notReady = append(notReady, "Doris connection not initialized")
+			notReady = append(notReady, "Database connection not initialized")
 		} else if db.DB.Ping() != nil {
-			notReady = append(notReady, "Doris ping failed")
-		}
-		// Verify Doris Stream Load HTTP endpoint is reachable.
-		if cfg != nil {
-			effDB := cfg.GetEffectiveDatabase()
-			if effDB.Type == "mysql" && effDB.Host != "" {
-				scheme := "http"
-				if env := os.Getenv("DORIS_USE_HTTPS"); strings.ToLower(env) == "1" || strings.ToLower(env) == "true" {
-					scheme = "https"
-				}
-				slURL := fmt.Sprintf("%s://%s:8030/api/", scheme, effDB.Host)
-				probeClient := &http.Client{Timeout: 5 * time.Second}
-				resp, probeErr := probeClient.Head(slURL)
-				if probeErr != nil {
-					notReady = append(notReady, fmt.Sprintf("Doris Stream Load endpoint unreachable: %v", probeErr))
-				} else {
-					resp.Body.Close()
-				}
-			}
+			notReady = append(notReady, "Database ping failed")
 		}
 		if len(notReady) > 0 {
 			c.JSON(503, gin.H{"status": "not_ready", "reasons": notReady})

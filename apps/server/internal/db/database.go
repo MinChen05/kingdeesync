@@ -4,9 +4,10 @@ import (
 	"database/sql"
 	"fmt"
 	"log"
+	"net/url"
 	"strings"
 
-	_ "github.com/go-sql-driver/mysql"
+	_ "github.com/microsoft/go-mssqldb"
 	"github.com/jmoiron/sqlx"
 	"github.com/kingdee-sync/go/internal/config"
 )
@@ -35,7 +36,7 @@ var primaryKeyMap = map[string]string{
 	"sal_returnstock":       "FENTRYID",
 	"saleorder":             "FID,FENTRYID",
 	"stk_instock":           "FID,FENTRYID",
-	"stk_inventory":         "FID",
+	"stk_inventory":         "FMATERIALID,FSTOCKID",
 	"sub_subreqorder":       "FID,FENTRYID",
 }
 
@@ -50,17 +51,13 @@ func Init() error {
 	log.Printf("[DB] Effective config: type=%s, host=%s, port=%d, user=%s, db=%s, password_len=%d",
 		dbCfg.Type, dbCfg.Host, dbCfg.Port, dbCfg.User, dbCfg.DBName, len(dbCfg.Password))
 
-	// Doris uses MySQL protocol, so we connect with the mysql driver.
-	// （原因：已移除 SQL Server 支持，Go 后端仅对接 Doris/MySQL）
-	driverName := "mysql"
-	dsn := fmt.Sprintf(
-		"%s:%s@tcp(%s:%d)/%s?parseTime=true&loc=Local&charset=utf8mb4",
-		dbCfg.User,
-		dbCfg.Password,
-		dbCfg.Host,
-		dbCfg.Port,
-		dbCfg.DBName,
-	)
+	// SQL Server uses go-mssqldb driver
+	// （原因：同步目标为 SQL Server，使用 MERGE 写入）
+	driverName := "sqlserver"
+	user := url.QueryEscape(dbCfg.User)
+	password := url.QueryEscape(dbCfg.Password)
+	dsn := fmt.Sprintf("sqlserver://%s:%s@%s:%d?database=%s&encrypt=disable&TrustServerCertificate=true",
+		user, password, dbCfg.Host, dbCfg.Port, dbCfg.DBName)
 
 	sqlDB, err := OpenDB(driverName, dsn)
 	if err != nil {
@@ -119,7 +116,7 @@ func GetTableColumns(tableName string) (map[string]string, error) {
 	rows, err := DB.Queryx(`
 		SELECT COLUMN_NAME
 		FROM INFORMATION_SCHEMA.COLUMNS
-		WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = ?
+		WHERE TABLE_SCHEMA = 'dbo' AND TABLE_NAME = ?
 		ORDER BY ORDINAL_POSITION
 	`, tableName)
 	if err != nil {
@@ -153,7 +150,7 @@ func getPrimaryKeyFromDB(tableName string) (string, error) {
 				ON tk.TABLE_SCHEMA = c.TABLE_SCHEMA
 				AND tk.TABLE_NAME = c.TABLE_NAME
 				AND tk.CONSTRAINT_NAME = c.CONSTRAINT_NAME
-			WHERE tk.TABLE_SCHEMA = DATABASE()
+			WHERE tk.TABLE_SCHEMA = 'dbo'
 				AND tk.TABLE_NAME = ?
 				AND tk.CONSTRAINT_TYPE = 'PRIMARY KEY'
 			ORDER BY c.ORDINAL_POSITION
@@ -179,20 +176,16 @@ func getPrimaryKeyFromDB(tableName string) (string, error) {
 }
 
 // GetLastSyncTime returns the maximum sync time from a table, used for incremental sync.
-// For Doris (mysql type), reads from _sync_time column.
-// Returns "YYYY-MM-DD HH:MM:SS" format for Kingdee API filter compatibility.
-// （原因：按数据库类型动态选择列名，Doris 用 _sync_time；格式需与金蝶 API 兼容）
+// For SQL Server, reads from SYNC_TIME column.
 func GetLastSyncTime(tableName string) (string, error) {
 	if DB == nil {
 		return "", fmt.Errorf("database not initialized")
 	}
 
-	// Doris uses SYNC_TIME column (as defined in DDL).
 	syncTimeCol := "SYNC_TIME"
 
-	// Use DATE_FORMAT to ensure consistent output format regardless of driver behavior.
 	var lastTime sql.NullString
-	query := fmt.Sprintf("SELECT DATE_FORMAT(MAX(%s), '%%Y-%%m-%%d %%H:%%i:%%s') FROM `%s`", syncTimeCol, tableName)
+	query := fmt.Sprintf("SELECT CONVERT(varchar(19), MAX(%s), 120) FROM dbo.%s", syncTimeCol, tableName)
 	err := DB.Get(&lastTime, query)
 	if err != nil {
 		return "", err

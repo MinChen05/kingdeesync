@@ -10,30 +10,32 @@ import (
 	"github.com/kingdee-sync/go/internal/config"
 )
 
-func TestDorisOrphanReconciliationDeletesOnlyTargetOnlyKey(t *testing.T) {
-	if os.Getenv("DORIS_INTEGRATION") != "1" {
-		t.Skip("set DORIS_INTEGRATION=1 to run against the isolated Doris test table")
+// TestSQLServerOrphanReconciliationDeletesOnlyTargetOnlyKey verifies the
+// orphan reconciliation flow against a real SQL Server instance.
+// Requires MSSQL_INTEGRATION=1 and a reachable SQL Server per config.local.ini.
+// （原因：P0-3 将孤儿删除从 Doris 改写为 SQL Server；集成测试默认跳过避免连生产库）
+func TestSQLServerOrphanReconciliationDeletesOnlyTargetOnlyKey(t *testing.T) {
+	if os.Getenv("MSSQL_INTEGRATION") != "1" {
+		t.Skip("set MSSQL_INTEGRATION=1 to run against a dedicated SQL Server test instance")
 	}
 	if _, err := config.Load("../../../config.local.ini"); err != nil {
 		t.Fatal(err)
 	}
-	writer := NewDorisWriter()
+	writer := NewSQLServerWriter()
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
 	defer cancel()
-	db, _, err := writer.openDorisSQL(ctx)
+	db, _, err := writer.openSQL(ctx)
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer db.Close()
 	table := fmt.Sprintf("orphan_it_%d", time.Now().UnixNano())
-	_, err = db.ExecContext(ctx, fmt.Sprintf(
-		"CREATE TABLE `%s` (`FID` BIGINT NOT NULL, `FDATE` DATETIME NOT NULL, `FVALUE` VARCHAR(20) NULL, `SYNC_TIME` DATETIME NULL) UNIQUE KEY(`FID`,`FDATE`) DISTRIBUTED BY HASH(`FID`) BUCKETS 1 PROPERTIES (\"enable_unique_key_merge_on_write\"=\"true\", \"replication_num\"=\"1\")",
+	if _, err := db.ExecContext(ctx, fmt.Sprintf(
+		"CREATE TABLE dbo.%s ([FID] BIGINT NOT NULL, [FDATE] DATETIME NOT NULL, [FVALUE] VARCHAR(50) NULL, [SYNC_TIME] DATETIME NULL)",
 		table,
-	))
-	if err != nil {
+	)); err != nil {
 		t.Fatal(err)
 	}
-	defer func() { _, _ = db.Exec("DROP TABLE IF EXISTS `" + table + "`") }()
+	defer func() { _, _ = db.Exec("IF OBJECT_ID(N'dbo." + table + "', 'U') IS NOT NULL DROP TABLE dbo." + table) }()
 
 	targetRows := make([]map[string]interface{}, 0, 101)
 	for id := 1; id <= 101; id++ {
@@ -56,10 +58,10 @@ func TestDorisOrphanReconciliationDeletesOnlyTargetOnlyKey(t *testing.T) {
 		t.Fatalf("reconcile result = %+v", result)
 	}
 	var count, deletedKey int
-	if err := db.Get(&count, "SELECT COUNT(*) FROM `"+table+"`"); err != nil {
+	if err := db.Get(&count, "SELECT COUNT(*) FROM dbo."+table); err != nil {
 		t.Fatal(err)
 	}
-	if err := db.Get(&deletedKey, "SELECT COUNT(*) FROM `"+table+"` WHERE FID = 101"); err != nil {
+	if err := db.Get(&deletedKey, "SELECT COUNT(*) FROM dbo."+table+" WHERE FID = 101"); err != nil {
 		t.Fatal(err)
 	}
 	if count != 100 || deletedKey != 0 {

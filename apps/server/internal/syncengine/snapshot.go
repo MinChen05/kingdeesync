@@ -105,7 +105,7 @@ func (m *SnapshotManager) Validate(rows []map[string]interface{}, pkCols []strin
 
 	// Check: write must have succeeded.
 	if meta.WrittenCount == 0 {
-		return m.abort("no rows written to Doris")
+		return m.abort("no rows written to database")
 	}
 
 	// Check: write count matches fetch count (allow minor tolerance for partial success).

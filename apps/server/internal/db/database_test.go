@@ -10,7 +10,7 @@ func TestGetPrimaryKeyMatchesMSSQLBusinessKeyContract(t *testing.T) {
 		"prd_instock": "FID,FENTRYID", "prd_mo": "FID", "prd_moentry": "FID,FENTRYID",
 		"prd_ppbom": "FID", "prd_ppbomentry": "FID,FENTRYID", "pur_purchaseorder": "FID,FENTRYID",
 		"sal_deliverynotice": "FID,FENTRYID", "sal_outstock": "FENTRYID", "sal_returnstock": "FENTRYID",
-		"saleorder": "FID,FENTRYID", "stk_instock": "FID,FENTRYID", "stk_inventory": "FID",
+		"saleorder": "FID,FENTRYID", "stk_instock": "FID,FENTRYID", "stk_inventory": "FMATERIALID,FSTOCKID",
 		"sub_subreqorder": "FID,FENTRYID",
 	}
 	for tableName, expected := range want {

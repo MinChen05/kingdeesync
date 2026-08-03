@@ -14,7 +14,7 @@ var controlCharRe = regexp.MustCompile("[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]")
 // normalizeValue converts float64 whole numbers to int64 and applies the
 // project's text convention: leading/trailing whitespace is removed and an
 // empty result is stored as NULL.
-// （原因：金蝶可能返回超长字符串，需截断到 Doris varchar(500) 限制以内）
+// （原因：金蝶可能返回超长字符串，需截断到 SQL Server varchar(500) 限制以内）
 func normalizeValue(v interface{}) interface{} {
 	if v == nil {
 		return nil
@@ -26,9 +26,9 @@ func normalizeValue(v interface{}) interface{} {
 	}
 	if s, ok := v.(string); ok {
 		s = strings.TrimSpace(s)
-		// Strip control characters that cause Doris JSON parse errors.
+		// Strip control characters that cause SQL Server JSON parse errors.
 		s = controlCharRe.ReplaceAllString(s, "")
-		// Truncate to 500 bytes to match Doris varchar(500) limit.
+		// Truncate to 500 bytes to match SQL Server varchar(500) limit.
 		// （原因：金蝶可能返回超过 500 字节的字符串，不截断会导致整个 Stream Load 失败）
 		if len(s) > 500 {
 			s = truncateUTF8(s, 500)
@@ -53,7 +53,7 @@ func truncateUTF8(s string, maxBytes int) string {
 }
 
 // NormalizeRow applies consistent normalization to a Kingdee row before
-// Doris Stream Load: uppercase column names, null/blank string handling,
+// SQL Server: uppercase column names, null/blank string handling,
 // float-to-int for whole numbers, and local time for SYNC_TIME.
 func NormalizeRow(row map[string]interface{}, cols []string, fieldMap map[string]string, loc *time.Location) map[string]interface{} {
 	if loc == nil {
@@ -128,7 +128,7 @@ func ComputePkCount(rows []map[string]interface{}, pkCols []string) int {
 
 // ValidateSnapshotData checks the source data for completeness before writing.
 // fieldMap maps source field names (e.g. "FEntity_FENTRYID") to DB column names (e.g. "FENTRYID").
-// （原因：金蝶返回的字段名可能与 Doris 列名不一致，需通过映射查找主键值）
+// （原因：金蝶返回的字段名可能与 SQL Server 列名不一致，需通过映射查找主键值）
 func ValidateSnapshotData(rows []map[string]interface{}, pkCols []string, formName string, fieldMap map[string]string) error {
 	if len(rows) == 0 {
 		return fmt.Errorf("form %s: no source rows for snapshot", formName)

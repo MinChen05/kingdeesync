@@ -34,18 +34,18 @@ func validateSourceBusinessDates(rows []map[string]interface{}, businessKeys []s
 
 // ValidateStableBusinessDates blocks writes that would move an existing
 // business key to a different physical quarter partition.
-func (w *DorisWriter) ValidateStableBusinessDates(
+func (w *SQLServerWriter) ValidateStableBusinessDates(
 	ctx context.Context,
 	targetTable string,
 	rows []map[string]interface{},
 	businessKeys []string,
 	partitionColumn string,
 ) error {
-	if !dorisIdentifier.MatchString(targetTable) || !dorisIdentifier.MatchString(partitionColumn) || len(businessKeys) == 0 {
+	if !sqlIdentifier.MatchString(targetTable) || !sqlIdentifier.MatchString(partitionColumn) || len(businessKeys) == 0 {
 		return fmt.Errorf("invalid partition-date validation input")
 	}
 	for _, column := range businessKeys {
-		if !dorisIdentifier.MatchString(column) {
+		if !sqlIdentifier.MatchString(column) {
 			return fmt.Errorf("invalid business key column %q", column)
 		}
 	}
@@ -57,30 +57,27 @@ func (w *DorisWriter) ValidateStableBusinessDates(
 	if err != nil {
 		return err
 	}
-	db, databaseName, err := w.openDorisSQL(ctx)
+	db, databaseName, err := w.openSQL(ctx)
 	if err != nil {
 		return err
 	}
-	defer db.Close()
+	// db is the shared SQL Server connection; do NOT close it here.
 	stagingTable := "partition_dates_" + snapshotHash[:16]
 	if err := createSourceKeyStaging(ctx, db, databaseName, targetTable, stagingTable, storageKeys); err != nil {
 		return err
 	}
-	defer func() { _, _ = db.ExecContext(context.Background(), "DROP TABLE IF EXISTS `"+stagingTable+"`") }()
-	identityMap := make(map[string]string, len(storageKeys))
-	for _, column := range storageKeys {
-		identityMap[column] = column
-	}
-	written, err := w.Upsert(ctx, stagingTable, canonical, storageKeys, storageKeys, identityMap)
+	defer func() { _, _ = db.ExecContext(context.Background(), "IF OBJECT_ID(N'dbo."+stagingTable+"', 'U') IS NOT NULL DROP TABLE dbo."+stagingTable) }()
+	// Insert canonical keys directly (not via the writer's business-table MERGE path).
+	written, err := batchInsertSourceKeys(ctx, db, stagingTable, canonical, storageKeys)
 	if err != nil || written != len(canonical) {
 		return fmt.Errorf("stage partition dates: written=%d expected=%d: %w", written, len(canonical), err)
 	}
 	joins := make([]string, len(businessKeys))
 	for i, column := range businessKeys {
-		joins[i] = "t.`" + column + "` <=> s.`" + column + "`"
+		joins[i] = "t." + column + " = s." + column + ""
 	}
 	query := fmt.Sprintf(
-		"SELECT COUNT(*) FROM `%s` t JOIN `%s` s ON %s WHERE NOT (t.`%s` <=> s.`%s`)",
+		"SELECT COUNT(*) FROM %s t JOIN %s s ON %s WHERE NOT (t.%s = s.%s)",
 		targetTable, stagingTable, strings.Join(joins, " AND "), partitionColumn, partitionColumn,
 	)
 	var mismatches int64

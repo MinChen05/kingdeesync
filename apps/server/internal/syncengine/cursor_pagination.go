@@ -133,14 +133,17 @@ func compareCursorValues(left, right []interface{}) (int, error) {
 // ValidateCursorPage rejects missing, duplicate, or non-monotonic cursor rows.
 // Rows with empty or null cursor key values are skipped (e.g. header-only rows
 // without entry lines in Kingdee cutover forms) instead of failing hard.
+// If all rows in a page are skipped, returns an error to prevent infinite loops.
 func ValidateCursorPage(rows []map[string]interface{}, columns []string, previous []interface{}) ([]interface{}, error) {
 	last := previous
+	validCount := 0
 	for index, row := range rows {
 		current, err := cursorValues(row, columns)
 		if err != nil {
 			// Skip rows with empty cursor keys (e.g. orders without entry lines)
 			continue
 		}
+		validCount++
 		if len(last) > 0 {
 			comparison, err := compareCursorValues(current, last)
 			if err != nil {
@@ -151,6 +154,9 @@ func ValidateCursorPage(rows []map[string]interface{}, columns []string, previou
 			}
 		}
 		last = current
+	}
+	if validCount == 0 && len(rows) > 0 {
+		return nil, fmt.Errorf("all %d rows have empty cursor keys; cursor pagination cannot proceed", len(rows))
 	}
 	return last, nil
 }

@@ -5,11 +5,11 @@ import (
 )
 
 // RowWriter abstracts the database write path so the sync engine
-// can work with Doris (Stream Load) or other targets without knowing details.
-// （原因：解耦同步引擎与具体数据库，为 Doris-only 改造提供扩展点）
+// can work with SQL Server or other targets without knowing details.
+// （原因：解耦同步引擎与具体数据库，为 SQL Server 改造提供扩展点）
 type RowWriter interface {
 	// Upsert writes rows into the target table using the configured strategy
-	// (e.g., Doris Stream Load with UNIQUE KEY merge-on-write).
+	// (e.g., SQL Server MERGE).
 	// tableName: target table name (e.g., "bd_stock")
 	// rows: Kingdee API rows as map[fieldName]->value
 	// cols: DB column names that will be written (ordered)

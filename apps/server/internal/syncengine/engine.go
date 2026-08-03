@@ -171,7 +171,7 @@ func GetFormPriority(formName string) int {
 
 func NewSyncEngine() *SyncEngine {
 	cfg := config.Get()
-	dbType := "mysql" // default to Doris/MySQL
+	dbType := "sqlserver"
 	if cfg != nil {
 		effDB := cfg.GetEffectiveDatabase()
 		if effDB.Type != "" {
@@ -181,13 +181,13 @@ func NewSyncEngine() *SyncEngine {
 
 	var writer RowWriter
 	switch dbType {
-	case "mysql":
-		writer = NewDorisWriter()
-		log.Printf("[SYNC-ENGINE] Using DorisWriter (Stream Load) for database type=mysql")
+	case "sqlserver":
+		writer = NewSQLServerWriter()
+		log.Printf("[SYNC-ENGINE] Using SQLServerWriter")
 	default:
-		// Fallback to DorisWriter for now; SQL Server support will be removed in phase 2.
-		writer = NewDorisWriter()
-		log.Printf("[SYNC-ENGINE] Warning: unknown database type=%s, falling back to DorisWriter", dbType)
+		// Fallback to SQLServerWriter.
+		writer = NewSQLServerWriter()
+		log.Printf("[SYNC-ENGINE] Warning: unknown database type=%s, falling back to SQLServerWriter", dbType)
 	}
 
 	return &SyncEngine{
@@ -1087,7 +1087,7 @@ func (e *SyncEngine) runSync(ctx context.Context, runID string, forms []string, 
 				}
 
 				if e.fetchRows == nil && formName != "科目余额表" && formName != "即时库存" && len(cursorKeysForForm(formName)) > 0 {
-					e.syncCursorForm(ctx, fetchCtx, formName, stat.TableName, formQuery, fieldKeyList, effectiveFilter, syncType, dryRun, &stat)
+					e.syncCursorForm(ctx, fetchCtx, runID, formName, stat.TableName, formQuery, fieldKeyList, effectiveFilter, syncType, dryRun, &stat)
 					if stat.Status == StatusSuccess && GetFormPriority(formName) == 2 && !dryRun {
 						if err := gormdb.ClearCheckpoint(formName); err != nil {
 							log.Printf("[CHECKPOINT] Warning: failed to clear cursor checkpoint for %s: %v", formName, err)
@@ -1153,11 +1153,19 @@ func (e *SyncEngine) runSync(ctx context.Context, runID string, forms []string, 
 					e.logMsg(formName, "INFO", "使用 GetSysReportData API 按月同步...")
 					client := kind.NewKingdeeClient()
 					endYear, endPeriod := accountBalanceEndPeriod(time.Now())
+					startYear, startPeriod := 2025, 1
+					if syncType == "incremental" {
+						// 增量同步只拉最近 6 个月（结束月往前推），避免每次全量拉 19 个月。
+						// （原因：科目余额每月才变一次，此前增量也全量拉 98 万条耗时 14 分钟，
+						// 占增量同步总耗时 96%；6 个月窗口覆盖当月及近 5 个月的调账修正）
+						startYear, startPeriod = accountBalanceStartPeriod(time.Now(), 6)
+						e.logMsg(formName, "INFO", fmt.Sprintf("增量窗口: %d-%02d 至 %d-%02d", startYear, startPeriod, endYear, endPeriod))
+					}
 					abParams := kind.AccountBalanceParams{
 						AcctBookID:    "002",
 						Currency:      "1",
-						StartYear:     2025,
-						StartPeriod:   1,
+						StartYear:     startYear,
+						StartPeriod:   startPeriod,
 						EndYear:       endYear,
 						EndPeriod:     endPeriod,
 						BalanceLevel:  4,
@@ -1278,7 +1286,7 @@ func (e *SyncEngine) runSync(ctx context.Context, runID string, forms []string, 
 							stat.Status = StatusFailed
 							stat.ErrorCount = 1
 							stat.Error = "db.DB is nil, cannot truncate"
-						} else if _, err := db.DB.Exec("TRUNCATE TABLE `" + TableName + "`"); err != nil {
+						} else if _, err := db.DB.Exec("TRUNCATE TABLE dbo." + TableName + ""); err != nil {
 							log.Printf("[TRUNCATE] Error: failed to truncate %s: %v; aborting form", TableName, err)
 							e.logMsg(formName, "ERROR", "清空表失败: "+err.Error())
 							stat.Status = StatusFailed
@@ -1330,28 +1338,12 @@ func (e *SyncEngine) runSync(ctx context.Context, runID string, forms []string, 
 								}
 							}
 
-							// Full sync: delete rows that exist in DB but not in Kingdee.
-							// Uses SnapshotManager for validation and safe deletion.
-							currentRecovery, currentRecoveryErr := e.isRecoveryRun(runID)
-							if currentRecoveryErr != nil {
-								stat.Status = StatusFailed
-								stat.ErrorCount = 1
-								stat.Error = fmt.Sprintf("sync run identity validation failed before cleanup: %v", currentRecoveryErr)
-							} else if syncType == "full" && !currentRecovery && !e.isCleanupDisabled() && len(result.Rows) > 0 {
-								deleted, delErr := e.deleteOrphanedWithSnapshot(ctx, runID, formName, stat.TableName, result.Rows, fieldKeyList, formQuery.FieldMap, inserted)
-								if delErr != nil {
-									log.Printf("Warning: failed to delete orphaned rows for %s: %v", formName, delErr)
-									e.logMsg(formName, "WARN", "孤儿删除失败: "+delErr.Error())
-									// Orphan deletion failure means the snapshot is incomplete;
-									// mark the form as failed so the run status reflects it.
-									stat.Status = StatusFailed
-									stat.ErrorCount = 1
-									stat.Error = "orphan deletion failed: " + delErr.Error()
-								} else if deleted > 0 {
-									log.Printf("[FULL-SYNC] Deleted %d orphaned rows from %s (removed in Kingdee)", deleted, stat.TableName)
-									e.logMsg(formName, "INFO", fmt.Sprintf("删除 %d 条孤儿记录", deleted))
-								}
-							}
+							// Snapshot forms (即时库存/科目余额表) are TRUNCATE + full rewrite
+							// above, so the target table always equals the source — there
+							// are no orphans to delete. Skipping avoids a giant NOT IN
+							// DELETE (56599+ values) that stalls the connection.
+							// （原因：快照表全量先清空再重写，表内容由源决定，无孤儿；
+							// 超大 NOT IN 删除会卡住应用，见 DeleteOrphaned 实测）
 						}
 					}
 				}
@@ -1496,12 +1488,16 @@ func (e *SyncEngine) runSync(ctx context.Context, runID string, forms []string, 
 	return result, nil
 }
 
-func (e *SyncEngine) syncCursorForm(ctx, fetchCtx context.Context, formName, tableName string, formQuery config.FormQuery, fieldKeys []string, baseFilter, syncType string, dryRun bool, stat *FormStat) {
+func (e *SyncEngine) syncCursorForm(ctx, fetchCtx context.Context, runID, formName, tableName string, formQuery config.FormQuery, fieldKeys []string, baseFilter, syncType string, dryRun bool, stat *FormStat) {
 	cursorKeys := cursorKeysForForm(formName)
 	if err := ValidateCursorKeyFields(fieldKeys, cursorKeys); err != nil {
 		stat.Status, stat.ErrorCount, stat.Error = StatusFailed, 1, err.Error()
 		return
 	}
+	// Kingdee caps single-page responses at 10000 rows server-side
+	// (verified: Limit=50000 still returns 10000). Keep the cap aligned.
+	// （原因：实测金蝶服务端强制单页 10000 条，请求 50000 无效且会因
+	// len < pageSize 提前结束导致漏数据）
 	pageSize := config.Get().Kingdee.PageSize
 	if pageSize <= 0 || pageSize > 10000 {
 		pageSize = 10000
@@ -1509,6 +1505,35 @@ func (e *SyncEngine) syncCursorForm(ctx, fetchCtx context.Context, formName, tab
 	client := kind.NewKingdeeClient()
 	var previous []interface{}
 	truncated := false
+
+	// Full sync: collect all fetched PKs into a staging table so we can later
+	// delete target rows that Kingdee no longer has (orphan cleanup).
+	// （原因：游标表单之前从不清理金蝶已删除的记录；PK 走 staging 表避免内存爆炸）
+	var pkCollector *sourceKeyCollector
+	if syncType == "full" && !dryRun {
+		pkStr := db.GetPrimaryKey(tableName)
+		if pkStr != "" {
+			pkCols := make([]string, 0, 2)
+			for _, p := range strings.Split(pkStr, ",") {
+				if p = strings.TrimSpace(p); p != "" {
+					pkCols = append(pkCols, p)
+				}
+			}
+			if len(pkCols) > 0 {
+				sqlWriter, isSQL := e.writer.(*SQLServerWriter)
+				if isSQL {
+					collector, cErr := newSourceKeyCollector(ctx, sqlWriter, tableName, pkCols, formQuery.FieldMap)
+					if cErr != nil {
+						e.logMsg(formName, "WARN", "孤儿删除准备失败(将跳过): "+cErr.Error())
+					} else {
+						pkCollector = collector
+						defer pkCollector.Drop(context.Background())
+					}
+				}
+			}
+		}
+	}
+
 	for page := 1; ; page++ {
 		filter := baseFilter
 		if len(previous) > 0 {
@@ -1552,7 +1577,7 @@ func (e *SyncEngine) syncCursorForm(ctx, fetchCtx context.Context, formName, tab
 				stat.Status, stat.ErrorCount, stat.Error = StatusFailed, 1, "database not initialized"
 				return
 			}
-			if _, err := db.DB.Exec("TRUNCATE TABLE `" + tableName + "`"); err != nil {
+			if _, err := db.DB.Exec("TRUNCATE TABLE dbo." + tableName + ""); err != nil {
 				stat.Status, stat.ErrorCount, stat.Error = StatusFailed, 1, "truncate failed: "+err.Error()
 				return
 			}
@@ -1570,6 +1595,12 @@ func (e *SyncEngine) syncCursorForm(ctx, fetchCtx context.Context, formName, tab
 			}
 			stat.InsertedCount += inserted
 		}
+		// Accumulate PKs for full-sync orphan cleanup
+		if pkCollector != nil {
+			if err := pkCollector.AddPage(ctx, result.Rows); err != nil {
+				log.Printf("[ORPHAN] Warning: failed to stage PKs for %s: %v", formName, err)
+			}
+		}
 		previous = current
 		e.logMsg(formName, "INFO", fmt.Sprintf("同步进度: %d 条 (第 %d 页)", stat.FetchedCount, page))
 		if len(result.Rows) < pageSize {
@@ -1581,7 +1612,7 @@ func (e *SyncEngine) syncCursorForm(ctx, fetchCtx context.Context, formName, tab
 		return
 	}
 	if stat.InsertedCount < stat.FetchedCount {
-		log.Printf("[SYNC] Warning: fetched/inserted mismatch for %s: fetched=%d inserted=%d (minor Doris filtering)", formName, stat.FetchedCount, stat.InsertedCount)
+		log.Printf("[SYNC] Warning: fetched/inserted mismatch for %s: fetched=%d inserted=%d (minor database filtering)", formName, stat.FetchedCount, stat.InsertedCount)
 		return
 	}
 	if !dryRun && syncType == "reset" && stat.FetchedCount > 0 {
@@ -1590,7 +1621,7 @@ func (e *SyncEngine) syncCursorForm(ctx, fetchCtx context.Context, formName, tab
 			return
 		}
 		var targetCount int
-		if err := db.DB.QueryRowContext(ctx, "SELECT COUNT(*) FROM `"+tableName+"`").Scan(&targetCount); err != nil {
+		if err := db.DB.QueryRowContext(ctx, "SELECT COUNT(*) FROM dbo." + tableName + "").Scan(&targetCount); err != nil {
 			stat.Status, stat.ErrorCount, stat.Error = StatusFailed, 1, "target count failed: "+err.Error()
 			return
 		}
@@ -1599,6 +1630,27 @@ func (e *SyncEngine) syncCursorForm(ctx, fetchCtx context.Context, formName, tab
 			return
 		}
 	}
+
+	// Full sync: delete target rows absent from the fetched source (orphans).
+	// The collector staged every page's PKs; completeness gates inside
+	// ReconcileAndDelete block deletion on partial writes.
+	// （原因：游标表单全量同步补齐孤儿删除；recovery 运行跳过，与快照表路径一致）
+	if pkCollector != nil && syncType == "full" && stat.Status != StatusFailed {
+		currentRecovery, recoveryErr := e.isRecoveryRun(runID)
+		if recoveryErr != nil {
+			stat.Status, stat.ErrorCount, stat.Error = StatusFailed, 1, fmt.Sprintf("sync run identity validation failed before cleanup: %v", recoveryErr)
+		} else if !currentRecovery && !e.isCleanupDisabled() {
+			deleted, delErr := pkCollector.ReconcileAndDelete(ctx, tableName, stat.FetchedCount, stat.InsertedCount)
+			if delErr != nil {
+				log.Printf("[ORPHAN] Warning: orphan deletion failed for %s: %v", formName, delErr)
+				e.logMsg(formName, "WARN", "孤儿删除失败: "+delErr.Error())
+			} else if deleted > 0 {
+				log.Printf("[FULL-SYNC] Deleted %d orphaned rows from %s (removed in Kingdee)", deleted, tableName)
+				e.logMsg(formName, "INFO", fmt.Sprintf("删除 %d 条孤儿记录", deleted))
+			}
+		}
+	}
+
 	stat.Status = StatusSuccess
 }
 
@@ -1680,8 +1732,22 @@ func accountBalanceEndPeriod(now time.Time) (int, int) {
 	return now.Year(), int(now.Month()) - 1
 }
 
+// accountBalanceStartPeriod returns the start year/period for a window of
+// `months` calendar months ending at the previous month (aligned with
+// accountBalanceEndPeriod). Used to limit incremental syncs of the balance
+// sheet to recent months instead of re-fetching the full history.
+func accountBalanceStartPeriod(now time.Time, months int) (int, int) {
+	if months < 1 {
+		months = 1
+	}
+	endYear, endPeriod := accountBalanceEndPeriod(now)
+	t := time.Date(endYear, time.Month(endPeriod), 1, 0, 0, 0, 0, time.Local)
+	t = t.AddDate(0, -(months - 1), 0)
+	return t.Year(), int(t.Month())
+}
+
 // writeRows maps Kingdee fields to DB columns and delegates to the configured RowWriter.
-// （原因：将列映射逻辑与具体写入实现解耦，通过 RowWriter 接口支持 Doris Stream Load）
+// （原因：将列映射逻辑与具体写入实现解耦，通过 RowWriter 接口支持 SQL Server MERGE）
 func (e *SyncEngine) writeRows(tableName string, rows []map[string]interface{}, fieldKeys []string, fieldMap map[string]string) (int, error) {
 	return e.writeRowsWithContext(context.Background(), tableName, rows, fieldKeys, fieldMap)
 }
@@ -1736,7 +1802,7 @@ func (e *SyncEngine) writeRowsWithContext(ctx context.Context, tableName string,
 			continue
 		}
 		// For composite fields like "FMATERIALGROUP.fname", use the part before "." as DB column name.
-		// （原因：金蝶 API 返回的关联字段如 FMATERIALGROUP.fname，Doris 中只存 FMATERIALGROUP 列）
+		// （原因：金蝶 API 返回的关联字段如 FMATERIALGROUP.fname，SQL Server 中只存 FMATERIALGROUP 列）
 		if dotIdx := strings.Index(fk, "."); dotIdx != -1 {
 			baseField := strings.ToUpper(fk[:dotIdx])
 			if actualName, ok := existingCols[baseField]; ok {
@@ -1760,8 +1826,8 @@ func (e *SyncEngine) writeRowsWithContext(ctx context.Context, tableName string,
 
 	log.Printf("[SYNC-ENGINE] writeRows: table=%s, rows=%d, cols=%d, pkCols=%v", tableName, len(rows), len(cols), pkCols)
 
-	// Delegate to the configured RowWriter (DorisWriter for mysql/Doris).
-	// Pass kingdeeToDB so DorisWriter can look up values using Kingdee field names.
+	// Delegate to the configured RowWriter (SQLServerWriter).
+	// Pass kingdeeToDB so SQLServerWriter can look up values using Kingdee field names.
 	return e.writer.Upsert(ctx, tableName, rows, cols, pkCols, kingdeeToDB)
 }
 
@@ -1773,13 +1839,13 @@ func (e *SyncEngine) getTableColumns(tableName string) (map[string]string, error
 	}
 
 	cols := make(map[string]string)
-	// Use positional parameter (?) for MySQL/Doris compatibility
-	rows, err := db.DB.Queryx(`
+	// Use positional parameter (?) for SQL Server compatibility
+	rows, err := db.DB.Queryx(fmt.Sprintf(`
 		SELECT COLUMN_NAME
 		FROM INFORMATION_SCHEMA.COLUMNS
-		WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = ?
+		WHERE TABLE_SCHEMA = 'dbo' AND TABLE_NAME = '%s'
 		ORDER BY ORDINAL_POSITION
-	`, tableName)
+	`, tableName))
 	if err != nil {
 		return nil, err
 	}
@@ -1842,7 +1908,7 @@ func (e *SyncEngine) deleteOrphanedWithSnapshot(
 	mgr.UpdatePkCount(rows, pkCols)
 
 	// Block deletion if actual write count differs from source count.
-	// PartialSuccess from Doris means some rows were filtered; we cannot
+	// PartialSuccess from database means some rows were filtered; we cannot
 	// safely assume the snapshot is complete.
 	if inserted != len(rows) {
 		log.Printf("[FULL-SYNC] Warning: partial write for %s: fetched=%d written=%d, skipping orphan deletion", tableName, len(rows), inserted)

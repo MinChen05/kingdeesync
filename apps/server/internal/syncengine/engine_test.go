@@ -31,6 +31,25 @@ func TestAccountBalanceEndPeriodMatchesPythonSyncRule(t *testing.T) {
 	}
 }
 
+func TestAccountBalanceStartPeriodSixMonthWindow(t *testing.T) {
+	// 2026-07-30: end period 2026-6, six-month window starts 2026-1
+	if year, period := accountBalanceStartPeriod(time.Date(2026, time.July, 30, 0, 0, 0, 0, time.Local), 6); year != 2026 || period != 1 {
+		t.Fatalf("July window start = %d-%d, want 2026-1", year, period)
+	}
+	// 2026-03-15: end period 2026-2, six-month window starts 2025-9
+	if year, period := accountBalanceStartPeriod(time.Date(2026, time.March, 15, 0, 0, 0, 0, time.Local), 6); year != 2025 || period != 9 {
+		t.Fatalf("March window start = %d-%d, want 2025-9", year, period)
+	}
+	// 2026-01-10: end period 2025-12, six-month window starts 2025-7
+	if year, period := accountBalanceStartPeriod(time.Date(2026, time.January, 10, 0, 0, 0, 0, time.Local), 6); year != 2025 || period != 7 {
+		t.Fatalf("January window start = %d-%d, want 2025-7", year, period)
+	}
+	// 跨年边界：2026-02-01 → end 2026-1 → window 2025-8
+	if year, period := accountBalanceStartPeriod(time.Date(2026, time.February, 1, 0, 0, 0, 0, time.Local), 6); year != 2025 || period != 8 {
+		t.Fatalf("February window start = %d-%d, want 2025-8", year, period)
+	}
+}
+
 func TestStandardCursorKeysCoverAllStandardForms(t *testing.T) {
 	for _, form := range []string{"发货通知单", "生产入库单", "销售订单", "销售出库单", "销售退货单", "预测订单", "生产订单主表", "生产订单明细", "客户资料", "生产用料清单主表", "生产用料清单明细表", "物料", "仓库", "物料清单", "物料清单子项", "采购订单", "采购入库单", "委外订单", "应付单", "应收单"} {
 		if got := cursorKeysForForm(form); len(got) == 0 {
@@ -113,38 +132,38 @@ func TestProductionConfigPrimaryKeyMappingContract(t *testing.T) {
 	}
 }
 
-func TestNewSyncEngineUsesDorisWriterForMySQL(t *testing.T) {
-	if runIsolatedDorisConfigTest(t, "mysql") {
+func TestNewSyncEngineUsesSQLServerWriter(t *testing.T) {
+	if runIsolatedSQLConfigTest(t, "sqlserver") {
 		return
 	}
 
 	engine := NewSyncEngine()
-	writer, ok := engine.writer.(*DorisWriter)
+	writer, ok := engine.writer.(*SQLServerWriter)
 	if !ok {
-		t.Fatalf("writer = %T, want *DorisWriter for DATABASE.type=mysql", engine.writer)
+		t.Fatalf("writer = %T, want *SQLServerWriter for DATABASE.type=sqlserver", engine.writer)
 	}
-	host, user, password, err := writer.dorisTarget()
+	host, user, password, err := writer.getSQLTarget()
 	if err != nil {
-		t.Fatalf("dorisTarget() error = %v", err)
+		t.Fatalf("getSQLTarget() error = %v", err)
 	}
 	if host != "doris.test" || user != "test-user" || password != "test-password" {
-		t.Fatalf("doris target = (%q, %q, %q), want configured offline target", host, user, password)
+		t.Fatalf("sqlserver target = (%q, %q, %q), want configured offline target", host, user, password)
 	}
 }
 
-func TestDorisTargetErrorDoesNotExposeConfiguredCredentials(t *testing.T) {
-	if runIsolatedDorisConfigTest(t, "unsupported") {
+func TestSQLTargetErrorDoesNotExposeConfiguredCredentials(t *testing.T) {
+	if runIsolatedSQLConfigTest(t, "unsupported") {
 		return
 	}
 
-	_, _, _, err := (&DorisWriter{}).dorisTarget()
+	_, _, _, err := (&SQLServerWriter{}).getSQLTarget()
 	if err == nil {
-		t.Fatal("dorisTarget() error = nil, want unsupported database type error")
+		t.Fatal("getSQLTarget() error = nil, want unsupported database type error")
 	}
 	message := err.Error()
 	for _, secret := range []string{"secret-user", "super-secret-password", "doris.internal"} {
 		if strings.Contains(message, secret) {
-			t.Fatalf("dorisTarget() error %q exposes configured value %q", message, secret)
+			t.Fatalf("getSQLTarget() error %q exposes configured value %q", message, secret)
 		}
 	}
 }
@@ -212,7 +231,7 @@ func TestSyncDataProcessesPriorityGroupsInOrder(t *testing.T) {
 	}
 }
 
-func runIsolatedDorisConfigTest(t *testing.T, mode string) bool {
+func runIsolatedSQLConfigTest(t *testing.T, mode string) bool {
 	t.Helper()
 	childMode := os.Getenv("SYNCENGINE_DORIS_CONFIG_TEST")
 	if childMode == "" {
@@ -225,8 +244,8 @@ func runIsolatedDorisConfigTest(t *testing.T, mode string) bool {
 	}
 
 	content := "[DATABASE]\ntype = unsupported\nhost = doris.internal\nuser = secret-user\npassword = super-secret-password\n"
-	if childMode == "mysql" {
-		content = "[DATABASE]\ntype = mysql\n\n[MYSQL]\nhost = doris.test\nport = 9030\nuser = test-user\npassword = test-password\ndatabase = sync_db\n"
+	if childMode == "sqlserver" {
+		content = "[DATABASE]\ntype = sqlserver\n\n[SQLSERVER]\nhost = doris.test\nport = 1433\nuser = test-user\npassword = test-password\ndatabase = sync_db\n"
 	}
 	path := filepath.Join(t.TempDir(), "config.ini")
 	if err := os.WriteFile(path, []byte(content), 0o600); err != nil {
@@ -284,9 +303,9 @@ func (columnTestConn) Prepare(string) (driver.Stmt, error) { return nil, driver.
 func (columnTestConn) Close() error                        { return nil }
 func (columnTestConn) Begin() (driver.Tx, error)           { return nil, driver.ErrSkip }
 
-func (columnTestConn) QueryContext(_ context.Context, _ string, args []driver.NamedValue) (driver.Rows, error) {
-	if len(args) != 1 || args[0].Value != "saleorder" {
-		return nil, fmt.Errorf("unexpected table metadata query arguments: %#v", args)
+func (columnTestConn) QueryContext(_ context.Context, query string, args []driver.NamedValue) (driver.Rows, error) {
+	if !strings.Contains(query, "saleorder") {
+		return nil, fmt.Errorf("unexpected table metadata query: %s", query)
 	}
 	return &columnTestRows{values: []string{"FID", "FENTRYID", "FBILLNO"}}, nil
 }

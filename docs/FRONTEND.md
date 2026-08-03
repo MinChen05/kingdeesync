@@ -85,11 +85,11 @@ frontend/
 | `/overview` | 概览 | dashboard | `./Overview` | 首页仪表盘 |
 | `/sync` | 同步管理 | sync | - | 父菜单，重定向到 `/sync/execute` |
 | `/sync/execute` | 同步执行 | playCircle | `./sync/Execute` | 手动启动同步 |
-| `/sync/tasks` | 表单监控 | orderedList | `./sync/Tasks` | Doris 中各表单数据状态 |
+| `/sync/tasks` | 表单监控 | orderedList | `./sync/Tasks` | SQL Server 中各表单数据状态 |
 | `/sync/task-management` | 任务管理 | unorderedList | `./sync/TaskManagement` | 同步任务 CRUD |
 | `/sync/schedule` | 定时任务 | clockCircle | `./sync/Schedule` | Cron 调度管理 |
 | `/data` | 数据配置 | database | - | 父菜单，重定向到 `/data/sources` |
-| `/data/sources` | 数据源 | cluster | `./data/Sources` | 金蝶/Doris/SQLite 配置 |
+| `/data/sources` | 数据源 | cluster | `./data/Sources` | 金蝶/SQL Server/SQLite 配置 |
 | `/monitor` | 监控分析 | radarChart | - | 父菜单，重定向到 `/monitor/history` |
 | `/monitor/history` | 同步历史 | history | `./monitor/History` | 同步记录列表 |
 | `/monitor/history/:runId` | 历史详情 | - | `./monitor/HistoryDetail` | 隐藏菜单，动态路由 |
@@ -116,7 +116,7 @@ frontend/
 2. **MetricCards** - 今日核心 KPI（同步次数、成功率、失败数、平均耗时），含昨日对比
 3. **TrendChart** - 近 7 天同步趋势柱状图（@ant-design/plots）
 4. **ErrorForms** - 近 7 天异常表单 Top5
-5. **HealthGrid** - 金蝶 API / Doris / 调度器 / 日志服务健康状态
+5. **HealthGrid** - 金蝶 API / SQL Server / 调度器 / 日志服务健康状态
 6. **RecentRuns** - 最近 6 条同步记录
 
 **数据获取：** `hooks.ts` 统一封装，使用 `ahooks useRequest`，同步状态 3 秒轮询。
@@ -137,7 +137,7 @@ frontend/
 
 **文件：** `src/pages/sync/Tasks/index.tsx`
 
-**职责：** 查看 Doris 中各表单的数据状态。
+**职责：** 查看 SQL Server 中各表单的数据状态。
 
 - 统计卡片：总表单数、已同步/未同步数、总行数
 - ProTable 展示：表单名、目标表、分类、行数、状态、最后同步时间
@@ -173,7 +173,7 @@ frontend/
 **职责：** 查看和管理三个数据源配置。
 
 - **金蝶云星空** - 账套 ID、用户名、QPS 限制、每页大小、登录/查询地址
-- **Doris 数据仓库** - 主机、端口、数据库、用户
+- **SQL Server 数据仓库** - 主机、端口、数据库、用户
 - **SQLite 状态库** - 本地只读展示
 - 测试连接按钮（调用 `/api/datasources/test`）
 - 编辑 Modal（敏感信息提示在配置文件中修改）

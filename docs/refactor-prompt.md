@@ -4,10 +4,10 @@
 
 ## 一、项目背景
 
-这是一个将金蝶云星空 ERP 数据同步到 Apache Doris 分析型数据库的工具。数据处理链路为：
+这是一个将金蝶云星空 ERP 数据同步到 SQL Server 数据库的工具。数据处理链路为：
 
 ```
-金蝶 Cloud API → Go 同步引擎 → Doris 写入 → React 前端查询展示
+金蝶 Cloud API → Go 同步引擎 → SQL Server 写入 → React 前端查询展示
 ```
 
 Go 后端提供 REST API（端口 8000），前端通过 Umi 代理调用。所有接口返回 `{ ok, data }` 包装结构。主要功能：

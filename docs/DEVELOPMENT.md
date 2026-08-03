@@ -13,7 +13,7 @@
 │   │   ├── api/routes/v1/   #   HTTP 路由与 DTO（仅做路由注册和参数绑定）
 │   │   ├── internal/        #   业务逻辑（按领域分包，禁止跨层循环依赖）
 │   │   │   ├── config/      #     配置加载（INI + JSON）
-│   │   │   ├── db/          #     sqlx 轻量查询（Doris/MySQL 业务表）
+│   │   │   ├── db/          #     sqlx 轻量查询（SQL Server 业务表）
 │   │   │   ├── gormdb/      #     GORM（内部表：schedule、runs、stats）
 │   │   │   ├── kind/        #     金蝶 API 客户端
 │   │   │   ├── syncengine/  #     同步引擎核心
@@ -151,7 +151,7 @@
 
 4. **`internal/syncengine/engine.go`** — `PriorityMap` 添加优先级分组（0=小表，1=中表，2=大表）
 
-5. **Doris 数据库** — 创建目标表（DDL 参考 `docs/doris-ddl-kingdee-sync.sql`）
+5. **SQL Server 数据库** — 目标表结构参考 `docs/sqlserver-tables-kingdee-sync.sql`
 
 6. **`config.local.ini`** — `[INCREMENTAL_FIELDS]` 段添加增量字段：
    ```ini
@@ -306,7 +306,7 @@ podman-compose down              # 停止并清理
 1. `form-queries.json` 是否已添加
 2. `formToTableName` 映射是否存在
 3. `primaryKeyMap` 是否定义主键
-4. Doris 目标表是否已创建
+4. SQL Server 目标表是否已创建
 5. 调度任务的 `forms` 字段是否包含新表单
 
 ### Q: 金蝶 API 返回 401？

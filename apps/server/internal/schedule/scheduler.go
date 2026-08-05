@@ -5,6 +5,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
+	"strconv"
+	"strings"
 	"sync"
 	"time"
 
@@ -179,6 +181,13 @@ func runJob(job *gormdb.ScheduleJob, engine *syncengine.SyncEngine) {
 		log.Printf("[Schedule] Skipping job %s because scheduler is paused", job.Name)
 		return
 	}
+
+	// Check sync time window (原因：限制自动同步只在业务低峰期执行)
+	if !isWithinTimeWindow() {
+		log.Printf("[Schedule] Skipping job %s: current time outside sync window", job.Name)
+		return
+	}
+
 	log.Printf("[Schedule] Running job: %s (type=%s)", job.Name, job.SyncType)
 
 	db := gormdb.DB
@@ -303,17 +312,17 @@ func runJob(job *gormdb.ScheduleJob, engine *syncengine.SyncEngine) {
 		// Aggregate stats from form results and write form-level records
 		for _, fs := range result.FormStats {
 			// Write form-level record
-			if err := db.Create(&gormdb.SyncRunForm{
-				RunID:           runID,
-				FormName:        fs.FormName,
-				Status:          string(fs.Status),
-				TotalRecords:    int64(fs.FetchedCount),
-				Inserted:        int64(fs.InsertedCount),
-				Updated:         0,
-				Failed:          int64(fs.ErrorCount),
-				DurationSeconds: fs.DurationSec,
-				ErrorMessage:    fs.Error,
-			}).Error; err != nil {
+if err := db.Create(&gormdb.SyncRunForm{
+					RunID:           runID,
+					FormName:        fs.FormName,
+					Status:          string(fs.Status),
+					TotalRecords:    int64(fs.FetchedCount),
+					Inserted:        int64(fs.InsertedCount),
+					Updated:         int64(fs.UpdatedCount),
+					Failed:          int64(fs.ErrorCount),
+					DurationSeconds: fs.DurationSec,
+					ErrorMessage:    fs.Error,
+				}).Error; err != nil {
 				log.Printf("[Schedule] Failed to persist form result for run %s form %s: %v", runID, fs.FormName, err)
 			}
 
@@ -391,6 +400,13 @@ func notifyScheduleRunComplete(runID string) {
 	if hook != nil {
 		hook(runID)
 	}
+}
+
+// SetRunCompletionHook registers a callback invoked when a scheduled sync run completes.
+func SetRunCompletionHook(h func(runID string)) {
+	mu.Lock()
+	defer mu.Unlock()
+	scheduleRunCompletionHook = h
 }
 
 func failSyncRun(run *gormdb.SyncRun, errMsg string) {
@@ -471,4 +487,53 @@ func ReloadJobs() error {
 	}
 
 	return nil
+}
+
+// isWithinTimeWindow checks if the current time falls within the configured sync time window.
+// Returns true if no window is configured or if the current time is within the window.
+// （原因：限制自动同步只在业务低峰期执行，避免高峰时段资源竞争）
+func isWithinTimeWindow() bool {
+	cfg := config.Get()
+	if cfg == nil {
+		return true
+	}
+	startStr := cfg.Sync.TimeWindowStart
+	endStr := cfg.Sync.TimeWindowEnd
+
+	// No window configured = always allowed
+	if startStr == "" || endStr == "" {
+		return true
+	}
+
+	now := time.Now()
+	nowMinutes := now.Hour()*60 + now.Minute()
+
+	startH, startM, ok1 := parseTimeStr(startStr)
+	endH, endM, ok2 := parseTimeStr(endStr)
+	if !ok1 || !ok2 {
+		return true // Invalid config = allow
+	}
+
+	startMinutes := startH*60 + startM
+	endMinutes := endH*60 + endM
+
+	if startMinutes <= endMinutes {
+		// Normal window: e.g., 02:00-06:00
+		return nowMinutes >= startMinutes && nowMinutes <= endMinutes
+	}
+	// Overnight window: e.g., 22:00-06:00
+	return nowMinutes >= startMinutes || nowMinutes <= endMinutes
+}
+
+func parseTimeStr(s string) (int, int, bool) {
+	parts := strings.Split(s, ":")
+	if len(parts) != 2 {
+		return 0, 0, false
+	}
+	h, err1 := strconv.Atoi(parts[0])
+	m, err2 := strconv.Atoi(parts[1])
+	if err1 != nil || err2 != nil || h < 0 || h > 23 || m < 0 || m > 59 {
+		return 0, 0, false
+	}
+	return h, m, true
 }

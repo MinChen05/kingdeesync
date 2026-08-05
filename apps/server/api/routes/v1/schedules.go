@@ -12,6 +12,7 @@ func initScheduleRoutes(group *gin.RouterGroup) {
 	group.GET("/schedules", listSchedules)
 	group.GET("/schedules/status", getSchedulerStatus)
 	group.POST("/schedules", createSchedule)
+	group.POST("/schedules/batch", batchScheduleAction)
 	group.PUT("/schedules/:id", updateSchedule)
 	group.DELETE("/schedules/:id", deleteSchedule)
 	group.POST("/scheduler/start", startScheduler)
@@ -207,6 +208,47 @@ func stopScheduler(c *gin.Context) {
 		cron.Stop()
 	}
 	WriteData(c, http.StatusOK, gin.H{"message": "scheduler stopped"})
+}
+
+func batchScheduleAction(c *gin.Context) {
+	db := gormdb.DB
+	if db == nil {
+		WriteProblem(c, http.StatusServiceUnavailable, Problem{
+			Code:    "INTERNAL_ERROR",
+			Message: "database not initialized",
+		})
+		return
+	}
+
+	var req struct {
+		Action string   `json:"action" binding:"required"` // enable, disable, delete
+		IDs    []uint   `json:"ids" binding:"required"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		WriteProblem(c, http.StatusBadRequest, Problem{
+			Code:    "INVALID_REQUEST",
+			Message: "invalid request: " + err.Error(),
+		})
+		return
+	}
+
+	switch req.Action {
+	case "enable":
+		db.Model(&gormdb.ScheduleJob{}).Where("id IN ?", req.IDs).Update("enabled", true)
+	case "disable":
+		db.Model(&gormdb.ScheduleJob{}).Where("id IN ?", req.IDs).Update("enabled", false)
+	case "delete":
+		db.Delete(&gormdb.ScheduleJob{}, "id IN ?", req.IDs)
+	default:
+		WriteProblem(c, http.StatusBadRequest, Problem{
+			Code:    "INVALID_REQUEST",
+			Message: "action must be 'enable', 'disable', or 'delete'",
+		})
+		return
+	}
+
+	schedule.ReloadJobs()
+	WriteData(c, http.StatusOK, gin.H{"message": "batch action completed", "action": req.Action})
 }
 
 func toV1Schedule(j gormdb.ScheduleJob) Schedule {

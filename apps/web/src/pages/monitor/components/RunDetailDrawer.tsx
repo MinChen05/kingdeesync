@@ -1,8 +1,8 @@
-import { useQuery } from '@tanstack/react-query';
-import { Drawer, Empty, Typography } from 'antd';
+import { useMutation, useQuery } from '@tanstack/react-query';
+import { App, Drawer, Empty, Typography } from 'antd';
 import React from 'react';
-import { getRun } from '@/services/v1';
 import type { V1Run } from '@/services/v1';
+import { getRun, retryFailedForms } from '@/services/v1';
 import type { RunDetail } from '../types';
 
 /** V1Run → RunDetail 兼容转换 */
@@ -23,7 +23,7 @@ function toRunDetail(v1: V1Run): RunDetail {
     success_forms: v1.success_forms,
     failed_forms: v1.failed_forms,
     error_message: v1.error_message,
-    forms: (v1.forms ?? []).map(f => ({
+    forms: (v1.forms ?? []).map((f) => ({
       run_id: v1.run_id,
       form_name: f.form_name,
       status: f.status as import('@/services/generated-api').SyncStatus,
@@ -36,7 +36,7 @@ function toRunDetail(v1: V1Run): RunDetail {
       duration_seconds: f.duration_seconds,
       error_message: f.error_message,
     })),
-    errors: (v1.errors ?? []).map(e => ({
+    errors: (v1.errors ?? []).map((e) => ({
       run_id: v1.run_id,
       form_name: e.form_name,
       level: e.level,
@@ -46,9 +46,11 @@ function toRunDetail(v1: V1Run): RunDetail {
     })),
   };
 }
+
 import { FormDetailTable } from './FormDetailTable';
 import { RunErrorList } from './RunErrorList';
 import { RunSummary } from './RunSummary';
+import { RunTimeline } from './RunTimeline';
 
 const { Text } = Typography;
 
@@ -73,14 +75,37 @@ const RunDetailDrawer: React.FC<RunDetailDrawerProps> = ({
   runId,
   onClose,
 }) => {
+  const { message } = App.useApp();
   const detailReq = useQuery({
     queryKey: ['v1', 'run', runId],
     queryFn: () => getRun(runId as string),
     enabled: !!runId,
   });
   const loading = detailReq.isPending;
-  const detail: RunDetail | undefined = detailReq.data ? toRunDetail(detailReq.data) : undefined;
-  const dotColor = detail ? STATUS_DOT_COLOR[detail.status] || 'var(--tk-text)' : 'var(--tk-primary)';
+  const detail: RunDetail | undefined = detailReq.data
+    ? toRunDetail(detailReq.data)
+    : undefined;
+  const dotColor = detail
+    ? STATUS_DOT_COLOR[detail.status] || 'var(--tk-text)'
+    : 'var(--tk-primary)';
+
+  // 重试失败表单
+  const retryReq = useMutation({
+    mutationFn: (runId: string) => retryFailedForms(runId),
+    onSuccess: () => {
+      message.success('已开始重试失败表单');
+      detailReq.refetch();
+    },
+    onError: () => {
+      message.error('重试失败，请检查是否有同步任务正在运行');
+    },
+  });
+
+  const hasFailedForms = detail && detail.failed_forms > 0;
+  const canRetry =
+    hasFailedForms &&
+    !['running'].includes(detail.status) &&
+    !retryReq.isPending;
 
   return (
     <Drawer
@@ -103,6 +128,20 @@ const RunDetailDrawer: React.FC<RunDetailDrawerProps> = ({
               {detail.run_id}
             </Text>
           )}
+          {canRetry && (
+            <span
+              onClick={() => retryReq.mutate(detail.run_id)}
+              style={{
+                marginLeft: 'auto',
+                fontSize: 12,
+                color: 'var(--tk-primary)',
+                cursor: 'pointer',
+                fontWeight: 500,
+              }}
+            >
+              重试失败表单 ({detail.failed_forms})
+            </span>
+          )}
         </span>
       }
       width={760}
@@ -115,6 +154,7 @@ const RunDetailDrawer: React.FC<RunDetailDrawerProps> = ({
         <div className="space-y-4">
           <RunSummary detail={detail} />
           <FormDetailTable forms={detail.forms || []} />
+          <RunTimeline runId={detail.run_id} />
           <RunErrorList errors={detail.errors || []} />
         </div>
       ) : (

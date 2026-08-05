@@ -59,6 +59,7 @@ func InitRunsRoutes(r *gin.Engine, engine *syncengine.SyncEngine) {
 	group.GET("", listRuns)
 	group.GET("/:runId", getRun)
 	group.GET("/:runId/events", listRunEvents)
+	group.POST("/:runId/retry-failed", retryFailedForms)
 
 	// Sync status & stop (used by frontend)
 	r.GET("/api/v1/sync/status", getSyncStatus)
@@ -190,6 +191,7 @@ func createRun(c *gin.Context) {
 				Status:          string(fs.Status),
 				TotalRecords:    int64(fs.FetchedCount),
 				Inserted:        int64(fs.InsertedCount),
+				Updated:         int64(fs.UpdatedCount),
 				Failed:          int64(fs.ErrorCount),
 				DurationSeconds: fs.DurationSec,
 				ErrorMessage:    fs.Error,
@@ -208,6 +210,84 @@ func createRun(c *gin.Context) {
 		RunID:    runID,
 		Status:   "running",
 		SyncType: req.SyncType,
+	})
+}
+
+// retryFailedForms creates a new sync run that retries only the failed forms from the given run.
+func retryFailedForms(c *gin.Context) {
+	if syncEng == nil {
+		WriteProblem(c, http.StatusServiceUnavailable, Problem{Code: "SYNC_ENGINE_NOT_INITIALIZED", Message: "sync engine is not initialized"})
+		return
+	}
+
+	db := gormdb.DB
+	if db == nil {
+		WriteProblem(c, http.StatusServiceUnavailable, Problem{Code: "INTERNAL_ERROR", Message: "database not initialized"})
+		return
+	}
+
+	runID := c.Param("runId")
+	var forms []gormdb.SyncRunForm
+	db.Where("run_id = ? AND status IN ?", runID, []string{"failed", "partial"}).Find(&forms)
+	if len(forms) == 0 {
+		WriteProblem(c, http.StatusNotFound, Problem{Code: "NO_FAILED_FORMS", Message: "no failed forms found in this run"})
+		return
+	}
+
+	formNames := make([]string, len(forms))
+	for i, f := range forms {
+		formNames[i] = f.FormName
+	}
+
+	// Check if sync is already running
+	syncMutex.Lock()
+	currentRunID := ""
+	if activeTask != nil {
+		currentRunID = activeTask.runID
+	} else if syncEng != nil {
+		currentRunID = syncEng.CurrentRunID()
+	}
+	if currentRunID != "" {
+		WriteProblem(c, http.StatusConflict, Problem{Code: "ALREADY_RUNNING", Message: "a sync task is already running", Details: map[string]string{"run_id": currentRunID}})
+		return
+	}
+
+	newRunID := uuid.NewString()
+	if _, err := gormdb.CreateSyncRun(newRunID, "api-retry", "incremental"); err != nil {
+		WriteProblem(c, http.StatusServiceUnavailable, Problem{Code: "DB_ERROR", Message: "failed to persist sync run"})
+		return
+	}
+	if err := syncEng.PrepareRun(newRunID, false); err != nil {
+		gormdb.FinishSyncRunWithRetry(newRunID, string(syncengine.StatusFailed), 0, 0, 0, 0, 0, 0, 0, err.Error())
+		WriteProblem(c, http.StatusConflict, Problem{Code: "ALREADY_RUNNING", Message: "a sync task is already running"})
+		return
+	}
+
+	// Start retry in background
+	go func() {
+		result, err := syncEng.SyncDataWithRunID(context.Background(), newRunID, formNames, "incremental", false)
+		if err != nil {
+			gormdb.FinishSyncRunWithRetry(newRunID, string(syncengine.StatusFailed), 0, 0, 0, 0, 0, 0, 0, err.Error())
+			return
+		}
+		status := string(result.Status)
+		totalRecords, failedRecords, successRecords := int64(0), int64(0), int64(0)
+		for _, r := range result.FormStats {
+			totalRecords += int64(r.FetchedCount)
+			if r.Status == syncengine.StatusFailed {
+				failedRecords += int64(r.ErrorCount)
+			} else {
+				successRecords += int64(r.InsertedCount)
+			}
+		}
+		gormdb.FinishSyncRunWithRetry(newRunID, status, result.DurationSec, totalRecords, successRecords, failedRecords,
+			len(result.FormStats), len(formNames), 0, "")
+	}()
+
+	WriteData(c, http.StatusOK, Run{
+		RunID:    newRunID,
+		Status:   "running",
+		SyncType: "incremental",
 	})
 }
 

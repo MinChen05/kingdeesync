@@ -36,6 +36,8 @@ const SchedulePage: React.FC = () => {
     updating,
     deleteJob,
     deleting,
+    batchAction,
+    batchActioning,
   } = useSchedule();
 
   const enabledCount = jobs.filter((j) => j.enabled).length;
@@ -91,6 +93,14 @@ const SchedulePage: React.FC = () => {
     }
   };
 
+  const handleBatchAction = async (action: string, ids: number[]) => {
+    try {
+      await batchAction(action, ids);
+    } catch (err) {
+      message.error(errorMessage(err) || '批量操作失败');
+    }
+  };
+
   return (
     <div className="space-y-6">
       <PageHeader title="任务调度" />
@@ -118,6 +128,8 @@ const SchedulePage: React.FC = () => {
         creating={creating}
         updating={updating}
         deleting={deleting}
+        onBatchAction={handleBatchAction}
+        batchActioning={batchActioning}
       />
     </div>
   );

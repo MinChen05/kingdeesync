@@ -393,6 +393,7 @@ CREATE TABLE dbo.sal_returnstock (
     [FMaterialTYPE] NVARCHAR(100) NULL,
     [FMaterialSort] NVARCHAR(100) NULL,
     [FRealQty] DECIMAL(18,6) NULL,
+    [FStockNAME] NVARCHAR(200) NULL,
     [FDeliveryDate] DATETIME NULL,
     [FModifyDate] DATETIME NULL,
     [SYNC_TIME] DATETIME NULL
@@ -403,7 +404,6 @@ CREATE TABLE dbo.saleorder (
     [FID] INT NOT NULL,
     [FENTRYID] NVARCHAR(64) NOT NULL,
     [FSEQ] INT NULL,
-    [FBILLTYPENAME] NVARCHAR(100) NULL,
     [FBILLNO] NVARCHAR(80) NULL,
     [FDATE] DATETIME NULL,
     [FCUSTNAME] NVARCHAR(200) NULL,
@@ -417,7 +417,6 @@ CREATE TABLE dbo.saleorder (
     [FQTY] DECIMAL(18,4) NULL,
     [FStockOutQty] DECIMAL(18,4) NULL,
     [FCloseStatus] NVARCHAR(50) NULL,
-    [FMrpCloseStatus] CHAR(1) NULL,
     [FDOCUMENTSTATUS] NVARCHAR(64) NULL,
     [FDeliveryDate] DATETIME NULL,
     [FModifyDate] DATETIME NULL,

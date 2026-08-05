@@ -33,17 +33,17 @@ func NewSQLServerWriter() *SQLServerWriter {
 }
 
 func (w *SQLServerWriter) Upsert(ctx context.Context, tableName string, rows []map[string]interface{},
-	cols []string, pkCols []string, fieldMap map[string]string) (int, error) {
+	cols []string, pkCols []string, fieldMap map[string]string) (UpsertResult, error) {
 
 	if len(rows) == 0 {
-		return 0, nil
+		return UpsertResult{}, nil
 	}
 	if ctx == nil {
 		ctx = context.Background()
 	}
 
 	if db.DB == nil {
-		return 0, fmt.Errorf("database not initialized")
+		return UpsertResult{}, fmt.Errorf("database not initialized")
 	}
 
 	// Check if this is a force-staging table
@@ -59,7 +59,7 @@ func (w *SQLServerWriter) Upsert(ctx context.Context, tableName string, rows []m
 }
 
 func (w *SQLServerWriter) stagingUpsert(ctx context.Context, tableName string, rows []map[string]interface{},
-	cols []string, pkCols []string, fieldMap map[string]string) (int, error) {
+	cols []string, pkCols []string, fieldMap map[string]string) (UpsertResult, error) {
 
 	sqlDB := db.DB
 	hash := sha256.Sum256([]byte(tableName + uuid.New().String()))
@@ -75,24 +75,24 @@ func (w *SQLServerWriter) stagingUpsert(ctx context.Context, tableName string, r
 	// — no separate CREATE INDEX round trip needed.
 	// （原因：内联 CLUSTERED INDEX 一步完成建表+索引，省一次 DDL 往返）
 	if err := w.createStagingTable(ctx, sqlDB, tableName, stagingTable, cols, pkCols); err != nil {
-		return 0, fmt.Errorf("create staging table %s: %w", stagingTable, err)
+		return UpsertResult{}, fmt.Errorf("create staging table %s: %w", stagingTable, err)
 	}
 
 	// Batch insert into staging table
-	totalInserted, err := w.batchInsertStaging(ctx, sqlDB, stagingTable, rows, cols, fieldMap)
+	stagingRows, err := w.batchInsertStaging(ctx, sqlDB, stagingTable, rows, cols, fieldMap)
 	if err != nil {
-		return 0, fmt.Errorf("batch insert staging %s: %w", stagingTable, err)
+		return UpsertResult{}, fmt.Errorf("batch insert staging %s: %w", stagingTable, err)
 	}
 
 	// Build and execute MERGE statement
 	mergeSQL, args := w.buildMergeSQL(tableName, stagingTable, cols, pkCols)
 	if mergeSQL == "" {
-		return 0, fmt.Errorf("cannot build MERGE for %s (no PK columns)", tableName)
+		return UpsertResult{}, fmt.Errorf("cannot build MERGE for %s (no PK columns)", tableName)
 	}
 
 	tx, err := sqlDB.BeginTxx(ctx, nil)
 	if err != nil {
-		return 0, fmt.Errorf("begin transaction: %w", err)
+		return UpsertResult{}, fmt.Errorf("begin transaction: %w", err)
 	}
 	defer func() {
 		if err != nil {
@@ -102,23 +102,45 @@ func (w *SQLServerWriter) stagingUpsert(ctx context.Context, tableName string, r
 
 	result, err := tx.ExecContext(ctx, mergeSQL, args...)
 	if err != nil {
-		return 0, fmt.Errorf("execute MERGE for %s: %w", tableName, err)
+		return UpsertResult{}, fmt.Errorf("execute MERGE for %s: %w", tableName, err)
 	}
 
 	if err := tx.Commit(); err != nil {
-		return 0, fmt.Errorf("commit MERGE for %s: %w", tableName, err)
+		return UpsertResult{}, fmt.Errorf("commit MERGE for %s: %w", tableName, err)
 	}
 
 	affected, _ := result.RowsAffected()
 	log.Printf("[SQLSERVER-MERGE] %s: merged %d rows via staging %s", tableName, affected, stagingTable)
-	return totalInserted, nil
+	// SQL Server MERGE does not expose INSERT vs UPDATE split directly.
+	// Estimate: count PKs that existed before MERGE.
+	// （原因：MERGE 不直接暴露 inserted/updated 拆分，通过 MERGE 前 COUNT 已有 PK 估算）
+	updateEstimate := 0
+	if len(pkCols) > 0 && affected > 0 {
+		pkConds := make([]string, len(pkCols))
+		for i, pk := range pkCols {
+			pkConds[i] = fmt.Sprintf("target.[%s] = source.[%s]", pk, pk)
+		}
+		countSQL := fmt.Sprintf(
+			"SELECT COUNT(*) FROM dbo.%s AS target INNER JOIN dbo.%s AS source ON %s",
+			tableName, stagingTable, strings.Join(pkConds, " AND "),
+		)
+		var count int
+		if err := sqlDB.GetContext(ctx, &count, countSQL); err == nil {
+			updateEstimate = count
+		}
+	}
+	inserted := stagingRows - updateEstimate
+	if inserted < 0 {
+		inserted = 0
+	}
+	return UpsertResult{Inserted: inserted, Updated: updateEstimate, Total: stagingRows}, nil
 }
 
 func (w *SQLServerWriter) directUpsert(ctx context.Context, tableName string, rows []map[string]interface{},
-	cols []string, pkCols []string, fieldMap map[string]string) (int, error) {
+	cols []string, pkCols []string, fieldMap map[string]string) (UpsertResult, error) {
 
 	if db.DB == nil {
-		return 0, fmt.Errorf("database not initialized")
+		return UpsertResult{}, fmt.Errorf("database not initialized")
 	}
 
 	// Build reverse field map
@@ -127,10 +149,11 @@ func (w *SQLServerWriter) directUpsert(ctx context.Context, tableName string, ro
 		colToKingdee[strings.ToUpper(dbCol)] = append(colToKingdee[strings.ToUpper(dbCol)], kField)
 	}
 
-	// Direct upsert without staging table: MERGE ... USING (VALUES ...)
-	// with @pN named parameters (go-mssqldb rejects "?").
-	// （原因：小批量直接写目标表，避免 staging 建表开销；@pN 是 mssql 唯一支持的占位符）
-	totalInserted := 0
+// Direct upsert without staging table: MERGE ... USING (VALUES ...)
+		// with @pN named parameters (go-mssqldb rejects "?").
+		// （原因：小批量直接写目标表，避免 staging 建表开销；@pN 是 mssql 唯一支持的占位符）
+		totalInserted := 0
+		totalUpdated := 0
 	// SQL Server caps parameters at 2100, so at most 100 rows per batch.
 	const batchRows = 100
 
@@ -222,13 +245,39 @@ func (w *SQLServerWriter) directUpsert(ctx context.Context, tableName string, ro
 			args = append(args, vals...)
 		}
 
-		if _, err := db.DB.ExecContext(ctx, builder.String(), args...); err != nil {
-			return totalInserted, fmt.Errorf("direct MERGE for %s: %w", tableName, err)
+result, err := db.DB.ExecContext(ctx, builder.String(), args...)
+			if err != nil {
+				return UpsertResult{}, fmt.Errorf("direct MERGE for %s: %w", tableName, err)
+			}
+			affected, _ := result.RowsAffected()
+			// For direct MERGE, estimate updated rows by checking PK overlap before this batch.
+			// Simple heuristic: count PKs in target that match this batch.
+			batchInserted := len(batch)
+			if len(pkCols) > 0 && affected > 0 {
+				// Build IN clause for first PK column values from this batch
+				firstPk := pkCols[0]
+				var pkVals []interface{}
+				var pkPlaceholders []string
+				for _, row := range batch {
+					v := w.lookupValue(row, firstPk, colToKingdee)
+					pkVals = append(pkVals, v)
+					pkPlaceholders = append(pkPlaceholders, "@p"+fmt.Sprint(len(pkVals)))
+				}
+				countSQL := fmt.Sprintf("SELECT COUNT(*) FROM dbo.%s WHERE [%s] IN (%s)",
+					tableName, firstPk, strings.Join(pkPlaceholders, ", "))
+				var existingCount int
+				if err := db.DB.GetContext(ctx, &existingCount, countSQL, pkVals...); err == nil {
+					totalUpdated += existingCount
+					batchInserted = len(batch) - existingCount
+					if batchInserted < 0 {
+						batchInserted = 0
+					}
+				}
+			}
+			totalInserted += batchInserted
 		}
-		totalInserted += len(batch)
-	}
 
-	return totalInserted, nil
+		return UpsertResult{Inserted: totalInserted, Updated: totalUpdated, Total: len(rows)}, nil
 }
 
 func (w *SQLServerWriter) createStagingTable(ctx context.Context, sqlDB *sqlx.DB,

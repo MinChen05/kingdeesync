@@ -6,9 +6,9 @@ import {
 import { Button, Popconfirm, Space, Tag } from 'antd';
 import type { ColumnsType } from 'antd/es/table';
 import React from 'react';
+import { formatCron } from '../cron';
 import type { ScheduleJob } from '../types';
 import { parseForms } from '../types';
-import { formatCron } from '../cron';
 
 interface JobColumnsDeps {
   onEdit: (job: ScheduleJob) => void;
@@ -120,5 +120,5 @@ const useJobColumns = ({
   ];
 };
 
-export { useJobColumns };
 export type { JobColumnsDeps };
+export { useJobColumns };

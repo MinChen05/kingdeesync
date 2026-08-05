@@ -55,6 +55,7 @@ type WindowFormSummary struct {
 	TableName string `json:"table_name"`
 	Fetched   int    `json:"fetched"`
 	Inserted  int    `json:"inserted"`
+	Updated int    `json:"updated"`
 	Filter    string `json:"filter"`
 	Error     string `json:"error,omitempty"`
 }
@@ -156,7 +157,7 @@ func (r *WindowRunner) SyncManifestRows(ctx context.Context, mapping WindowTable
 	fetched := len(result.Rows)
 
 	// 5. 写入目标库（空结果不写入）
-	var inserted int
+	var inserted UpsertResult
 	if fetched > 0 {
 		if r.Columns == nil {
 			return WindowFormSummary{FormName: mapping.Form, TableName: mapping.TargetTable, Filter: filter, Fetched: fetched, Error: "target column provider is not configured"}, nil
@@ -189,7 +190,8 @@ func (r *WindowRunner) SyncManifestRows(ctx context.Context, mapping WindowTable
 		FormName:  mapping.Form,
 		TableName: mapping.TargetTable,
 		Fetched:   fetched,
-		Inserted:  inserted,
+		Inserted:  inserted.Inserted,
+			Updated: inserted.Updated,
 		Filter:    filter,
 	}, nil
 }

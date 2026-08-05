@@ -24,6 +24,7 @@ import (
 	"github.com/kingdee-sync/go/internal/schedule"
 	"github.com/kingdee-sync/go/internal/syncengine"
 	"github.com/kingdee-sync/go/internal/task"
+	"github.com/kingdee-sync/go/internal/webhook"
 )
 
 func main() {
@@ -95,6 +96,42 @@ func main() {
 	if err := schedule.Init(engine); err != nil {
 		log.Printf("Warning: scheduler init failed: %v", err)
 	}
+
+	// Register webhook completion hook
+	whDispatcher := webhook.New()
+	dingTalkNotifier := webhook.NewDingTalkNotifier(os.Getenv("DINGTALK_WEBHOOK_URL"))
+	schedule.SetRunCompletionHook(func(runID string) {
+		go func() {
+			gdb := gormdb.DB
+			if gdb == nil {
+				return
+			}
+			var run gormdb.SyncRun
+			if err := gdb.Where("run_id = ?", runID).First(&run).Error; err != nil {
+				return
+			}
+
+			// Generic webhooks
+			var webhooks []gormdb.WebhookConfig
+			gdb.Where("enabled = ?", true).Find(&webhooks)
+			for _, wh := range webhooks {
+				switch run.Status {
+				case "success":
+					whDispatcher.FireCompleted(wh.URL, runID, run.DurationSeconds)
+				case "failed", "stopped", "abnormal_exit":
+					whDispatcher.FireFailed(wh.URL, runID, run.ErrorMessage, run.DurationSeconds)
+				}
+			}
+
+			// DingTalk notification
+			switch run.Status {
+			case "success":
+				dingTalkNotifier.OnCompleted(runID, run.DurationSeconds, int(run.FormCount))
+			case "failed", "stopped", "abnormal_exit":
+				dingTalkNotifier.OnFailed(runID, run.ErrorMessage, run.DurationSeconds)
+			}
+		}()
+	})
 
 	// Start Kingdee session keepalive
 	keepAliveClient := kind.NewKingdeeClient()

@@ -102,8 +102,11 @@ func AutoMigrate() error {
 		&SnapshotMeta{},
 		&OrphanDeleteApproval{},
 		&FormSetting{},
-		&FormQueryConfig{},
-	)
+&FormQueryConfig{},
+			&WebhookConfig{},
+			&ConfigSnapshot{},
+			&FormQueryTemplate{},
+		)
 }
 
 func CreateOrphanDeleteApproval(approval *OrphanDeleteApproval) error {

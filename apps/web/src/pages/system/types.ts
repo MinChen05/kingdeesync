@@ -27,6 +27,8 @@ export interface ConfigData {
     auto_sync: boolean;
     table_concurrency: number;
     time_window_days: number;
+    time_window_start: string;
+    time_window_end: string;
     [key: string]: unknown;
   };
   server?: {

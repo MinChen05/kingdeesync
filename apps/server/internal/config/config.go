@@ -2,6 +2,11 @@ package config
 
 import (
 	"bufio"
+	"crypto/aes"
+	"crypto/cipher"
+	"crypto/rand"
+	"crypto/sha256"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -70,13 +75,15 @@ type DatabaseConfig struct {
 
 type Config struct {
 	Kingdee KingdeeConfig `ini:"KINGDEE"`
-	Sync    struct {
-		AutoSync         bool   `ini:"auto_sync"`
-		SyncInterval     int    `ini:"sync_interval"`
-		SyncType         string `ini:"sync_type"`
-		TimeWindowDays   int    `ini:"time_window_days"`
-		TableConcurrency int    `ini:"table_concurrency"`
-	} `ini:"SYNC"`
+Sync    struct {
+			AutoSync         bool   `ini:"auto_sync"`
+			SyncInterval     int    `ini:"sync_interval"`
+			SyncType         string `ini:"sync_type"`
+			TimeWindowDays   int    `ini:"time_window_days"`
+			TimeWindowStart  string `ini:"time_window_start"`  // "HH:MM" format, empty = no limit
+			TimeWindowEnd    string `ini:"time_window_end"`    // "HH:MM" format, empty = no limit
+			TableConcurrency int    `ini:"table_concurrency"`
+		} `ini:"SYNC"`
 	Database DatabaseConfig `ini:"DATABASE"`
 	// Also read from [SQLSERVER] or [MYSQL] sections for compatibility with existing config.local.ini
 	SQLServer DatabaseConfig `ini:"SQLSERVER"`
@@ -146,8 +153,9 @@ func (c *Config) GetEffectiveDatabase() DatabaseConfig {
 }
 
 var (
-	instance *Config
-	mu       sync.RWMutex
+	instance    *Config
+	configPath  string // resolved config file path
+	mu          sync.RWMutex
 )
 
 // fixPasswordsFromFile manually parses the INI file to fix passwords that contain
@@ -228,6 +236,7 @@ func Load(path string) (*Config, error) {
 
 	// Resolve to absolute path
 	path, _ = filepath.Abs(path)
+	configPath = path
 
 	// Config dir is project root (config.local.ini is at project root)
 	configDir := filepath.Dir(path)
@@ -247,6 +256,12 @@ func Load(path string) (*Config, error) {
 	if err := fixPasswordsFromFile(path, cfg); err != nil {
 		fmt.Printf("Warning: failed to fix passwords from config file: %v\n", err)
 	}
+
+	// Decrypt encrypted password fields (原因：INI 中的 ENC: 前缀密码自动解密)
+	cfg.Kingdee.Password = MaybeDecryptPassword(cfg.Kingdee.Password)
+	cfg.Database.Password = MaybeDecryptPassword(cfg.Database.Password)
+	cfg.SQLServer.Password = MaybeDecryptPassword(cfg.SQLServer.Password)
+	cfg.MySQL.Password = MaybeDecryptPassword(cfg.MySQL.Password)
 
 	// Defaults
 	if cfg.Kingdee.Lcid == "" {
@@ -410,6 +425,13 @@ func Get() *Config {
 	return instance
 }
 
+// ConfigPath returns the resolved config file path.
+func ConfigPath() string {
+	mu.RLock()
+	defer mu.RUnlock()
+	return configPath
+}
+
 // Reload reloads the config from file. Called when config is updated via API.
 func Reload(path string) {
 	mu.Lock()
@@ -431,6 +453,12 @@ func Reload(path string) {
 
 	// Fix passwords
 	fixPasswordsFromFile(path, cfg)
+
+	// Decrypt encrypted password fields
+	cfg.Kingdee.Password = MaybeDecryptPassword(cfg.Kingdee.Password)
+	cfg.Database.Password = MaybeDecryptPassword(cfg.Database.Password)
+	cfg.SQLServer.Password = MaybeDecryptPassword(cfg.SQLServer.Password)
+	cfg.MySQL.Password = MaybeDecryptPassword(cfg.MySQL.Password)
 
 	// Reload incremental fields
 	cfg.IncrementalFields = make(map[string]string)
@@ -534,4 +562,91 @@ func watchConfig(path string) {
 			}
 		}
 	}
+}
+
+// ─── Config Encryption ───
+
+// encPrefix marks encrypted values in INI file.
+const encPrefix = "ENC:"
+
+// MaybeDecryptPassword returns the plaintext if the value is encrypted,
+// otherwise returns the value as-is.
+// （原因：INI 中的密码字段以 ENC:[base64] 格式存储，运行时自动解密）
+func MaybeDecryptPassword(v string) string {
+	if !strings.HasPrefix(v, encPrefix) {
+		return v
+	}
+	key := getEncryptionKey()
+	if len(key) == 0 {
+		return strings.TrimPrefix(v, encPrefix) // fallback: return raw
+	}
+	ciphertext, err := base64.StdEncoding.DecodeString(strings.TrimPrefix(v, encPrefix))
+	if err != nil {
+		return v // fallback: return as-is
+	}
+	plaintext, err := aesGCMDecrypt(key, ciphertext)
+	if err != nil {
+		return v // fallback: return as-is
+	}
+	return string(plaintext)
+}
+
+// EncryptPassword encrypts a password for storage in INI.
+func EncryptPassword(plaintext string) string {
+	key := getEncryptionKey()
+	if len(key) == 0 {
+		return plaintext // no key: store as plaintext
+	}
+	ciphertext, err := aesGCMEncrypt(key, []byte(plaintext))
+	if err != nil {
+		return plaintext
+	}
+	return encPrefix + base64.StdEncoding.EncodeToString(ciphertext)
+}
+
+func getEncryptionKey() []byte {
+	// Key from environment variable SYNC_ENCRYPTION_KEY (hex-encoded 32 bytes = 256 bits)
+	hexKey := os.Getenv("SYNC_ENCRYPTION_KEY")
+	if hexKey == "" {
+		return nil
+	}
+	key, err := base64.StdEncoding.DecodeString(hexKey)
+	if err != nil || len(key) != 32 {
+		// Try SHA256 of the raw env value to derive a 32-byte key
+		h := sha256.Sum256([]byte(hexKey))
+		return h[:]
+	}
+	return key
+}
+
+func aesGCMEncrypt(key, plaintext []byte) ([]byte, error) {
+	block, err := aes.NewCipher(key)
+	if err != nil {
+		return nil, err
+	}
+	aesGCM, err := cipher.NewGCM(block)
+	if err != nil {
+		return nil, err
+	}
+	nonce := make([]byte, aesGCM.NonceSize())
+	// Nonce is random; safety: no goroutine parallelism in this function
+	_, _ = rand.Reader.Read(nonce)
+	return aesGCM.Seal(nonce, nonce, plaintext, nil), nil
+}
+
+func aesGCMDecrypt(key, ciphertext []byte) ([]byte, error) {
+	block, err := aes.NewCipher(key)
+	if err != nil {
+		return nil, err
+	}
+	aesGCM, err := cipher.NewGCM(block)
+	if err != nil {
+		return nil, err
+	}
+	nonceSize := aesGCM.NonceSize()
+	if len(ciphertext) < nonceSize {
+		return nil, fmt.Errorf("ciphertext too short")
+	}
+	nonce, ciphertext := ciphertext[:nonceSize], ciphertext[nonceSize:]
+	return aesGCM.Open(nil, nonce, ciphertext, nil)
 }

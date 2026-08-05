@@ -1,7 +1,12 @@
 package v1
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
+	"io"
 	"net/http"
+	"os"
+	"path/filepath"
 	"strconv"
 	"time"
 
@@ -21,6 +26,18 @@ func initSystemRoutes(group *gin.RouterGroup) {
 	group.GET("/system/version", getVersion)
 	group.POST("/system/archive", archiveSystem)
 	group.GET("/logs", listLogs)
+	// Webhook
+	group.GET("/webhooks", listWebhooks)
+	group.POST("/webhooks", createWebhook)
+	group.DELETE("/webhooks/:id", deleteWebhook)
+	// Config snapshots
+	group.GET("/config/snapshots", listConfigSnapshots)
+	group.POST("/config/snapshots", createConfigSnapshot)
+	group.POST("/config/snapshots/:id/rollback", rollbackConfigSnapshot)
+	// Form templates
+	group.GET("/templates", listFormTemplates)
+	group.POST("/templates", createFormTemplate)
+	group.DELETE("/templates/:id", deleteFormTemplate)
 }
 
 func getDiagnostics(c *gin.Context) {
@@ -234,4 +251,213 @@ func listLogs(c *gin.Context) {
 		"logs":  events,
 		"total": total,
 	})
+}
+
+// ─── Webhook endpoints ───
+
+func listWebhooks(c *gin.Context) {
+	db := gormdb.DB
+	if db == nil {
+		WriteData(c, http.StatusOK, []gin.H{})
+		return
+	}
+	var webhooks []gormdb.WebhookConfig
+	db.Find(&webhooks)
+	WriteData(c, http.StatusOK, webhooks)
+}
+
+func createWebhook(c *gin.Context) {
+	db := gormdb.DB
+	if db == nil {
+		WriteProblem(c, http.StatusServiceUnavailable, Problem{Code: "INTERNAL_ERROR", Message: "database not initialized"})
+		return
+	}
+	var req struct {
+		URL     string `json:"url" binding:"required"`
+		Events  string `json:"events"`
+		Enabled *bool  `json:"enabled"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		WriteProblem(c, http.StatusBadRequest, Problem{Code: "INVALID_REQUEST", Message: err.Error()})
+		return
+	}
+	wh := gormdb.WebhookConfig{
+		URL:     req.URL,
+		Events:  req.Events,
+		Enabled: req.Enabled == nil || *req.Enabled,
+	}
+	if err := db.Create(&wh).Error; err != nil {
+		WriteProblem(c, http.StatusInternalServerError, Problem{Code: "INTERNAL_ERROR", Message: "failed to create webhook"})
+		return
+	}
+	WriteData(c, http.StatusCreated, wh)
+}
+
+func deleteWebhook(c *gin.Context) {
+	db := gormdb.DB
+	if db == nil {
+		WriteProblem(c, http.StatusServiceUnavailable, Problem{Code: "INTERNAL_ERROR", Message: "database not initialized"})
+		return
+	}
+	id := c.Param("id")
+	if err := db.Delete(&gormdb.WebhookConfig{}, id).Error; err != nil {
+		WriteProblem(c, http.StatusInternalServerError, Problem{Code: "INTERNAL_ERROR", Message: "failed to delete webhook"})
+		return
+	}
+	WriteData(c, http.StatusOK, gin.H{"message": "webhook deleted"})
+}
+
+// ─── Config Snapshot endpoints ───
+
+func listConfigSnapshots(c *gin.Context) {
+	db := gormdb.DB
+	if db == nil {
+		WriteData(c, http.StatusOK, []gin.H{})
+		return
+	}
+	var snapshots []gormdb.ConfigSnapshot
+	db.Order("created_at DESC").Limit(50).Find(&snapshots)
+	WriteData(c, http.StatusOK, snapshots)
+}
+
+func createConfigSnapshot(c *gin.Context) {
+	db := gormdb.DB
+	if db == nil {
+		WriteProblem(c, http.StatusServiceUnavailable, Problem{Code: "INTERNAL_ERROR", Message: "database not initialized"})
+		return
+	}
+
+	var req struct {
+		Labels string `json:"labels"`
+	}
+	_ = c.ShouldBindJSON(&req)
+
+	// Read current config files
+	iniPath := config.ConfigPath()
+	iniContent, _ := os.ReadFile(iniPath)
+	jsonPath := filepath.Join(filepath.Dir(iniPath), "form-queries.json")
+	jsonContent, _ := os.ReadFile(jsonPath)
+
+	hash := sha256.Sum256(append(iniContent, jsonContent...))
+	hashHex := hex.EncodeToString(hash[:])
+
+	snap := gormdb.ConfigSnapshot{
+		ConfigHash: hashHex,
+		IniContent: string(iniContent),
+		JsonConfig: string(jsonContent),
+		Labels:     req.Labels,
+	}
+	if err := db.Create(&snap).Error; err != nil {
+		WriteProblem(c, http.StatusInternalServerError, Problem{Code: "INTERNAL_ERROR", Message: "failed to create snapshot"})
+		return
+	}
+	WriteData(c, http.StatusCreated, snap)
+}
+
+func rollbackConfigSnapshot(c *gin.Context) {
+	db := gormdb.DB
+	if db == nil {
+		WriteProblem(c, http.StatusServiceUnavailable, Problem{Code: "INTERNAL_ERROR", Message: "database not initialized"})
+		return
+	}
+
+	id := c.Param("id")
+	var snap gormdb.ConfigSnapshot
+	if err := db.First(&snap, id).Error; err != nil {
+		WriteProblem(c, http.StatusNotFound, Problem{Code: "SNAPSHOT_NOT_FOUND", Message: "snapshot not found"})
+		return
+	}
+
+	// Write config files back
+	iniPath := config.ConfigPath()
+	if iniPath == "" {
+		WriteProblem(c, http.StatusInternalServerError, Problem{Code: "INTERNAL_ERROR", Message: "config path not found"})
+		return
+	}
+
+	if err := os.WriteFile(iniPath, []byte(snap.IniContent), 0644); err != nil {
+		WriteProblem(c, http.StatusInternalServerError, Problem{Code: "INTERNAL_ERROR", Message: "failed to write config: " + err.Error()})
+		return
+	}
+
+	if snap.JsonConfig != "" {
+		jsonPath := filepath.Join(filepath.Dir(iniPath), "form-queries.json")
+		if err := os.WriteFile(jsonPath, []byte(snap.JsonConfig), 0644); err != nil {
+			// Rollback INI on failure
+			_ = os.WriteFile(iniPath, []byte(""), 0644)
+			WriteProblem(c, http.StatusInternalServerError, Problem{Code: "INTERNAL_ERROR", Message: "failed to write form-queries: " + err.Error()})
+			return
+		}
+	}
+
+	// Reload config in memory
+	config.Reload(iniPath)
+
+	WriteData(c, http.StatusOK, gin.H{"message": "configuration rolled back to snapshot " + id})
+}
+
+// fileHash computes sha256 hex of a file.
+func fileHash(path string) string {
+	f, err := os.Open(path)
+	if err != nil {
+		return ""
+	}
+	defer f.Close()
+	h := sha256.New()
+	io.Copy(h, f)
+	return hex.EncodeToString(h.Sum(nil))
+}
+
+// ─── Form Template endpoints ───
+
+func listFormTemplates(c *gin.Context) {
+	db := gormdb.DB
+	if db == nil {
+		WriteData(c, http.StatusOK, []gin.H{})
+		return
+	}
+	var templates []gormdb.FormQueryTemplate
+	db.Find(&templates)
+	WriteData(c, http.StatusOK, templates)
+}
+
+func createFormTemplate(c *gin.Context) {
+	db := gormdb.DB
+	if db == nil {
+		WriteProblem(c, http.StatusServiceUnavailable, Problem{Code: "INTERNAL_ERROR", Message: "database not initialized"})
+		return
+	}
+	var req struct {
+		Name        string `json:"name" binding:"required"`
+		Description string `json:"description"`
+		Queries     string `json:"queries" binding:"required"` // JSON array
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		WriteProblem(c, http.StatusBadRequest, Problem{Code: "INVALID_REQUEST", Message: err.Error()})
+		return
+	}
+	tmpl := gormdb.FormQueryTemplate{
+		Name:        req.Name,
+		Description: req.Description,
+		Queries:     req.Queries,
+	}
+	if err := db.Create(&tmpl).Error; err != nil {
+		WriteProblem(c, http.StatusInternalServerError, Problem{Code: "INTERNAL_ERROR", Message: "failed to create template"})
+		return
+	}
+	WriteData(c, http.StatusCreated, tmpl)
+}
+
+func deleteFormTemplate(c *gin.Context) {
+	db := gormdb.DB
+	if db == nil {
+		WriteProblem(c, http.StatusServiceUnavailable, Problem{Code: "INTERNAL_ERROR", Message: "database not initialized"})
+		return
+	}
+	id := c.Param("id")
+	if err := db.Delete(&gormdb.FormQueryTemplate{}, id).Error; err != nil {
+		WriteProblem(c, http.StatusInternalServerError, Problem{Code: "INTERNAL_ERROR", Message: "failed to delete template"})
+		return
+	}
+	WriteData(c, http.StatusOK, gin.H{"message": "template deleted"})
 }

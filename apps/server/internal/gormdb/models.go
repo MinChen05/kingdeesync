@@ -176,3 +176,39 @@ type FormQueryConfig struct {
 }
 
 func (FormQueryConfig) TableName() string { return "go_form_queries" }
+
+// WebhookConfig stores webhook endpoint configuration.
+type WebhookConfig struct {
+	ID        uint      `gorm:"primaryKey" json:"id"`
+	URL       string    `gorm:"type:varchar(512);not null" json:"url"`
+	Events    string    `gorm:"type:varchar(128)" json:"events"` // comma-separated: completed,failed
+	Enabled   bool      `gorm:"not null;default:true" json:"enabled"`
+	CreatedAt time.Time `gorm:"autoCreateTime" json:"created_at"`
+	UpdatedAt time.Time `gorm:"autoUpdateTime" json:"updated_at"`
+}
+
+func (WebhookConfig) TableName() string { return "go_webhook_configs" }
+
+// ConfigSnapshot stores a point-in-time snapshot of the system configuration.
+type ConfigSnapshot struct {
+	ID         uint      `gorm:"primaryKey" json:"id"`
+	ConfigHash string    `gorm:"type:varchar(64);not null;index" json:"config_hash"`
+	IniContent string    `gorm:"type:text" json:"ini_content"`
+	JsonConfig string    `gorm:"type:text" json:"json_config"` // form-queries JSON
+	Labels     string    `gorm:"type:varchar(256)" json:"labels"` // free-form labels
+	CreatedAt  time.Time `gorm:"autoCreateTime;index" json:"created_at"`
+}
+
+func (ConfigSnapshot) TableName() string { return "go_config_snapshots" }
+
+// FormQueryTemplate stores a reusable form query configuration template.
+type FormQueryTemplate struct {
+	ID          uint      `gorm:"primaryKey" json:"id"`
+	Name        string    `gorm:"type:varchar(128);not null" json:"name"`
+	Description string    `gorm:"type:varchar(256)" json:"description"`
+	Queries     string    `gorm:"type:text;not null" json:"queries"` // JSON array of FormQuery
+	CreatedAt   time.Time `gorm:"autoCreateTime" json:"created_at"`
+	UpdatedAt   time.Time `gorm:"autoUpdateTime" json:"updated_at"`
+}
+
+func (FormQueryTemplate) TableName() string { return "go_form_templates" }

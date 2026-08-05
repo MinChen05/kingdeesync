@@ -170,8 +170,8 @@ type recoveryTestWriter struct {
 	deleteCalls int
 }
 
-func (w *recoveryTestWriter) Upsert(context.Context, string, []map[string]interface{}, []string, []string, map[string]string) (int, error) {
-	return 0, nil
+func (w *recoveryTestWriter) Upsert(context.Context, string, []map[string]interface{}, []string, []string, map[string]string) (UpsertResult, error) {
+	return UpsertResult{}, nil
 }
 func (w *recoveryTestWriter) DeleteOrphaned(context.Context, string, []map[string]interface{}, []string) (int, error) {
 	w.mu.Lock()
@@ -197,8 +197,8 @@ func TestRecoveryUsesCheckpointPositionClearsAfterWriteAndSkipsOrphanDelete(t *t
 		gotStart = start
 		return &kind.QueryResult{Rows: []map[string]interface{}{{"FID": "1"}}}, nil
 	}
-	engine.writeRowsFunc = func(context.Context, string, []map[string]interface{}, []string, map[string]string) (int, error) {
-		return 1, nil
+	engine.writeRowsFunc = func(context.Context, string, []map[string]interface{}, []string, map[string]string) (UpsertResult, error) {
+		return UpsertResult{Inserted: 1, Total: 1}, nil
 	}
 	plan, err := engine.PrepareRecovery(parent.RunID, false)
 	if err != nil {
@@ -250,8 +250,8 @@ func TestRecoveryFailureKeepsCheckpointForRetry(t *testing.T) {
 	engine.fetchRows = func(context.Context, string, int) (*kind.QueryResult, error) {
 		return &kind.QueryResult{Rows: []map[string]interface{}{{"FID": "1"}}}, nil
 	}
-	engine.writeRowsFunc = func(context.Context, string, []map[string]interface{}, []string, map[string]string) (int, error) {
-		return 0, fmt.Errorf("fake Doris write failed")
+	engine.writeRowsFunc = func(context.Context, string, []map[string]interface{}, []string, map[string]string) (UpsertResult, error) {
+		return UpsertResult{}, fmt.Errorf("fake Doris write failed")
 	}
 	plan, err := engine.PrepareRecovery(parent.RunID, false)
 	if err != nil {
@@ -298,8 +298,8 @@ func TestRecoveryIdentityFailureFailsFormAndSkipsOrphanDelete(t *testing.T) {
 	engine.fetchRows = func(context.Context, string, int) (*kind.QueryResult, error) {
 		return &kind.QueryResult{Rows: []map[string]interface{}{{"FID": "1"}}}, nil
 	}
-	engine.writeRowsFunc = func(context.Context, string, []map[string]interface{}, []string, map[string]string) (int, error) {
-		return 1, nil
+	engine.writeRowsFunc = func(context.Context, string, []map[string]interface{}, []string, map[string]string) (UpsertResult, error) {
+		return UpsertResult{Inserted: 1, Total: 1}, nil
 	}
 	plan, err := engine.PrepareRecovery(parent.RunID, false)
 	if err != nil {
@@ -336,14 +336,14 @@ func TestGracefulStopWaitsForSubmittedWrite(t *testing.T) {
 	writeStarted := make(chan struct{})
 	releaseWrite := make(chan struct{})
 	writerCanceled := make(chan struct{})
-	engine.writeRowsFunc = func(ctx context.Context, _ string, _ []map[string]interface{}, _ []string, _ map[string]string) (int, error) {
+	engine.writeRowsFunc = func(ctx context.Context, _ string, _ []map[string]interface{}, _ []string, _ map[string]string) (UpsertResult, error) {
 		close(writeStarted)
 		select {
 		case <-releaseWrite:
-			return 1, nil
+			return UpsertResult{Inserted: 1, Total: 1}, nil
 		case <-ctx.Done():
 			close(writerCanceled)
-			return 0, ctx.Err()
+			return UpsertResult{}, ctx.Err()
 		}
 	}
 	plan, err := engine.PrepareRecovery(parent.RunID, false)
@@ -403,10 +403,10 @@ func TestFullRunGracefulStopSkipsOrphanDeleteAndFinishesStopped(t *testing.T) {
 	}
 	writeStarted := make(chan struct{})
 	releaseWrite := make(chan struct{})
-	engine.writeRowsFunc = func(context.Context, string, []map[string]interface{}, []string, map[string]string) (int, error) {
+	engine.writeRowsFunc = func(context.Context, string, []map[string]interface{}, []string, map[string]string) (UpsertResult, error) {
 		close(writeStarted)
 		<-releaseWrite
-		return 1, nil
+		return UpsertResult{Inserted: 1, Total: 1}, nil
 	}
 	if err := engine.PrepareRun("full-graceful-stop", false); err != nil {
 		t.Fatal(err)
@@ -494,14 +494,14 @@ func TestGracefulStopTimeoutCancelsAndKeepsCheckpoint(t *testing.T) {
 	}
 	writeStarted := make(chan struct{})
 	writeCanceled := make(chan struct{})
-	engine.writeRowsFunc = func(ctx context.Context, _ string, _ []map[string]interface{}, _ []string, _ map[string]string) (int, error) {
+	engine.writeRowsFunc = func(ctx context.Context, _ string, _ []map[string]interface{}, _ []string, _ map[string]string) (UpsertResult, error) {
 		close(writeStarted)
 		select {
 		case <-ctx.Done():
 			close(writeCanceled)
-			return 0, ctx.Err()
+			return UpsertResult{}, ctx.Err()
 		case <-time.After(time.Second):
-			return 1, nil
+			return UpsertResult{Inserted: 1, Total: 1}, nil
 		}
 	}
 	plan, err := engine.PrepareRecovery(parent.RunID, false)

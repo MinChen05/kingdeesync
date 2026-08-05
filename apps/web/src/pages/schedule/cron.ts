@@ -17,7 +17,15 @@ export interface CronLabel {
 
 // ---------- 常量 ----------
 
-const DAY_NAMES = ['周日', '周一', '周二', '周三', '周四', '周五', '周六'] as const;
+const DAY_NAMES = [
+  '周日',
+  '周一',
+  '周二',
+  '周三',
+  '周四',
+  '周五',
+  '周六',
+] as const;
 
 /** 内置预设（按使用频率排序） */
 const PRESETS: CronLabel[] = [
@@ -74,11 +82,21 @@ export function chineseToCron(text: string): string | null {
   }
 
   // "每周X" 或 "每周X HH:MM"
-  const weekly = t.match(/^每(周|星期)([日零一二三四五六七天])\s*(?:(\d{1,2}):?(\d{0,2}))?$/);
+  const weekly = t.match(
+    /^每(周|星期)([日零一二三四五六七天])\s*(?:(\d{1,2}):?(\d{0,2}))?$/,
+  );
   if (weekly) {
     const dayChar = weekly[2];
     const dayMap: Record<string, number> = {
-      日: 0, 零: 0, 一: 1, 二: 2, 三: 3, 四: 4, 五: 5, 六: 6, 天: 0,
+      日: 0,
+      零: 0,
+      一: 1,
+      二: 2,
+      三: 3,
+      四: 4,
+      五: 5,
+      六: 6,
+      天: 0,
     };
     const d = dayMap[dayChar];
     const h = weekly[3] ? parseInt(weekly[3], 10) : 0;
@@ -107,7 +125,15 @@ function parseDow(dow: string): string | null {
   if (range) {
     const from = parseInt(range[1], 10);
     const to = parseInt(range[2], 10);
-    if (!isNaN(from) && !isNaN(to) && from >= 0 && from <= 7 && to >= 0 && to <= 7 && from < to) {
+    if (
+      !isNaN(from) &&
+      !isNaN(to) &&
+      from >= 0 &&
+      from <= 7 &&
+      to >= 0 &&
+      to <= 7 &&
+      from < to
+    ) {
       const f = from === 7 ? 0 : from;
       const t = to === 7 ? 0 : to;
       return `${DAY_NAMES[f]}至${DAY_NAMES[t]}`;
@@ -116,14 +142,19 @@ function parseDow(dow: string): string | null {
 
   // 逗号分隔: 1,3,5 → 周一、周三、周五
   const list = dow.split(',');
-  if (list.length > 1 && list.every((d) => {
-    const n = parseInt(d, 10);
-    return !isNaN(n) && n >= 0 && n <= 7;
-  })) {
-    return list.map((d) => {
+  if (
+    list.length > 1 &&
+    list.every((d) => {
       const n = parseInt(d, 10);
-      return DAY_NAMES[n === 7 ? 0 : n];
-    }).join('、');
+      return !isNaN(n) && n >= 0 && n <= 7;
+    })
+  ) {
+    return list
+      .map((d) => {
+        const n = parseInt(d, 10);
+        return DAY_NAMES[n === 7 ? 0 : n];
+      })
+      .join('、');
   }
 
   return null;
@@ -141,7 +172,14 @@ export function cronToChinese(cron: string): string | null {
 
   // 每 N 分钟模式: 0 */N * * * *
   const slashStar = '*' + '/';
-  if (sec === '0' && min.startsWith(slashStar) && hour === '*' && dom === '*' && month === '*' && dow === '*') {
+  if (
+    sec === '0' &&
+    min.startsWith(slashStar) &&
+    hour === '*' &&
+    dom === '*' &&
+    month === '*' &&
+    dow === '*'
+  ) {
     const n = parseInt(min.slice(2), 10);
     if (n > 0 && n <= 59) {
       return `每 ${n} 分钟`;
@@ -149,12 +187,26 @@ export function cronToChinese(cron: string): string | null {
   }
 
   // 每小时模式: 0 0 * * * *
-  if (sec === '0' && min === '0' && hour === '*' && dom === '*' && month === '*' && dow === '*') {
+  if (
+    sec === '0' &&
+    min === '0' &&
+    hour === '*' &&
+    dom === '*' &&
+    month === '*' &&
+    dow === '*'
+  ) {
     return '每小时';
   }
 
   // 每 N 小时模式: 0 0 */N * * * (dow = *)
-  if (sec === '0' && min === '0' && hour.startsWith(slashStar) && dom === '*' && month === '*' && dow === '*') {
+  if (
+    sec === '0' &&
+    min === '0' &&
+    hour.startsWith(slashStar) &&
+    dom === '*' &&
+    month === '*' &&
+    dow === '*'
+  ) {
     const n = parseInt(hour.slice(2), 10);
     if (n > 0 && n <= 23) {
       return `每 ${n} 小时`;
@@ -185,7 +237,15 @@ export function cronToChinese(cron: string): string | null {
     }
 
     // 固定时间 + 周范围/单值: 0 0 2 * * 0
-    if (!isNaN(h) && !isNaN(m) && h >= 0 && h <= 23 && m >= 0 && m <= 59 && dowLabel) {
+    if (
+      !isNaN(h) &&
+      !isNaN(m) &&
+      h >= 0 &&
+      h <= 23 &&
+      m >= 0 &&
+      m <= 59 &&
+      dowLabel
+    ) {
       return `每${dowLabel} ${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
     }
   }

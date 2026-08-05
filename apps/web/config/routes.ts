@@ -10,6 +10,12 @@ export default [
     component: './Overview',
   },
   {
+    path: '/dashboard',
+    name: 'dashboard',
+    icon: 'desktop',
+    component: './Overview/Dashboard',
+  },
+  {
     path: '/sync',
     name: 'sync',
     icon: 'sync',

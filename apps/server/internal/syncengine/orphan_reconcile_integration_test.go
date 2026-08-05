@@ -43,8 +43,8 @@ func TestSQLServerOrphanReconciliationDeletesOnlyTargetOnlyKey(t *testing.T) {
 			"FID": id, "FDATE": "2025-01-01 00:00:00", "FVALUE": fmt.Sprintf("value-%d", id),
 		})
 	}
-	if written, err := writer.Upsert(ctx, table, targetRows, []string{"FID", "FDATE", "FVALUE"}, []string{"FID", "FDATE"}, nil); err != nil || written != 101 {
-		t.Fatalf("seed target: written=%d err=%v", written, err)
+if written, err := writer.Upsert(ctx, table, targetRows, []string{"FID", "FDATE", "FVALUE"}, []string{"FID", "FDATE"}, nil); err != nil || written.Total != 101 {
+			t.Fatalf("seed target: written=%d err=%v", written.Total, err)
 	}
 	sourceRows := targetRows[:100]
 	result, err := writer.ReconcileOrphans(ctx, OrphanReconcileInput{

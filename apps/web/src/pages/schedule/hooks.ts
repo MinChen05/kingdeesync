@@ -1,5 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import type { V1Schedule } from '@/services/v1';
 import {
+  batchScheduleAction,
   createSchedule,
   deleteSchedule,
   listSchedules,
@@ -7,7 +9,6 @@ import {
   stopScheduler,
   updateSchedule,
 } from '@/services/v1';
-import type { V1Schedule } from '@/services/v1';
 import type { ScheduleJob, ScheduleJobSubmit, SchedulerStatus } from './types';
 
 /** useSchedule 返回值类型 */
@@ -22,17 +23,14 @@ interface UseScheduleResult {
   pausing: boolean;
   stopScheduler: () => Promise<unknown>;
   stopping: boolean;
-  createJob: (
-    data: ScheduleJobSubmit,
-  ) => Promise<ScheduleJob>;
+  createJob: (data: ScheduleJobSubmit) => Promise<ScheduleJob>;
   creating: boolean;
-  updateJob: (
-    id: number,
-    data: ScheduleJobSubmit,
-  ) => Promise<ScheduleJob>;
+  updateJob: (id: number, data: ScheduleJobSubmit) => Promise<ScheduleJob>;
   updating: boolean;
   deleteJob: (id: number) => Promise<void>;
   deleting: boolean;
+  batchAction: (action: string, ids: number[]) => Promise<void>;
+  batchActioning: boolean;
 }
 
 /**
@@ -88,25 +86,26 @@ export function useSchedule(): UseScheduleResult {
 
   // 更新任务
   const updateReq = useMutation({
-    mutationFn: ({
-      id,
-      data,
-    }: {
-      id: number;
-      data: ScheduleJobSubmit;
-    }) => updateSchedule(id, {
-      name: data.name,
-      cron_expr: data.cron_expr,
-      sync_type: data.sync_type,
-      forms: data.forms.length > 0 ? JSON.stringify(data.forms) : '',
-      enabled: data.enabled,
-    }),
+    mutationFn: ({ id, data }: { id: number; data: ScheduleJobSubmit }) =>
+      updateSchedule(id, {
+        name: data.name,
+        cron_expr: data.cron_expr,
+        sync_type: data.sync_type,
+        forms: data.forms.length > 0 ? JSON.stringify(data.forms) : '',
+        enabled: data.enabled,
+      }),
     onSuccess: invalidateSchedule,
   });
 
   // 删除任务
   const deleteReq = useMutation({
     mutationFn: deleteSchedule,
+    onSuccess: invalidateSchedule,
+  });
+
+  // 批量操作
+  const batchReq = useMutation({
+    mutationFn: batchScheduleAction,
     onSuccess: invalidateSchedule,
   });
 
@@ -131,8 +130,14 @@ export function useSchedule(): UseScheduleResult {
       return toScheduleJob(v1);
     },
     updating: updateReq.isPending,
-    deleteJob: async (id: number) => { await deleteReq.mutateAsync(id); },
+    deleteJob: async (id: number) => {
+      await deleteReq.mutateAsync(id);
+    },
     deleting: deleteReq.isPending,
+    batchAction: async (action: string, ids: number[]) => {
+      await batchReq.mutateAsync({ action, ids });
+    },
+    batchActioning: batchReq.isPending,
   };
 }
 

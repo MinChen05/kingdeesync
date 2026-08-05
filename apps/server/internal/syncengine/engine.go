@@ -95,6 +95,7 @@ type FormStat struct {
 	TableName     string     `json:"table_name"`
 	FetchedCount  int        `json:"fetched_count"`
 	InsertedCount int        `json:"inserted_count"`
+	UpdatedCount  int        `json:"updated_count"`
 	ErrorCount    int        `json:"error_count"`
 	Status        SyncStatus `json:"status"`
 	DurationSec   float64    `json:"duration_seconds"`
@@ -123,7 +124,7 @@ type SyncEngine struct {
 	fetchCancel        context.CancelFunc
 	stopWatcherStarted bool
 	fetchRows          func(context.Context, string, int) (*kind.QueryResult, error)
-	writeRowsFunc      func(context.Context, string, []map[string]interface{}, []string, map[string]string) (int, error)
+	writeRowsFunc      func(context.Context, string, []map[string]interface{}, []string, map[string]string) (UpsertResult, error)
 	formQuery          func(string) (config.FormQuery, bool)
 }
 
@@ -1311,7 +1312,7 @@ func (e *SyncEngine) runSync(ctx context.Context, runID string, forms []string, 
 								log.Printf("[AGGREGATE] %s: %d rows aggregated to %d rows", formName, len(result.Rows), len(writeRows))
 							}
 						}
-						inserted, err := e.writeRowsWithContext(ctx, stat.TableName, writeRows, fieldKeyList, formQuery.FieldMap)
+						upsertRes, err := e.writeRowsWithContext(ctx, stat.TableName, writeRows, fieldKeyList, formQuery.FieldMap)
 						if err != nil {
 							log.Printf("Failed to upsert %s: %v", formName, err)
 							e.logMsg(formName, "ERROR", "写入失败: "+err.Error())
@@ -1325,8 +1326,9 @@ func (e *SyncEngine) runSync(ctx context.Context, runID string, forms []string, 
 							stat.Status = StatusStopped
 							stat.Error = "sync stopped"
 						} else {
-							stat.InsertedCount = inserted
-							e.logMsg(formName, "INFO", fmt.Sprintf("写入完成: %d 条", inserted))
+							stat.InsertedCount = upsertRes.Inserted
+							stat.UpdatedCount = upsertRes.Updated
+							e.logMsg(formName, "INFO", fmt.Sprintf("写入完成: %d 条 (新增 %d, 更新 %d)", upsertRes.Total, upsertRes.Inserted, upsertRes.Updated))
 
 							// Save checkpoint for large tables after successful write
 							if priority == 2 && !dryRun {
@@ -1405,6 +1407,25 @@ func (e *SyncEngine) runSync(ctx context.Context, runID string, forms []string, 
 	}
 	e.logMsg("", "INFO", fmt.Sprintf("总计: %d 个表单, 拉取 %d, 写入 %d, 错误 %d",
 		len(results), totalRecords, totalInserted, totalErrors))
+
+	// Run data verification for successfully synced forms
+	// （原因：同步完成后抽样校验数据一致性，发现"数据对不上"问题）
+	if !dryRun {
+		for _, r := range results {
+			if r.Status != StatusSuccess || r.FetchedCount == 0 {
+				continue
+			}
+			formQuery, _ := e.formQuery(r.FormName)
+			if formQuery.FormID == "" {
+				continue
+			}
+			verResult := e.VerifySamples(ctx, r.TableName, r.FormName, strings.Split(formQuery.FieldKeys, ","), formQuery.FieldMap, 10)
+			if verResult.Mismatched > 0 {
+				e.logMsg(r.FormName, "WARNING", fmt.Sprintf("数据校验发现 %d 条不一致 (抽样 %d)", verResult.Mismatched, verResult.Sampled))
+			}
+		}
+	}
+
 	if failedForms > 0 && successForms == 0 {
 		status = StatusFailed
 	} else if failedForms > 0 {
@@ -1586,15 +1607,16 @@ func (e *SyncEngine) syncCursorForm(ctx, fetchCtx context.Context, runID, formNa
 		stat.FetchedCount += len(result.Rows)
 		if dryRun {
 			stat.InsertedCount += len(result.Rows)
-		} else {
-			inserted, err := e.writeRowsWithContext(ctx, tableName, result.Rows, appendDerivedWriteFields(formName, fieldKeys), formQuery.FieldMap)
-			if err != nil {
-				stat.Status, stat.ErrorCount = StatusFailed, 1
-				stat.Error = fmt.Sprintf("cursor page %d write: inserted=%d err=%v", page, inserted, err)
-				return
+} else {
+				upsertRes, err := e.writeRowsWithContext(ctx, tableName, result.Rows, appendDerivedWriteFields(formName, fieldKeys), formQuery.FieldMap)
+				if err != nil {
+					stat.Status, stat.ErrorCount = StatusFailed, 1
+					stat.Error = fmt.Sprintf("cursor page %d write: total=%d err=%v", page, upsertRes.Total, err)
+					return
+				}
+				stat.InsertedCount += upsertRes.Inserted
+				stat.UpdatedCount += upsertRes.Updated
 			}
-			stat.InsertedCount += inserted
-		}
 		// Accumulate PKs for full-sync orphan cleanup
 		if pkCollector != nil {
 			if err := pkCollector.AddPage(ctx, result.Rows); err != nil {
@@ -1748,26 +1770,26 @@ func accountBalanceStartPeriod(now time.Time, months int) (int, int) {
 
 // writeRows maps Kingdee fields to DB columns and delegates to the configured RowWriter.
 // （原因：将列映射逻辑与具体写入实现解耦，通过 RowWriter 接口支持 SQL Server MERGE）
-func (e *SyncEngine) writeRows(tableName string, rows []map[string]interface{}, fieldKeys []string, fieldMap map[string]string) (int, error) {
+func (e *SyncEngine) writeRows(tableName string, rows []map[string]interface{}, fieldKeys []string, fieldMap map[string]string) (UpsertResult, error) {
 	return e.writeRowsWithContext(context.Background(), tableName, rows, fieldKeys, fieldMap)
 }
 
-func (e *SyncEngine) writeRowsWithContext(ctx context.Context, tableName string, rows []map[string]interface{}, fieldKeys []string, fieldMap map[string]string) (int, error) {
+func (e *SyncEngine) writeRowsWithContext(ctx context.Context, tableName string, rows []map[string]interface{}, fieldKeys []string, fieldMap map[string]string) (UpsertResult, error) {
 	if e.writeRowsFunc != nil {
 		return e.writeRowsFunc(ctx, tableName, rows, fieldKeys, fieldMap)
 	}
 	if db.DB == nil {
-		return 0, fmt.Errorf("database not initialized")
+		return UpsertResult{}, fmt.Errorf("database not initialized")
 	}
 
 	if len(rows) == 0 {
-		return 0, nil
+		return UpsertResult{}, nil
 	}
 
 	// Get PK for this table
 	pkStr := db.GetPrimaryKey(tableName)
 	if pkStr == "" {
-		return 0, fmt.Errorf("no primary key defined for table %s", tableName)
+		return UpsertResult{}, fmt.Errorf("no primary key defined for table %s", tableName)
 	}
 	pkCols := strings.Split(pkStr, ",")
 	for i := range pkCols {
@@ -1777,7 +1799,7 @@ func (e *SyncEngine) writeRowsWithContext(ctx context.Context, tableName string,
 	// Get existing columns in target table
 	existingCols, err := e.getTableColumns(tableName)
 	if err != nil {
-		return 0, fmt.Errorf("failed to get table columns for %s: %w", tableName, err)
+		return UpsertResult{}, fmt.Errorf("failed to get table columns for %s: %w", tableName, err)
 	}
 
 	// Build Kingdee field -> DB column mapping (considering FieldMap config)
@@ -1821,7 +1843,7 @@ func (e *SyncEngine) writeRowsWithContext(ctx context.Context, tableName string,
 	}
 
 	if len(cols) == 0 {
-		return 0, fmt.Errorf("no matching columns between Kingdee fields and table %s", tableName)
+		return UpsertResult{}, fmt.Errorf("no matching columns between Kingdee fields and table %s", tableName)
 	}
 
 	log.Printf("[SYNC-ENGINE] writeRows: table=%s, rows=%d, cols=%d, pkCols=%v", tableName, len(rows), len(cols), pkCols)

@@ -45,11 +45,11 @@ type fakeWriter struct {
 	rows           []map[string]interface{}
 }
 
-func (f *fakeWriter) Upsert(ctx context.Context, tableName string, rows []map[string]interface{}, cols []string, pkCols []string, fieldMap map[string]string) (int, error) {
+func (f *fakeWriter) Upsert(ctx context.Context, tableName string, rows []map[string]interface{}, cols []string, pkCols []string, fieldMap map[string]string) (UpsertResult, error) {
 	f.upsertCalls++
 	f.cols = append([]string(nil), cols...)
 	f.rows = rows
-	return f.upsertReturned, f.upsertErr
+	return UpsertResult{Inserted: f.upsertReturned, Total: f.upsertReturned}, f.upsertErr
 }
 
 func fakeColumns(string) (map[string]string, error) {

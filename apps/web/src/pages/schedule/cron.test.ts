@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { chineseToCron, cronToChinese, formatCron, cronPresets } from './cron';
+import { chineseToCron, cronPresets, cronToChinese, formatCron } from './cron';
 
 describe('chineseToCron', () => {
   it('每 N 分钟', () => {

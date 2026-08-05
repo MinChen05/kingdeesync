@@ -183,8 +183,8 @@ func TestWriteRowsPassesCompositePrimaryKeyToWriter(t *testing.T) {
 	if err != nil {
 		t.Fatalf("writeRows() error = %v", err)
 	}
-	if written != 1 || writer.tableName != "saleorder" {
-		t.Fatalf("writeRows() = (%d, table %q), want one saleorder row", written, writer.tableName)
+if written.Total != 1 || writer.tableName != "saleorder" {
+			t.Fatalf("writeRows() = (%d, table %q), want one saleorder row", written.Total, writer.tableName)
 	}
 	if !reflect.DeepEqual(writer.pkCols, []string{"FID", "FENTRYID"}) {
 		t.Fatalf("writer PK columns = %#v, want ordered composite key", writer.pkCols)
@@ -211,9 +211,9 @@ func TestSyncDataProcessesPriorityGroupsInOrder(t *testing.T) {
 			starts = append(starts, formName)
 			return &kind.QueryResult{Rows: []map[string]interface{}{{"FID": formName}}}, nil
 		},
-		writeRowsFunc: func(_ context.Context, _ string, rows []map[string]interface{}, _ []string, _ map[string]string) (int, error) {
-			return len(rows), nil
-		},
+writeRowsFunc: func(_ context.Context, _ string, rows []map[string]interface{}, _ []string, _ map[string]string) (UpsertResult, error) {
+				return UpsertResult{Inserted: len(rows), Total: len(rows)}, nil
+			},
 	}
 	if err := engine.PrepareRun(runID, true); err != nil {
 		t.Fatal(err)
@@ -264,12 +264,12 @@ type capturingWriter struct {
 	pkCols    []string
 }
 
-func (w *capturingWriter) Upsert(_ context.Context, tableName string, rows []map[string]interface{}, cols []string, pkCols []string, _ map[string]string) (int, error) {
+func (w *capturingWriter) Upsert(_ context.Context, tableName string, rows []map[string]interface{}, cols []string, pkCols []string, _ map[string]string) (UpsertResult, error) {
 	w.tableName = tableName
 	w.rows = rows
 	w.cols = cols
 	w.pkCols = pkCols
-	return len(rows), nil
+	return UpsertResult{Inserted: len(rows), Total: len(rows)}, nil
 }
 
 func (w *capturingWriter) DeleteOrphaned(context.Context, string, []map[string]interface{}, []string) (int, error) {

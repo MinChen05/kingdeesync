@@ -31,7 +31,7 @@
   },
   "销售订单": {
     "FormId": "SAL_SaleOrder",
-    "FieldKeys": "FID,FSaleOrderEntry_FENTRYID,FSaleOrderEntry_FSEQ,FBillTypeID.FName,FBillNo,FDate,FCustId.FName,FSaleOrgId.FName,FCustId.FGROUP,FMaterialId,FMaterialId.FName,FMaterialId.FNumber,FMaterialId.F_ora_Text_qtr,FMaterialId.FBarcode,FMaterialId.FDescription,FQTY,FCloseStatus,FDeliveryDate,FModifyDate,FStockOutQty,FMrpCloseStatus,FDocumentStatus",
+    "FieldKeys": "FID,FSaleOrderEntry_FENTRYID,FSaleOrderEntry_FSEQ,FBillNo,FDate,FCustId.FName,FSaleOrgId.FName,FCustId.FGROUP,FMaterialId,FMaterialId.FName,FMaterialId.FNumber,FMaterialId.F_ora_Text_qtr,FMaterialId.FBarcode,FMaterialId.FDescription,FQTY,FCloseStatus,FDeliveryDate,FModifyDate,FStockOutQty,FDocumentStatus",
     "FilterString": "FSaleOrgId = 171190 and FBillTypeID.FName='标准销售订单' and FMaterialId.FName='电机'",
     "OrderString": "",
     "TopRowCount": 0,
@@ -41,7 +41,6 @@
     "FieldMap": {
       "FSaleOrderEntry_FENTRYID": "FENTRYID",
       "FSaleOrderEntry_FSEQ": "FSEQ",
-      "FBillTypeID.FName": "FBILLTYPENAME",
       "FCustId.FName": "FCUSTNAME",
       "FSaleOrgId.FName": "FSALEORONAME",
       "FCustId.FGROUP": "FCUSTGROUP",
@@ -79,7 +78,7 @@
   },
   "销售退货单": {
     "FormId": "SAL_RETURNSTOCK",
-    "FieldKeys": "FEntity_FENTRYID,FBillNo,FDATE,FRetcustId.FNAME,FRetcustId.FGROUP,FSalesManId.FNAME,F_ora_Assistant1.FDataValue,FRealQty,FMaterialId.FNAME,FMaterialId.FNUMBER,FMaterialId.F_ora_Text_qtr,FMaterialId.FBarcode,FDeliveryDate,FModifyDate",
+    "FieldKeys": "FEntity_FENTRYID,FBillNo,FDATE,FRetcustId.FNAME,FRetcustId.FGROUP,FSalesManId.FNAME,F_ora_Assistant1.FDataValue,FRealQty,FStockId.FNAME,FMaterialId.FNAME,FMaterialId.FNUMBER,FMaterialId.F_ora_Text_qtr,FMaterialId.FBarcode,FDeliveryDate,FModifyDate",
     "FilterString": "FSaleOrgId = '171190' AND FMaterialId.FNAME = '电机' AND FDocumentStatus = 'C'",
     "OrderString": "",
     "TopRowCount": 0,
@@ -96,7 +95,8 @@
       "FMaterialId.FBARCODE": "FMaterialSort",
       "FMaterialId.F_ora_Text_qtr": "FMaterialTYPE",
       "F_ora_Assistant1.FDataValue": "FReturnType",
-      "FMaterialId.FBarcode": "FMaterialSort"
+      "FMaterialId.FBarcode": "FMaterialSort",
+      "FStockId.FNAME": "FStockNAME"
     }
   },
   "预测订单": {

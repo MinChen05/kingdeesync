@@ -4,6 +4,14 @@ import (
 	"context"
 )
 
+// UpsertResult holds the breakdown of upsert outcomes.
+// （原因：SQL Server MERGE 同时完成 INSERT 和 UPDATE，需拆分行级统计供变更审计使用）
+type UpsertResult struct {
+	Inserted int `json:"inserted"`
+	Updated  int `json:"updated"`
+	Total    int `json:"total"`
+}
+
 // RowWriter abstracts the database write path so the sync engine
 // can work with SQL Server or other targets without knowing details.
 // （原因：解耦同步引擎与具体数据库，为 SQL Server 改造提供扩展点）
@@ -16,7 +24,7 @@ type RowWriter interface {
 	// pkCols: primary key column names
 	// fieldMap: mapping from Kingdee field names to DB column names (for value lookup)
 	Upsert(ctx context.Context, tableName string, rows []map[string]interface{},
-		cols []string, pkCols []string, fieldMap map[string]string) (int, error)
+		cols []string, pkCols []string, fieldMap map[string]string) (UpsertResult, error)
 
 	// DeleteOrphaned removes rows that exist in DB but not in the provided Kingdee data.
 	// Used for full sync to keep DB in sync with Kingdee deletions.

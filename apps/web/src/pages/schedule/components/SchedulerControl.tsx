@@ -37,9 +37,19 @@ const SchedulerControl: React.FC<SchedulerControlProps> = ({
 
   return (
     <div className="glass-card" style={{ padding: '20px 24px' }}>
-      <div className="flex items-center justify-between" style={{ flexWrap: 'wrap', gap: 16 }}>
+      <div
+        className="flex items-center justify-between"
+        style={{ flexWrap: 'wrap', gap: 16 }}
+      >
         {/* 左侧：状态 + 指标 */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 32, flexWrap: 'wrap' }}>
+        <div
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: 32,
+            flexWrap: 'wrap',
+          }}
+        >
           {/* 状态指示 */}
           <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
             <div
@@ -59,15 +69,25 @@ const SchedulerControl: React.FC<SchedulerControlProps> = ({
           {/* 指标 */}
           <div style={{ display: 'flex', alignItems: 'center', gap: 24 }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-              <ScheduleOutlined style={{ fontSize: 14, color: 'var(--tk-dim)' }} />
+              <ScheduleOutlined
+                style={{ fontSize: 14, color: 'var(--tk-dim)' }}
+              />
               <span style={{ fontSize: 13, color: 'var(--tk-dim)' }}>
-                全部 <span style={{ color: '#e2e8f0', fontWeight: 600 }}>{jobCount}</span>
+                全部{' '}
+                <span style={{ color: '#e2e8f0', fontWeight: 600 }}>
+                  {jobCount}
+                </span>
               </span>
             </div>
             <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-              <ClockCircleOutlined style={{ fontSize: 14, color: 'var(--tk-dim)' }} />
+              <ClockCircleOutlined
+                style={{ fontSize: 14, color: 'var(--tk-dim)' }}
+              />
               <span style={{ fontSize: 13, color: 'var(--tk-dim)' }}>
-                启用 <span style={{ color: '#e2e8f0', fontWeight: 600 }}>{enabledCount}</span>
+                启用{' '}
+                <span style={{ color: '#e2e8f0', fontWeight: 600 }}>
+                  {enabledCount}
+                </span>
               </span>
             </div>
           </div>

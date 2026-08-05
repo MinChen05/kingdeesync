@@ -306,6 +306,14 @@ export async function stopScheduler() {
   return v1Request<unknown>('/api/v1/scheduler/stop', { method: 'POST' });
 }
 
+export async function batchScheduleAction(data: { action: string; ids: number[] }) {
+  return v1Request<unknown>('/api/v1/schedules/batch', { method: 'POST', data });
+}
+
+export async function retryFailedForms(runId: string) {
+  return v1Request<{ run_id: string }>('/api/v1/runs/' + runId + '/retry-failed', { method: 'POST' });
+}
+
 // ─── Resources ───
 
 export async function listForms() {

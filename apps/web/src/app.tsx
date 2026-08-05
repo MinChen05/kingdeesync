@@ -63,6 +63,7 @@ export async function getInitialState(): Promise<{
 /** 菜单名称映射（原因：避免 ProLayout 国际化报错，name 用英文 key，这里映射中文显示） */
 const menuNameMap: Record<string, string> = {
   overview: '系统概览',
+  dashboard: '数据看板',
   sync: '同步管理',
   schedule: '任务调度',
   data: '数据配置',

@@ -63,6 +63,12 @@ func main() {
 		}
 		log.Println("[GORM] Auto-migration completed")
 
+		// Recover stale running runs (原因：上次 panic 后未正确更新状态，启动时自动修复)
+		stale, _ := gormdb.RecoverStaleRunningRuns()
+		if stale > 0 {
+			log.Printf("[INIT] Recovered %d stale running runs to failed status", stale)
+		}
+
 		// Seed form queries from form-queries.json if DB is empty
 		if n := gormdb.MigrateFormQueriesFromJSON(); n > 0 {
 			log.Printf("[GORM] Seeded %d form queries from JSON", n)

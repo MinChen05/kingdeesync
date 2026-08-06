@@ -672,3 +672,20 @@ func MigrateFormQueriesFromJSON() int {
 	}
 	return 0
 }
+
+// RecoverStaleRunningRuns marks runs that have been in "running" status for
+// more than 3 hours as failed. This recovers from panics that did not
+// properly update the run status before crashing.
+// （原因：panic 后未正确更新数据库状态，下次启动时自动修复）
+func RecoverStaleRunningRuns() (int, error) {
+	if DB == nil {
+		return 0, nil
+	}
+	result := DB.Model(&SyncRun{}).
+		Where("status = ? AND started_at < ?", "running", time.Now().Add(-3*time.Hour)).
+		Updates(map[string]interface{}{
+			"status":        "failed",
+			"error_message": "recovered from stale running state on server restart",
+		})
+	return int(result.RowsAffected), result.Error
+}

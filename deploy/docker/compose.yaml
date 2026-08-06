@@ -1,3 +1,5 @@
+# 参考用：实际的部署使用 Podman Pod 模式（deploy/scripts/build-and-run.sh），
+# 以消除 DNS 解析依赖。此文件保留用于文档参考和 docker compose 兼容性。
 services:
   kingdee-sync-api:
     build:
@@ -10,11 +12,8 @@ services:
     environment:
       LISTEN_ADDR: 0.0.0.0
       LISTEN_PORT: "8000"
-      # SQLite 状态库指向持久卷，容器重建不丢同步历史/调度配置
-      # （原因：之前 go_state.db 在容器内，重建即清空全部历史记录）
       GORM_DB_PATH: /app/state/go_state.db
     volumes:
-      # 相对路径基于 compose 文件所在目录（deploy/docker/），上溯到仓库根
       - ../../config.local.ini:/app/config.local.ini:ro,Z
       - ../../packages/sync-config:/app/packages/sync-config:ro,Z
       - ../../.run/logs:/app/logs:Z
@@ -25,7 +24,6 @@ services:
       timeout: 5s
       retries: 3
       start_period: 15s
-    networks: [kingdee-sync-net]
 
   kingdee-sync-web:
     build:
@@ -36,7 +34,6 @@ services:
     depends_on: [kingdee-sync-api]
     ports:
       - "8001:80"
-    networks: [kingdee-sync-net]
 
 networks:
   kingdee-sync-net:

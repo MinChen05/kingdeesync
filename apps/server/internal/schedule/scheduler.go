@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
+	"runtime"
 	"strconv"
 	"strings"
 	"sync"
@@ -279,7 +280,10 @@ func runJob(job *gormdb.ScheduleJob, engine *syncengine.SyncEngine) {
 		defer close(done)
 		defer func() {
 			if r := recover(); r != nil {
-				log.Printf("[Schedule] Panic in job %s: %v", job.Name, r)
+				const size = 64 << 10
+				buf := make([]byte, size)
+				n := runtime.Stack(buf, true)
+				log.Printf("[Schedule] Panic in job %s: %v\n%s", job.Name, r, buf[:n])
 				failSyncRun(syncRun, fmt.Sprintf("panic: %v", r))
 				failScheduleRun(&scheduleRun, fmt.Sprintf("panic: %v", r))
 			}

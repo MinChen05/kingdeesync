@@ -1410,7 +1410,7 @@ func (e *SyncEngine) runSync(ctx context.Context, runID string, forms []string, 
 
 	// Run data verification for successfully synced forms
 	// （原因：同步完成后抽样校验数据一致性，发现"数据对不上"问题）
-	if !dryRun {
+	if !dryRun && e.formQuery != nil {
 		for _, r := range results {
 			if r.Status != StatusSuccess || r.FetchedCount == 0 {
 				continue

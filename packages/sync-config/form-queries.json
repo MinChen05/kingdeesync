@@ -382,8 +382,8 @@
   },
   "应收单": {
     "FormId": "AR_receivable",
-    "FieldKeys": "FID,FEntityDetail_FENTRYID,FEntityDetail_FSEQ,FBillTypeID.FNAME,FBillNo,FDATE,FCUSTOMERID.FNAME,FSETACCOUNTTYPE,F_ora_BaseProperty1,FSourceBillNo,FMATERIALID.FNUMBER,FMATERIALID.FNAME,FTaxPrice,FPriceQty,FALLAMOUNTFOR_D,FModifyDate",
-    "FilterString": "FSetAccountType = 3 and FSALEORGID.FNAME='台州市金宇机电有限公司'",
+    "FieldKeys": "FID,FEntityDetail_FENTRYID,FEntityDetail_FSEQ,FBillTypeID.FNAME,FBillNo,FDATE,FCUSTOMERID.FNAME,FSETACCOUNTTYPE,F_ora_BaseProperty1,FMATERIALID.FNUMBER,FMATERIALID.FNAME,FTaxPrice,FPriceQty,FALLAMOUNTFOR_D,FModifyDate,FSourceBillNo,FSaleOrgId",
+    "FilterString": "FSetAccountType = 3 and FSALEORGID.FNAME='台州市金宇机电有限公司' and FDocumentStatus = 'C' and FCancelStatus = 'A'",
     "OrderString": "",
     "TopRowCount": 0,
     "StartRow": 0,

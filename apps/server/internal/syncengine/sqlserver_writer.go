@@ -84,6 +84,26 @@ func (w *SQLServerWriter) stagingUpsert(ctx context.Context, tableName string, r
 		return UpsertResult{}, fmt.Errorf("batch insert staging %s: %w", stagingTable, err)
 	}
 
+	// Count PKs that already exist in the target BEFORE the MERGE, to split
+	// inserted vs updated. After the MERGE every staged PK exists in the target,
+	// so counting then would report all rows as "updated" (inserted stuck at 0).
+	// （原因：MERGE 后所有 PK 都已存在于目标表，必须在 MERGE 前统计已有 PK 才能得到正确的 inserted/updated 拆分）
+	updateEstimate := 0
+	if len(pkCols) > 0 && stagingRows > 0 {
+		pkConds := make([]string, len(pkCols))
+		for i, pk := range pkCols {
+			pkConds[i] = fmt.Sprintf("target.[%s] = source.[%s]", pk, pk)
+		}
+		countSQL := fmt.Sprintf(
+			"SELECT COUNT(*) FROM dbo.%s AS target INNER JOIN dbo.%s AS source ON %s",
+			tableName, stagingTable, strings.Join(pkConds, " AND "),
+		)
+		var count int
+		if err := sqlDB.GetContext(ctx, &count, countSQL); err == nil {
+			updateEstimate = count
+		}
+	}
+
 	// Build and execute MERGE statement
 	mergeSQL, args := w.buildMergeSQL(tableName, stagingTable, cols, pkCols)
 	if mergeSQL == "" {
@@ -111,24 +131,6 @@ func (w *SQLServerWriter) stagingUpsert(ctx context.Context, tableName string, r
 
 	affected, _ := result.RowsAffected()
 	log.Printf("[SQLSERVER-MERGE] %s: merged %d rows via staging %s", tableName, affected, stagingTable)
-	// SQL Server MERGE does not expose INSERT vs UPDATE split directly.
-	// Estimate: count PKs that existed before MERGE.
-	// （原因：MERGE 不直接暴露 inserted/updated 拆分，通过 MERGE 前 COUNT 已有 PK 估算）
-	updateEstimate := 0
-	if len(pkCols) > 0 && affected > 0 {
-		pkConds := make([]string, len(pkCols))
-		for i, pk := range pkCols {
-			pkConds[i] = fmt.Sprintf("target.[%s] = source.[%s]", pk, pk)
-		}
-		countSQL := fmt.Sprintf(
-			"SELECT COUNT(*) FROM dbo.%s AS target INNER JOIN dbo.%s AS source ON %s",
-			tableName, stagingTable, strings.Join(pkConds, " AND "),
-		)
-		var count int
-		if err := sqlDB.GetContext(ctx, &count, countSQL); err == nil {
-			updateEstimate = count
-		}
-	}
 	inserted := stagingRows - updateEstimate
 	if inserted < 0 {
 		inserted = 0

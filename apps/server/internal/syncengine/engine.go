@@ -1633,8 +1633,14 @@ func (e *SyncEngine) syncCursorForm(ctx, fetchCtx context.Context, runID, formNa
 		stat.Status, stat.ErrorCount, stat.Error = StatusFailed, 1, "full sync returned empty source"
 		return
 	}
-	if stat.InsertedCount < stat.FetchedCount {
-		log.Printf("[SYNC] Warning: fetched/inserted mismatch for %s: fetched=%d inserted=%d (minor database filtering)", formName, stat.FetchedCount, stat.InsertedCount)
+	// Completeness gate: total written (inserted + updated) must reach fetched.
+	// A MERGE counts pre-existing rows as "updated", so InsertedCount alone is
+	// not the written count — use the sum, otherwise a full sync that wrote
+	// everything (all as updates) is misread as a partial write and the
+	// orphan-cleanup below is skipped.
+	// （原因：MERGE 把已存在行计入 updated，只用 inserted 会把"全部写入成功"误判为部分写入而跳过孤儿删除）
+	if !isWriteComplete(stat.FetchedCount, stat.InsertedCount, stat.UpdatedCount) {
+		log.Printf("[SYNC] Warning: fetched/written mismatch for %s: fetched=%d written=%d (minor database filtering)", formName, stat.FetchedCount, stat.InsertedCount+stat.UpdatedCount)
 		return
 	}
 	if !dryRun && syncType == "reset" && stat.FetchedCount > 0 {
@@ -1662,7 +1668,7 @@ func (e *SyncEngine) syncCursorForm(ctx, fetchCtx context.Context, runID, formNa
 		if recoveryErr != nil {
 			stat.Status, stat.ErrorCount, stat.Error = StatusFailed, 1, fmt.Sprintf("sync run identity validation failed before cleanup: %v", recoveryErr)
 		} else if !currentRecovery && !e.isCleanupDisabled() {
-			deleted, delErr := pkCollector.ReconcileAndDelete(ctx, tableName, stat.FetchedCount, stat.InsertedCount)
+			deleted, delErr := pkCollector.ReconcileAndDelete(ctx, tableName, stat.FetchedCount, stat.InsertedCount+stat.UpdatedCount)
 			if delErr != nil {
 				log.Printf("[ORPHAN] Warning: orphan deletion failed for %s: %v", formName, delErr)
 				e.logMsg(formName, "WARN", "孤儿删除失败: "+delErr.Error())
@@ -1674,6 +1680,15 @@ func (e *SyncEngine) syncCursorForm(ctx, fetchCtx context.Context, runID, formNa
 	}
 
 	stat.Status = StatusSuccess
+}
+
+// isWriteComplete reports whether a full sync wrote every fetched row. The
+// written total is inserted+updated: a MERGE classifies pre-existing rows as
+// "updated", so inserted alone under-counts and would wrongly flag a complete
+// all-update sync as partial (skipping orphan cleanup).
+// （原因：把"总写入=新增+更新"的完整性判定抽成纯函数，便于单测锁定该回归）
+func isWriteComplete(fetched, inserted, updated int) bool {
+	return inserted+updated >= fetched
 }
 
 // aggregateRowsByKey deduplicates rows by primary key, summing numeric columns.

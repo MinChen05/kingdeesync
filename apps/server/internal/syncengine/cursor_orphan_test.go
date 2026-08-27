@@ -58,3 +58,40 @@ func TestSourceKeyCollectorCompletenessGateBlocksPartialWrite(t *testing.T) {
 		t.Fatal("expected empty-source block error")
 	}
 }
+
+// TestIsWriteCompleteUsesInsertedPlusUpdated locks the regression where a
+// full sync whose rows were all written as MERGE "updates" (inserted=0) was
+// misread as a partial write because the gate compared inserted alone against
+// fetched, causing orphan cleanup to be skipped.
+// （原因：锁定"总写入=新增+更新"的判定，防止回退到只看 inserted 而漏删孤儿）
+func TestIsWriteCompleteUsesInsertedPlusUpdated(t *testing.T) {
+	cases := []struct {
+		name     string
+		fetched  int
+		inserted int
+		updated  int
+		want     bool
+	}{
+		// The staging-MERGE bug scenario: everything pre-existed, all written
+		// as updates, inserted=0. Must be complete (not partial).
+		{"all updates, inserted=0", 100, 0, 100, true},
+		// Fresh/reset table: everything inserted.
+		{"all inserted", 100, 100, 0, true},
+		// Mixed: some new, some updated, exactly covering fetched.
+		{"mixed, exact", 100, 30, 70, true},
+		// Partial write: fewer rows actually written than fetched.
+		{"partial", 100, 30, 60, false},
+		// Nothing written.
+		{"nothing written", 100, 0, 0, false},
+		// Over-count is tolerated (defensive; should not happen).
+		{"over count", 100, 40, 70, true},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := isWriteComplete(tc.fetched, tc.inserted, tc.updated); got != tc.want {
+				t.Fatalf("isWriteComplete(fetched=%d, inserted=%d, updated=%d) = %v, want %v",
+					tc.fetched, tc.inserted, tc.updated, got, tc.want)
+			}
+		})
+	}
+}

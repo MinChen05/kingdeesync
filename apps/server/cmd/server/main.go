@@ -130,12 +130,15 @@ func main() {
 				}
 			}
 
-			// DingTalk notification
+			// DingTalk notification: 仅异常推送，成功静默
+			// （原因：正常运行无需打扰；partial 与 failed_abnormal_exit 均属异常，此前分别漏推与拼写不匹配）
 			switch run.Status {
-			case "success":
-				dingTalkNotifier.OnCompleted(runID, run.DurationSeconds, int(run.FormCount))
-			case "failed", "stopped", "abnormal_exit":
-				dingTalkNotifier.OnFailed(runID, run.ErrorMessage, run.DurationSeconds)
+			case "failed", "partial", "stopped", "failed_abnormal_exit":
+				msg := run.ErrorMessage
+				if msg == "" {
+					msg = fmt.Sprintf("失败表单 %d/%d，失败记录 %d 条", run.FailedForms, run.FormCount, run.FailedRecords)
+				}
+				dingTalkNotifier.OnFailed(runID, run.Status, msg, run.DurationSeconds)
 			}
 		}()
 	})

@@ -114,3 +114,39 @@ func TestDingTalkNotifierNoSecretNoSignParams(t *testing.T) {
 		t.Fatalf("未配置密钥却追加了签名参数: %s", rawQuery)
 	}
 }
+
+// OnFailed 仅对异常状态推送，且 partial 使用"同步部分失败"标题。
+func TestDingTalkNotifierOnFailedTitles(t *testing.T) {
+	cases := []struct {
+		status string
+		title  string
+	}{
+		{"failed", "【金蝶同步告警】同步失败"},
+		{"partial", "【金蝶同步告警】同步部分失败"},
+	}
+	for _, c := range cases {
+		var mu sync.Mutex
+		var content string
+		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			var payload DingTalkPayload
+			if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
+				t.Errorf("解析请求体失败: %v", err)
+			}
+			mu.Lock()
+			content = payload.Text.Content
+			mu.Unlock()
+			w.WriteHeader(http.StatusOK)
+		}))
+		NewDingTalkNotifier(srv.URL+"?access_token=t", "").OnFailed("abcdef12-0000", c.status, "失败表单 2/22", 12.5)
+		srv.Close()
+
+		mu.Lock()
+		defer mu.Unlock()
+		if !strings.HasPrefix(content, c.title) {
+			t.Fatalf("status=%s 期望标题前缀 %q，实际 %q", c.status, c.title, content)
+		}
+		if !strings.Contains(content, "失败表单 2/22") {
+			t.Fatalf("通知缺少详情: %q", content)
+		}
+	}
+}

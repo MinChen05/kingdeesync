@@ -199,20 +199,19 @@ func (n *DingTalkNotifier) send(title, content string) {
 	New().SendDingTalk(signed, title, content)
 }
 
-// OnCompleted sends a success notification.
-func (n *DingTalkNotifier) OnCompleted(runID string, duration float64, formCount int) {
-	content := fmt.Sprintf("运行 %s 成功完成\n耗时: %.1f 秒\n同步表单: %d 个", runID[:8], duration, formCount)
-	n.send("同步成功", content)
-}
-
-// OnFailed sends a failure notification.
-func (n *DingTalkNotifier) OnFailed(runID, message string, duration float64) {
-	content := fmt.Sprintf("运行 %s 失败\n耗时: %.1f 秒\n错误: %s", runID[:8], duration, message)
-	n.send("同步失败", content)
+// OnFailed 发送异常完成通知（failed/partial/stopped/failed_abnormal_exit）。
+// 成功完成不再推送（原因：用户要求仅异常打扰，正常运行静默）。
+func (n *DingTalkNotifier) OnFailed(runID, status, message string, duration float64) {
+	title := "同步失败"
+	if status == "partial" {
+		title = "同步部分失败"
+	}
+	content := fmt.Sprintf("运行 %s %s\n耗时: %.1f 秒\n详情: %s", runID[:8], status, duration, message)
+	n.send(title, content)
 }
 
 // SendAlert 发送系统级告警（如目标数据库断连/恢复），不依赖具体同步 run。
-// （原因：探活告警发生在两次同步任务之间，无法复用面向 run 生命周期的 OnCompleted/OnFailed）
+// （原因：探活告警发生在两次同步任务之间，无法复用面向 run 生命周期的 OnFailed）
 func (n *DingTalkNotifier) SendAlert(title, content string) {
 	n.send(title, content)
 }

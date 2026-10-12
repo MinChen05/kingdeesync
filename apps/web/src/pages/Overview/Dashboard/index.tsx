@@ -1,8 +1,10 @@
+import dayjs from 'dayjs';
 import { useQuery } from '@tanstack/react-query';
-import { Button, Typography } from 'antd';
+import { Typography } from 'antd';
 import React, { useEffect, useRef, useState } from 'react';
-import { DotIndicator } from '@/components/DotIndicator';
-import type { V1Overview } from '@/services/v1';
+import { DotIndicator, runStatusToDotLevel } from '@/components/DotIndicator';
+import type { HealthLevel } from '@/pages/Overview/types';
+import type { V1HealthStatus } from '@/services/v1';
 import { getOverview } from '@/services/v1';
 import { formatDuration, formatNumber } from '@/utils/format';
 
@@ -16,7 +18,7 @@ const DashboardPage: React.FC = () => {
   const [now, setNow] = useState(new Date());
   const { data: overview, isPending } = useQuery({
     queryKey: ['v1', 'overview'],
-    queryFn: getOverview,
+    queryFn: () => getOverview(),
     refetchInterval: 30_000,
   });
 
@@ -27,9 +29,10 @@ const DashboardPage: React.FC = () => {
     return () => clearInterval(timerRef.current!);
   }, []);
 
-  const health = overview?.health || {};
-  const today = overview?.today || {};
-  const recentRuns = overview?.recent_runs || [];
+  // 直接可选链取值（原因：`|| {}` 会丢失类型且曾导致 KPI 恒 0——字段名与后端不符）
+  const health = overview?.health;
+  const today = overview?.today;
+  const recentRuns = overview?.recent_runs ?? [];
 
   if (isPending) {
     return (
@@ -74,16 +77,7 @@ const DashboardPage: React.FC = () => {
           >
             金蝶数据同步看板
           </h1>
-          <DotIndicator
-            type={
-              health.overall === 'ok'
-                ? 'ok'
-                : health.overall === 'degraded'
-                  ? 'unknown'
-                  : 'error'
-            }
-            size={12}
-          />
+          <DotIndicator level={healthOverall(health)} size={12} />
         </div>
         <Text
           style={{
@@ -92,7 +86,7 @@ const DashboardPage: React.FC = () => {
             fontFamily: 'monospace',
           }}
         >
-          {now.toLocaleString('zh-CN')}
+          {dayjs(now).format('YYYY-MM-DD HH:mm:ss')}
         </Text>
       </div>
 
@@ -105,28 +99,32 @@ const DashboardPage: React.FC = () => {
           marginBottom: 24,
         }}
       >
+        {/* KPI 字段与后端 V1TodayStats 对齐（原因：此前读 total_runs/success_forms 等
+            不存在字段，四张卡恒 0） */}
         <KpiCard
           title="今日同步"
-          value={formatNumber(today.total_runs || 0)}
+          value={formatNumber(today?.sync_count ?? 0)}
           subtitle="次"
           color="#38bdf8"
         />
         <KpiCard
-          title="成功表单"
-          value={formatNumber(today.success_forms || 0)}
-          subtitle="个"
+          title="成功次数"
+          value={formatNumber(
+            Math.max((today?.sync_count ?? 0) - (today?.fail_count ?? 0), 0),
+          )}
+          subtitle="次"
           color="#34d399"
         />
         <KpiCard
-          title="失败表单"
-          value={formatNumber(today.failed_forms || 0)}
-          subtitle="个"
+          title="失败次数"
+          value={formatNumber(today?.fail_count ?? 0)}
+          subtitle="次"
           color="#f87171"
         />
         <KpiCard
-          title="总数据量"
-          value={formatNumber(today.total_records || 0)}
-          subtitle="行"
+          title="平均耗时"
+          value={formatDuration(today?.avg_duration ?? 0)}
+          subtitle=""
           color="#a78bfa"
         />
       </div>
@@ -152,19 +150,19 @@ const DashboardPage: React.FC = () => {
         >
           <ServiceStatus
             name="金蝶 API"
-            status={health.kingdee_api?.status || 'unknown'}
+            status={health?.kingdee_api?.status || 'unknown'}
           />
           <ServiceStatus
             name="数据库"
-            status={health.database?.status || 'unknown'}
+            status={health?.database?.status || 'unknown'}
           />
           <ServiceStatus
             name="调度器"
-            status={health.scheduler?.status || 'unknown'}
+            status={health?.scheduler?.status || 'unknown'}
           />
           <ServiceStatus
             name="日志服务"
-            status={health.log_service?.status || 'unknown'}
+            status={health?.log_service?.status || 'unknown'}
           />
         </div>
       </div>
@@ -229,13 +227,7 @@ const DashboardPage: React.FC = () => {
                   >
                     <td style={{ padding: '8px 16px' }}>
                       <DotIndicator
-                        type={
-                          run.status === 'success'
-                            ? 'ok'
-                            : run.status === 'partial'
-                              ? 'unknown'
-                              : 'error'
-                        }
+                        level={runStatusToDotLevel(run.status)}
                         size={8}
                       />
                     </td>
@@ -276,6 +268,23 @@ const DashboardPage: React.FC = () => {
 };
 
 // ── Sub-components ──
+
+/**
+ * 头部健康灯：聚合四项服务状态——全部 ok 才绿，数据缺失灰，任一非 ok 红。
+ * （原因：此前读不存在的 health.overall 字段，灯恒红）
+ */
+function healthOverall(health: V1HealthStatus | undefined): HealthLevel {
+  if (!health) return 'unknown';
+  const items = [
+    health.kingdee_api,
+    health.database,
+    health.scheduler,
+    health.log_service,
+  ];
+  if (items.some((item) => !item)) return 'unknown';
+  if (items.every((item) => item.status === 'ok')) return 'ok';
+  return 'error';
+}
 
 const KpiCard: React.FC<{
   title: string;
@@ -325,7 +334,7 @@ const ServiceStatus: React.FC<{ name: string; status: string }> = ({
         gap: 10,
       }}
     >
-      <DotIndicator type={isOk ? 'ok' : 'error'} size={10} />
+      <DotIndicator level={isOk ? 'ok' : 'error'} size={10} />
       <Text style={{ fontSize: 13, color: 'var(--tk-text)' }}>{name}</Text>
       <Text
         style={{

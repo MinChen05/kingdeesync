@@ -4,6 +4,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"io"
+	"log"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -124,7 +125,7 @@ func testConnections(c *gin.Context) {
 	kdStart := time.Now()
 	done := make(chan struct{})
 	go func() {
-		client := kind.NewKingdeeClient()
+		client := kind.SharedClient()
 		kdOk = client.TestConnection()
 		close(done)
 	}()
@@ -309,6 +310,29 @@ func deleteWebhook(c *gin.Context) {
 
 // ─── Config Snapshot endpoints ───
 
+// configSnapshotSummary 是快照的脱敏视图。
+// （原因：IniContent/JsonConfig 含密码等凭据，列表与创建响应不得原样序列化全文内容；
+// 回滚为服务端按 id 读取快照，无需将内容下发给客户端）
+type configSnapshotSummary struct {
+	ID         uint      `json:"id"`
+	ConfigHash string    `json:"config_hash"`
+	Labels     string    `json:"labels"`
+	CreatedAt  time.Time `json:"created_at"`
+	IniSize    int       `json:"ini_size"`
+	JsonSize   int       `json:"json_size"`
+}
+
+func snapshotSummaryOf(s gormdb.ConfigSnapshot) configSnapshotSummary {
+	return configSnapshotSummary{
+		ID:         s.ID,
+		ConfigHash: s.ConfigHash,
+		Labels:     s.Labels,
+		CreatedAt:  s.CreatedAt,
+		IniSize:    len(s.IniContent),
+		JsonSize:   len(s.JsonConfig),
+	}
+}
+
 func listConfigSnapshots(c *gin.Context) {
 	db := gormdb.DB
 	if db == nil {
@@ -317,7 +341,11 @@ func listConfigSnapshots(c *gin.Context) {
 	}
 	var snapshots []gormdb.ConfigSnapshot
 	db.Order("created_at DESC").Limit(50).Find(&snapshots)
-	WriteData(c, http.StatusOK, snapshots)
+	summaries := make([]configSnapshotSummary, 0, len(snapshots))
+	for _, s := range snapshots {
+		summaries = append(summaries, snapshotSummaryOf(s))
+	}
+	WriteData(c, http.StatusOK, summaries)
 }
 
 func createConfigSnapshot(c *gin.Context) {
@@ -351,7 +379,7 @@ func createConfigSnapshot(c *gin.Context) {
 		WriteProblem(c, http.StatusInternalServerError, Problem{Code: "INTERNAL_ERROR", Message: "failed to create snapshot"})
 		return
 	}
-	WriteData(c, http.StatusCreated, snap)
+	WriteData(c, http.StatusCreated, snapshotSummaryOf(snap))
 }
 
 func rollbackConfigSnapshot(c *gin.Context) {
@@ -375,16 +403,38 @@ func rollbackConfigSnapshot(c *gin.Context) {
 		return
 	}
 
-	if err := os.WriteFile(iniPath, []byte(snap.IniContent), 0644); err != nil {
+	// 先留存当前文件内容与权限，供部分失败时真实回滚。
+	// （原因：此前 JSON 写失败时把 INI 写成空串，等于亲手让服务无法重启；权限也固定 0644 导致任何本机用户可读密码）
+	jsonPath := filepath.Join(filepath.Dir(iniPath), "form-queries.json")
+	oldIni, iniReadErr := os.ReadFile(iniPath)
+	iniMode := os.FileMode(0600)
+	if fi, err := os.Stat(iniPath); err == nil {
+		iniMode = fi.Mode().Perm()
+	}
+	oldJson, _ := os.ReadFile(jsonPath)
+	jsonMode := os.FileMode(0600)
+	if fi, err := os.Stat(jsonPath); err == nil {
+		jsonMode = fi.Mode().Perm()
+	}
+
+	if err := os.WriteFile(iniPath, []byte(snap.IniContent), iniMode); err != nil {
 		WriteProblem(c, http.StatusInternalServerError, Problem{Code: "INTERNAL_ERROR", Message: "failed to write config: " + err.Error()})
 		return
 	}
 
 	if snap.JsonConfig != "" {
-		jsonPath := filepath.Join(filepath.Dir(iniPath), "form-queries.json")
-		if err := os.WriteFile(jsonPath, []byte(snap.JsonConfig), 0644); err != nil {
-			// Rollback INI on failure
-			_ = os.WriteFile(iniPath, []byte(""), 0644)
+		if err := os.WriteFile(jsonPath, []byte(snap.JsonConfig), jsonMode); err != nil {
+			// 用回滚前的原文恢复 INI 与 form-queries；若原文都读不出来则保持已写入内容并如实报告
+			if iniReadErr == nil {
+				if restoreErr := os.WriteFile(iniPath, oldIni, iniMode); restoreErr != nil {
+					log.Printf("[CONFIG] rollback restore INI failed: %v", restoreErr)
+				}
+			}
+			if oldJson != nil {
+				if restoreErr := os.WriteFile(jsonPath, oldJson, jsonMode); restoreErr != nil {
+					log.Printf("[CONFIG] rollback restore form-queries failed: %v", restoreErr)
+				}
+			}
 			WriteProblem(c, http.StatusInternalServerError, Problem{Code: "INTERNAL_ERROR", Message: "failed to write form-queries: " + err.Error()})
 			return
 		}

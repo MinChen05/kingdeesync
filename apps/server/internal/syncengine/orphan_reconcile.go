@@ -7,7 +7,6 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
-	"regexp"
 	"sort"
 	"strings"
 
@@ -17,7 +16,7 @@ import (
 	"github.com/kingdee-sync/go/internal/gormdb"
 )
 
-var sqlIdentifier = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_]*$`)
+// sqlIdentifier 校验已统一至 config.IsSQLIdentifier（原因：多包共享同一标识符规则）
 
 type OrphanReconcileInput struct {
 	SnapshotID          string
@@ -49,11 +48,11 @@ func ValidateSourceStorageKeys(rows []map[string]interface{}, keyColumns []strin
 // anti-join, applies safety gates, and optionally deletes only target-only keys.
 func (w *SQLServerWriter) ReconcileOrphans(ctx context.Context, input OrphanReconcileInput) (OrphanReconcileResult, error) {
 	result := OrphanReconcileResult{}
-	if input.SnapshotID == "" || !sqlIdentifier.MatchString(input.TargetTable) || len(input.StorageKeyColumns) == 0 {
+	if input.SnapshotID == "" || !config.IsSQLIdentifier(input.TargetTable) || len(input.StorageKeyColumns) == 0 {
 		return result, fmt.Errorf("invalid orphan reconciliation input")
 	}
 	for _, column := range input.StorageKeyColumns {
-		if !sqlIdentifier.MatchString(column) {
+		if !config.IsSQLIdentifier(column) {
 			return result, fmt.Errorf("invalid storage key column %q", column)
 		}
 	}
@@ -76,7 +75,9 @@ func (w *SQLServerWriter) ReconcileOrphans(ctx context.Context, input OrphanReco
 	if err := createSourceKeyStaging(ctx, db, databaseName, input.TargetTable, stagingTable, input.StorageKeyColumns); err != nil {
 		return result, err
 	}
-	defer func() { _, _ = db.ExecContext(context.Background(), "IF OBJECT_ID(N'dbo."+stagingTable+"', 'U') IS NOT NULL DROP TABLE dbo."+stagingTable) }()
+	defer func() {
+		_, _ = db.ExecContext(context.Background(), "IF OBJECT_ID(N'dbo."+stagingTable+"', 'U') IS NOT NULL DROP TABLE dbo."+stagingTable)
+	}()
 
 	// Insert canonical source keys directly into the staging table
 	// (plain INSERT, not the writer's staging MERGE path).

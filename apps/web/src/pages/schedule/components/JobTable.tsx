@@ -17,9 +17,11 @@ import JobEditDrawer from './JobEditDrawer';
 interface JobTableProps {
   jobs: ScheduleJob[];
   loading: boolean;
-  onCreate: (job: ScheduleJobSubmit) => void;
-  onUpdate: (id: number, job: ScheduleJobSubmit) => void;
-  onDelete: (id: number) => void;
+  // 回调必须返回 Promise：失败时 reject（页面层已弹错误 toast），
+  // 组件只在 resolve 后提示成功（原因：此前不 await 先弹成功，失败也报"已创建/已删除"）
+  onCreate: (job: ScheduleJobSubmit) => Promise<unknown>;
+  onUpdate: (id: number, job: ScheduleJobSubmit) => Promise<unknown>;
+  onDelete: (id: number) => Promise<unknown>;
   creating: boolean;
   updating: boolean;
   deleting: boolean;
@@ -83,15 +85,30 @@ const JobTable: React.FC<JobTableProps> = ({
     );
   });
 
-  const handleSubmit = (data: ScheduleJobSubmit) => {
-    if (editingJob) {
-      onUpdate(editingJob.id, data);
-      message.success('任务已更新');
-    } else {
-      onCreate(data);
-      message.success('任务已创建');
+  const handleSubmit = async (data: ScheduleJobSubmit) => {
+    try {
+      if (editingJob) {
+        await onUpdate(editingJob.id, data);
+        message.success('任务已更新');
+      } else {
+        await onCreate(data);
+        message.success('任务已创建');
+      }
+      setDrawerVisible(false);
+    } catch {
+      // 页面层已弹错误提示；保持抽屉打开让用户可修正后重试
     }
-    setDrawerVisible(false);
+  };
+
+  // 批量操作统一封装：仅在真实成功后提示并清空选择（原因：失败时报成功会误导运维）
+  const runBatch = async (action: 'enable' | 'disable' | 'delete', successText: string) => {
+    try {
+      await onBatchAction(action, Array.from(selectedIds));
+      message.success(successText);
+      setSelectedIds(new Set());
+    } catch {
+      // 页面层已弹错误提示
+    }
   };
 
   return (
@@ -137,11 +154,7 @@ const JobTable: React.FC<JobTableProps> = ({
                 <Button
                   size="small"
                   icon={<PlayCircleOutlined />}
-                  onClick={async () => {
-                    await onBatchAction('enable', Array.from(selectedIds));
-                    message.success('已批量启用');
-                    setSelectedIds(new Set());
-                  }}
+                  onClick={() => runBatch('enable', '已批量启用')}
                   loading={batchActioning}
                 >
                   启用
@@ -149,22 +162,14 @@ const JobTable: React.FC<JobTableProps> = ({
                 <Button
                   size="small"
                   icon={<PauseCircleOutlined />}
-                  onClick={async () => {
-                    await onBatchAction('disable', Array.from(selectedIds));
-                    message.success('已批量停用');
-                    setSelectedIds(new Set());
-                  }}
+                  onClick={() => runBatch('disable', '已批量禁用')}
                   loading={batchActioning}
                 >
-                  停用
+                  禁用
                 </Button>
                 <Popconfirm
-                  title={`确定删除选中的 ${selectedIds.size} 个任务？`}
-                  onConfirm={async () => {
-                    await onBatchAction('delete', Array.from(selectedIds));
-                    message.success('已批量删除');
-                    setSelectedIds(new Set());
-                  }}
+                  title={`确定删除选中的 ${selectedIds.size} 个任务？删除后不可恢复`}
+                  onConfirm={() => runBatch('delete', '已批量删除')}
                 >
                   <Button
                     size="small"
@@ -351,10 +356,14 @@ const JobTable: React.FC<JobTableProps> = ({
                     />
                     {!isDefaultJob(job.name) && (
                       <Popconfirm
-                        title="确定删除此任务？"
-                        onConfirm={() => {
-                          onDelete(job.id);
-                          message.success('任务已删除');
+                        title="确定删除该定时任务？删除后不可恢复"
+                        onConfirm={async () => {
+                          try {
+                            await onDelete(job.id);
+                            message.success('任务已删除');
+                          } catch {
+                            // 页面层已弹错误提示
+                          }
                         }}
                         okText="确定"
                         cancelText="取消"

@@ -35,9 +35,11 @@ func getOverview(c *gin.Context) {
 				TodayCalls: &health.KingdeeAPI.TodayCalls,
 			},
 			Database: &HealthItem{
-				Status:     health.Database.Status,
-				ResponseMs: &health.Database.ResponseMs,
-				ConnCount:  &health.Database.ConnCount,
+				Status:       health.Database.Status,
+				ResponseMs:   &health.Database.ResponseMs,
+				ConnCount:    &health.Database.ConnCount,
+				ProbeHealthy: health.Database.ProbeHealthy,
+				ProbeAt:      health.Database.ProbeAt,
 			},
 			Scheduler: &HealthItem{
 				Status:   health.Scheduler.Status,

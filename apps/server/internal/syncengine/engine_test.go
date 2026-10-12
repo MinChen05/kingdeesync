@@ -304,8 +304,9 @@ func (columnTestConn) Close() error                        { return nil }
 func (columnTestConn) Begin() (driver.Tx, error)           { return nil, driver.ErrSkip }
 
 func (columnTestConn) QueryContext(_ context.Context, query string, args []driver.NamedValue) (driver.Rows, error) {
-	if !strings.Contains(query, "saleorder") {
-		return nil, fmt.Errorf("unexpected table metadata query: %s", query)
+	// 表名通过 @p1 命名参数绑定，mock 校验参数值而非 SQL 文本拼接
+	if !strings.Contains(query, "INFORMATION_SCHEMA.COLUMNS") || len(args) != 1 || args[0].Value != "saleorder" {
+		return nil, fmt.Errorf("unexpected table metadata query: %s args=%v", query, args)
 	}
 	return &columnTestRows{values: []string{"FID", "FENTRYID", "FBILLNO"}}, nil
 }

@@ -79,7 +79,7 @@ const FieldKeysEditor: React.FC<{
         />
       </div>
       <div style={{ fontSize: 12, color: 'var(--tk-dim)', marginTop: 6 }}>
-        {tags.length} 个字段，逗号分隔的 Kingdee API 字段名
+        {tags.length} 个字段，逗号分隔的 金蝶 API 字段名
       </div>
     </div>
   );
@@ -136,7 +136,7 @@ const FieldMapEditor: React.FC<{
     <div>
       {rows.length === 0 ? (
         <div style={{ fontSize: 12, color: 'var(--tk-dim)', padding: '8px 0' }}>
-          将 Kingdee API 字段名映射为目标数据库列名
+          将 金蝶 API 字段名映射为目标数据库列名
         </div>
       ) : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
@@ -283,7 +283,7 @@ const FormConfigDrawer: React.FC<FormConfigDrawerProps> = ({
       }}
     >
       {/* FormID badge */}
-      <Section title="金蝶表单 ID" description="Kingdee 数据接口中的表单标识符">
+      <Section title="金蝶表单 ID" description="金蝶数据接口中的表单标识符">
         <div
           style={{
             display: 'flex',
@@ -334,7 +334,7 @@ const FormConfigDrawer: React.FC<FormConfigDrawerProps> = ({
       />
 
       {/* FieldKeys */}
-      <Section title="字段列表" description="从 Kingdee API 拉取的字段">
+      <Section title="字段列表" description="从金蝶 API 拉取的字段">
         <div
           style={{
             backgroundColor: 'var(--tk-surface)',
@@ -348,7 +348,7 @@ const FormConfigDrawer: React.FC<FormConfigDrawerProps> = ({
       </Section>
 
       {/* FilterString */}
-      <Section title="过滤条件" description="Kingdee 查询过滤表达式">
+      <Section title="过滤条件" description="金蝶查询过滤表达式">
         <Textarea
           value={filterString}
           onChange={(e) => setFilterString(e.target.value)}
@@ -364,7 +364,7 @@ const FormConfigDrawer: React.FC<FormConfigDrawerProps> = ({
       </Section>
 
       {/* FieldMap */}
-      <Section title="字段映射" description="Kingdee 字段名到数据库列名的映射">
+      <Section title="字段映射" description="金蝶字段名到数据库列名的映射">
         <div
           style={{
             backgroundColor: 'var(--tk-surface)',

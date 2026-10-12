@@ -49,10 +49,14 @@ export async function startSync(params: SyncStartRequest) {
   return request<ApiResponse<SyncStartData>>('/api/sync/start', { method: 'POST', data: params });
 }
 
-export async function getSyncStatus(runId?: string) {
+export async function getSyncStatus(
+  runId?: string,
+  opts?: { skipErrorHandler?: boolean },
+) {
   return request<ApiResponse<SyncStatusData>>('/api/v1/sync/status', {
     method: 'GET',
     params: runId ? { run_id: runId } : undefined,
+    ...(opts || {}),
   });
 }
 

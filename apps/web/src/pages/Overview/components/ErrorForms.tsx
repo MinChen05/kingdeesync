@@ -13,7 +13,7 @@ interface ErrorFormsProps {
 }
 
 /**
- * 近 7 天异常表单 Top5：排名 + 表单名 + 失败次数，最近错误信息悬浮可见。
+ * 近 7 天异常表单 Top3（后端 GetRiskItems(3)）：排名 + 表单名 + 失败次数，最近错误信息悬浮可见。
  */
 const ErrorForms: React.FC<ErrorFormsProps> = ({ topForms, loading }) => {
   return (

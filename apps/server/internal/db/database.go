@@ -113,10 +113,11 @@ func GetTableColumns(tableName string) (map[string]string, error) {
 	if DB == nil {
 		return nil, fmt.Errorf("database not initialized")
 	}
+	// go-mssqldb 仅识别 @pN 命名参数，`?` 会原样透传给 SQL Server 导致语法错误
 	rows, err := DB.Queryx(`
 		SELECT COLUMN_NAME
 		FROM INFORMATION_SCHEMA.COLUMNS
-		WHERE TABLE_SCHEMA = 'dbo' AND TABLE_NAME = ?
+		WHERE TABLE_SCHEMA = 'dbo' AND TABLE_NAME = @p1
 		ORDER BY ORDINAL_POSITION
 	`, tableName)
 	if err != nil {
@@ -143,6 +144,7 @@ func GetTableColumns(tableName string) (map[string]string, error) {
 
 func getPrimaryKeyFromDB(tableName string) (string, error) {
 	var cols []string
+	// go-mssqldb 仅识别 @pN 命名参数，`?` 会原样透传给 SQL Server 导致语法错误
 	rows, err := DB.Queryx(`
 		SELECT c.COLUMN_NAME
 			FROM INFORMATION_SCHEMA.TABLE_CONSTRAINTS tk
@@ -151,7 +153,7 @@ func getPrimaryKeyFromDB(tableName string) (string, error) {
 				AND tk.TABLE_NAME = c.TABLE_NAME
 				AND tk.CONSTRAINT_NAME = c.CONSTRAINT_NAME
 			WHERE tk.TABLE_SCHEMA = 'dbo'
-				AND tk.TABLE_NAME = ?
+				AND tk.TABLE_NAME = @p1
 				AND tk.CONSTRAINT_TYPE = 'PRIMARY KEY'
 			ORDER BY c.ORDINAL_POSITION
 		`, tableName)
@@ -180,6 +182,10 @@ func getPrimaryKeyFromDB(tableName string) (string, error) {
 func GetLastSyncTime(tableName string) (string, error) {
 	if DB == nil {
 		return "", fmt.Errorf("database not initialized")
+	}
+	// 表名拼接进 SELECT，入口校验（原因：防注入纵深防御）
+	if err := config.ValidateSQLIdentifier(tableName); err != nil {
+		return "", err
 	}
 
 	syncTimeCol := "SYNC_TIME"

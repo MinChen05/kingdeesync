@@ -39,7 +39,9 @@ func listSchedules(c *gin.Context) {
 
 func getSchedulerStatus(c *gin.Context) {
 	cron := schedule.GetCron()
-	enabled := cron != nil && len(cron.Entries()) > 0
+	// 原因：cron.Stop() 不清空 entries，仅看 entries 数量会让 stop 之后仍报 enabled=true；
+	// 叠加 IsPaused 才能反映"调度是否真的会触发"
+	enabled := cron != nil && !schedule.IsPaused() && len(cron.Entries()) > 0
 
 	WriteData(c, http.StatusOK, SchedulerStatus{Enabled: enabled})
 }
@@ -192,7 +194,9 @@ func deleteSchedule(c *gin.Context) {
 }
 
 func startScheduler(c *gin.Context) {
-	if err := schedule.ReloadJobs(); err != nil {
+	// 原因：Resume 会清 paused、重启 cron 并重注册任务；旧实现只 ReloadJobs，
+	// stop（cron.Stop）之后启动的条目不会再触发
+	if err := schedule.Resume(); err != nil {
 		WriteProblem(c, http.StatusInternalServerError, Problem{
 			Code:    "INTERNAL_ERROR",
 			Message: "failed to start scheduler: " + err.Error(),
@@ -203,10 +207,9 @@ func startScheduler(c *gin.Context) {
 }
 
 func stopScheduler(c *gin.Context) {
-	cron := schedule.GetCron()
-	if cron != nil {
-		cron.Stop()
-	}
+	// 原因：Pause 同时置 paused 并 cron.Stop()；旧实现只 Stop，
+	// 状态接口仍报 enabled=true，且重启前 reload 类操作可能带着半停状态运行
+	schedule.Pause()
 	WriteData(c, http.StatusOK, gin.H{"message": "scheduler stopped"})
 }
 

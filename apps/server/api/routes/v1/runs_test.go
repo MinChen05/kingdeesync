@@ -11,6 +11,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/kingdee-sync/go/internal/gormdb"
+	"github.com/kingdee-sync/go/internal/syncengine"
 	"github.com/stretchr/testify/require"
 	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
@@ -166,4 +167,50 @@ func TestCreateRunEngineNotInitialized(t *testing.T) {
 	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &result))
 	err := result["error"].(map[string]any)
 	require.Equal(t, "SYNC_ENGINE_NOT_INITIALIZED", err["code"])
+}
+
+// 回归测试：retryFailedForms 此前在 syncMutex.Lock 之后的所有出口都不解锁，
+// 首次调用即永久锁死全部 runs 接口（原因：批一修复死锁，防止回归）。
+// 通过注入 activeTask 让请求走"锁内发现已有任务 → 409"路径，
+// 连续两次调用都必须在超时前返回 409；若锁未释放，第二次调用会永久阻塞。
+func TestRetryFailedFormsReleasesSyncMutex(t *testing.T) {
+	r, db := setupRunTest(t)
+
+	oldEng, oldTask := syncEng, activeTask
+	t.Cleanup(func() {
+		syncMutex.Lock()
+		syncEng, activeTask = oldEng, oldTask
+		syncMutex.Unlock()
+	})
+
+	syncEng = syncengine.NewSyncEngine()
+	activeTask = &activeSyncTask{runID: "RUN-BUSY"}
+
+	require.NoError(t, db.Create(&gormdb.SyncRun{
+		RunID:  "RUN-RETRY-SRC",
+		Status: "failed",
+	}).Error)
+	require.NoError(t, db.Create(&gormdb.SyncRunForm{
+		RunID:    "RUN-RETRY-SRC",
+		FormName: "BD_Material",
+		Status:   "failed",
+	}).Error)
+
+	type outcome struct {
+		statuses [2]int
+	}
+	done := make(chan outcome, 1)
+	go func() {
+		first := performRequest(r, http.MethodPost, "/api/v1/runs/RUN-RETRY-SRC/retry-failed", "")
+		second := performRequest(r, http.MethodPost, "/api/v1/runs/RUN-RETRY-SRC/retry-failed", "")
+		done <- outcome{statuses: [2]int{first.Code, second.Code}}
+	}()
+
+	select {
+	case res := <-done:
+		require.Equal(t, [2]int{http.StatusConflict, http.StatusConflict}, res.statuses,
+			"两次 retry-failed 调用都应返回 409（锁内冲突分支），且第二次不得阻塞")
+	case <-time.After(10 * time.Second):
+		t.Fatal("retryFailedForms 连续调用出现死锁：syncMutex 未在出口释放")
+	}
 }

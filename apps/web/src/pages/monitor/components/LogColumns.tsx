@@ -82,7 +82,7 @@ const useLogColumns = (): ColumnsType<V1RunEvent> => [
           to={`/sync?forms=${encodeURIComponent(record.form_name)}`}
           style={{ fontSize: 12, color: 'var(--tk-primary)' }}
         >
-          <RedoOutlined /> 重跑此表
+          <RedoOutlined /> 重跑该表单
         </Link>
       ) : null,
   },

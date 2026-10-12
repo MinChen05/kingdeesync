@@ -198,7 +198,7 @@ const ConfigPanel: React.FC<ConfigPanelProps> = ({
             <ConfigRow
               label="同步间隔"
               value={
-                sync?.sync_interval != null ? `${sync.sync_interval}s` : '-'
+                sync?.sync_interval != null ? `${sync.sync_interval} 秒` : '-'
               }
             />
             <ConfigRow

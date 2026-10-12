@@ -1,8 +1,9 @@
 import { useQuery } from '@tanstack/react-query';
 import { useMemo } from 'react';
 import { getDiagnostics, getOverview, listRuns } from '@/services/v1';
-import type { V1Diagnostics, V1Run } from '@/services/v1';
+import type { V1Diagnostics } from '@/services/v1';
 import type { FormStat } from '@/types/form';
+import { toHistoryRun } from './mappers';
 import type { DiagInfo, StatsSummary } from './types';
 
 const DEFAULT_STATS: StatsSummary = {
@@ -70,7 +71,7 @@ export function useMonitorPage() {
   // 异常表单 — 从 overview.risks 获取（后端已按 go_sync_errors 聚合）
   const overviewReq = useQuery({
     queryKey: ['v1', 'overview'],
-    queryFn: getOverview,
+    queryFn: () => getOverview(),
   });
   const topErrors = useMemo(() => {
     const risks = overviewReq.data?.risks ?? [];
@@ -107,37 +108,3 @@ export function useMonitorPage() {
   };
 }
 
-/** V1Run → HistoryRun 转换 */
-function toHistoryRun(run: V1Run): {
-  id: number;
-  run_id: string;
-  task_name: string;
-  sync_type: string;
-  status: string;
-  start_time: string;
-  end_time?: string;
-  duration_seconds: number;
-  total_records: number;
-  success_records: number;
-  failed_records: number;
-  form_count: number;
-  success_forms: number;
-  failed_forms: number;
-} {
-  return {
-    id: 0,
-    run_id: run.run_id,
-    task_name: run.sync_type,
-    sync_type: run.sync_type,
-    status: run.status,
-    start_time: run.started_at || '',
-    end_time: run.finished_at,
-    duration_seconds: run.duration_seconds,
-    total_records: run.total_records,
-    success_records: run.success_records,
-    failed_records: run.failed_records,
-    form_count: run.form_count,
-    success_forms: run.success_forms,
-    failed_forms: run.failed_forms,
-  };
-}

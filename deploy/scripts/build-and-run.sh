@@ -6,6 +6,14 @@ PROJECT_ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
 command -v podman >/dev/null || { echo "Podman is required" >&2; exit 1; }
 test -f "$PROJECT_ROOT/config.local.ini" || { echo "config.local.ini is required" >&2; exit 1; }
 
+# Load deploy-time secrets (DingTalk webhook etc.), gitignored
+# （原因：告警凭据不得进 git/镜像，仅在宿主机运行时注入容器环境）
+if [ -f "$PROJECT_ROOT/deploy/deploy.env" ]; then
+  set -a
+  . "$PROJECT_ROOT/deploy/deploy.env"
+  set +a
+fi
+
 mkdir -p "$PROJECT_ROOT/.run/logs" "$PROJECT_ROOT/.run/state"
 
 POD_NAME="kingdee-sync"
@@ -31,6 +39,8 @@ podman run -d --pod "$POD_NAME" --name "$API_CONTAINER" \
   -e LISTEN_ADDR=0.0.0.0 \
   -e LISTEN_PORT=8000 \
   -e GORM_DB_PATH=/app/state/go_state.db \
+  -e DINGTALK_WEBHOOK_URL="${DINGTALK_WEBHOOK_URL:-}" \
+  -e DINGTALK_WEBHOOK_SECRET="${DINGTALK_WEBHOOK_SECRET:-}" \
   kingdee-sync-api
 
 # Run Web container

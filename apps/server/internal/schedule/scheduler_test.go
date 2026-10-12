@@ -6,6 +6,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/kingdee-sync/go/internal/config"
 	"github.com/kingdee-sync/go/internal/gormdb"
 	"github.com/kingdee-sync/go/internal/syncengine"
 	"gorm.io/driver/sqlite"
@@ -207,5 +208,22 @@ func TestLateRunnerCannotOverwriteWatchdogSummaryWithSuccess(t *testing.T) {
 	}
 	if persistedJob.LastStatus != string(syncengine.StatusFailedAbnormalExit) {
 		t.Fatalf("job last status = %q, want watchdog status %q", persistedJob.LastStatus, scheduleRun.Status)
+	}
+}
+
+// 配置未加载时 resolveRunTimeout 回退包级默认值（保护测试注入模式）。
+func TestResolveRunTimeoutFallsBackWhenConfigNotLoaded(t *testing.T) {
+	if config.Get() != nil {
+		t.Skip("config instance already loaded in this test process")
+	}
+	old := schedulerRunTimeout
+	t.Cleanup(func() { schedulerRunTimeout = old })
+	schedulerRunTimeout = 42 * time.Second
+
+	if got := resolveRunTimeout("full"); got != 42*time.Second {
+		t.Fatalf("配置未加载时 full 应回退包级默认 42s，实际 %v", got)
+	}
+	if got := resolveRunTimeout("incremental"); got != 42*time.Second {
+		t.Fatalf("配置未加载时 incremental 应回退包级默认 42s，实际 %v", got)
 	}
 }

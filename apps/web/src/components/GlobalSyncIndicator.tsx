@@ -34,7 +34,7 @@ interface SyncInfo {
  * 全局同步状态指示器 — v1 版。
  *
  * 使用 v1 overview 端点获取 active_run 作为当前同步状态。
- * 停止操作暂用旧接口（v1 尚无 stop 端点）。
+ * 停止操作走 POST /api/v1/sync/stop（该端点注册在 v1 组外，但同属当前后端路由）。
  */
 const GlobalSyncIndicator: React.FC = () => {
   const { message } = App.useApp();
@@ -44,7 +44,8 @@ const GlobalSyncIndicator: React.FC = () => {
 
   const overviewReq = useQuery({
     queryKey: ['overview'],
-    queryFn: getOverview,
+    // 3s 后台轮询：跳过全局错误 toast，否则后端不可用时形成 toast 风暴（原因：审阅报告"轮询风暴"）
+    queryFn: () => getOverview({ skipErrorHandler: true }),
     refetchInterval: 3000,
   });
   const activeRun: V1Run | undefined = overviewReq.data?.active_run;

@@ -111,9 +111,12 @@ type Checkpoint struct {
 	ID           uint      `gorm:"primaryKey" json:"id"`
 	FormName     string    `gorm:"type:varchar(128);uniqueIndex;not null" json:"form_name"`
 	RunID        string    `gorm:"type:varchar(64);index" json:"run_id,omitempty"`
-	LastPosition int64     `gorm:"not null;default:0" json:"last_position"`          // StartRow where sync left off
+	LastPosition int64     `gorm:"not null;default:0" json:"last_position"`          // StartRow（StartRow 路径）或已拉取行数（游标路径）
 	LastSyncTime string    `gorm:"type:varchar(64)" json:"last_sync_time,omitempty"` // Last successful sync timestamp from Kingdee
-	UpdatedAt    time.Time `gorm:"autoUpdateTime;index" json:"updated_at"`
+	// CursorValue 持久化游标分页表单的中断游标（JSON 数组），
+	// 使中断的 run 能从断点续拉而非整表重跑（原因：千万级大表中断重跑是周日全量超时的放大器）
+	CursorValue string    `gorm:"type:text" json:"cursor_value,omitempty"`
+	UpdatedAt   time.Time `gorm:"autoUpdateTime;index" json:"updated_at"`
 }
 
 // SnapshotMeta tracks per-form snapshot metadata for full-sync validation.

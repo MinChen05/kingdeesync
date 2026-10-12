@@ -89,6 +89,9 @@ apps/server/packages/
 # zcode plan 文件（含会话上下文，不应提交）
 .zcode/plans/
 
+# 部署敏感配置（钉钉 webhook、密钥等，不应提交）
+deploy/deploy.env
+
 # 根目录临时文件
 form-queries.json
 form-queries.json.new

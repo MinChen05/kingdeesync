@@ -179,7 +179,7 @@ func (s *Service) TestAllConnections() []TestResult {
 	go func() {
 		defer wg.Done()
 		start := time.Now()
-		client := kind.NewKingdeeClient()
+		client := kind.SharedClient()
 		ok := client.TestConnection()
 		duration := time.Since(start).Milliseconds()
 
@@ -259,7 +259,7 @@ func (s *Service) TestConnection(id string) TestResult {
 
 	switch id {
 	case "kingdee":
-		client := kind.NewKingdeeClient()
+		client := kind.SharedClient()
 		ok := client.TestConnection()
 		duration := time.Since(start).Milliseconds()
 

@@ -4,6 +4,7 @@ import {
   batchScheduleAction,
   createSchedule,
   deleteSchedule,
+  getSchedulerStatus,
   listSchedules,
   startScheduler,
   stopScheduler,
@@ -19,8 +20,6 @@ interface UseScheduleResult {
   refresh: () => Promise<unknown>;
   startScheduler: () => Promise<unknown>;
   starting: boolean;
-  pauseScheduler: () => Promise<unknown>;
-  pausing: boolean;
   stopScheduler: () => Promise<unknown>;
   stopping: boolean;
   createJob: (data: ScheduleJobSubmit) => Promise<ScheduleJob>;
@@ -49,15 +48,26 @@ export function useSchedule(): UseScheduleResult {
   });
   const schedules: V1Schedule[] = schedulesReq.data || [];
 
+  // 调度器真实运行状态
+  // （原因：此前 enabled 硬编码 true，停止调度后页面仍显示"运行中"，运维会误判同步在跑；
+  //  轮询查询跳过全局错误 toast，后端不可用时不形成弹窗风暴）
+  const schedulerStatusReq = useQuery({
+    queryKey: ['v1', 'scheduler-status'],
+    queryFn: () => getSchedulerStatus({ skipErrorHandler: true }),
+    refetchInterval: 10000,
+  });
+
   // 转换为 ScheduleJob 格式
   const jobs: ScheduleJob[] = schedules.map(toScheduleJob);
   const status: SchedulerStatus = {
-    enabled: true, // v1 通过单独端点获取
+    enabled: schedulerStatusReq.data?.enabled ?? false,
     jobs,
   };
 
-  const invalidateSchedule = () =>
+  const invalidateSchedule = () => {
     queryClient.invalidateQueries({ queryKey: ['v1', 'schedules'] });
+    queryClient.invalidateQueries({ queryKey: ['v1', 'scheduler-status'] });
+  };
 
   // 启动调度
   const startReq = useMutation({
@@ -116,8 +126,6 @@ export function useSchedule(): UseScheduleResult {
     refresh: schedulesReq.refetch,
     startScheduler: startReq.mutateAsync,
     starting: startReq.isPending,
-    pauseScheduler: stopReq.mutateAsync,
-    pausing: stopReq.isPending,
     stopScheduler: stopReq.mutateAsync,
     stopping: stopReq.isPending,
     createJob: async (data: ScheduleJobSubmit) => {

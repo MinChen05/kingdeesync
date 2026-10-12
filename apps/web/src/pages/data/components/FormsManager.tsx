@@ -1,6 +1,7 @@
 import { App, Collapse, Table, Tag } from 'antd';
 import React, { useMemo, useState } from 'react';
 import Panel from '@/components/Panel';
+import { errorMessage } from '@/utils/errorMessage';
 import type { FormItem, FormStat } from '../types';
 import { useFormColumns } from './FormColumns';
 import { FormToolbar } from './FormToolbar';
@@ -12,8 +13,13 @@ interface FormsManagerProps {
   forms: FormItem[];
   statsMap: Map<string, FormStat>;
   loading?: boolean;
-  onUpdateForm: (formName: string, enabled: boolean) => void;
-  onUpdateFormConfig: (formName: string, data: Partial<FormItem>) => void;
+  // 回调失败时必须 reject；成功/失败提示由本组件统一负责（页面层不再重复弹），
+  // 避免"失败也报成功"与双重 toast
+  onUpdateForm: (formName: string, enabled: boolean) => Promise<void>;
+  onUpdateFormConfig: (
+    formName: string,
+    data: Partial<FormItem>,
+  ) => Promise<void>;
   updating?: boolean;
   updatingConfig?: boolean;
 }
@@ -75,20 +81,29 @@ const FormsManager: React.FC<FormsManagerProps> = ({
       await onUpdateForm(formName, enabled);
       message.success(`${formName} 已${enabled ? '启用' : '禁用'}`);
     } catch (err) {
-      message.error(err instanceof Error ? err.message : '操作失败');
+      message.error(`${formName} ${enabled ? '启用' : '禁用'}失败：${errorMessage(err)}`);
     }
   };
 
+  // 批量逐个提交并统计真实成败（原因：此前无条件按请求数报成功，部分失败被完全掩盖）
   const handleBatchToggle = async (list: FormItem[], enable: boolean) => {
     if (list.length === 0) return;
+    let failed = 0;
     for (const f of list) {
       try {
         await onUpdateForm(f.form_name, enable);
-      } catch (_err) {
-        // continue
+      } catch {
+        failed += 1;
       }
     }
-    message.success(`已${enable ? '启用' : '禁用'} ${list.length} 个表单`);
+    const done = list.length - failed;
+    if (failed === 0) {
+      message.success(`已${enable ? '启用' : '禁用'} ${done} 个表单`);
+    } else {
+      message.warning(
+        `已${enable ? '启用' : '禁用'} ${done} 个表单，失败 ${failed} 个，请检查后端服务后对失败表单重试`,
+      );
+    }
   };
 
   const columns = useFormColumns({
@@ -164,11 +179,15 @@ const FormsManager: React.FC<FormsManagerProps> = ({
         form={editingForm}
         submitting={updatingConfig ?? false}
         onCancel={() => setConfigDrawerVisible(false)}
-        onSubmit={(data) => {
-          if (editingForm) {
-            onUpdateFormConfig(editingForm.form_name, data);
+        onSubmit={async (data) => {
+          if (!editingForm) return;
+          try {
+            await onUpdateFormConfig(editingForm.form_name, data);
             message.success(`${editingForm.form_name} 配置已更新`);
             setConfigDrawerVisible(false);
+          } catch (err) {
+            // 失败保持抽屉打开，用户可修正后重试（原因：此前 fire-and-forget 先报成功）
+            message.error(`配置更新失败：${errorMessage(err)}`);
           }
         }}
       />

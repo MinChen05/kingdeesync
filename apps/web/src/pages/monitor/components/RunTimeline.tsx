@@ -100,7 +100,7 @@ const RunTimeline: React.FC<RunTimelineProps> = ({ runId }) => {
                 }}
               >
                 <DotIndicator
-                  type={LEVEL_TO_DOT[event.level] || 'unknown'}
+                  level={LEVEL_TO_DOT[event.level] || 'unknown'}
                   size={8}
                 />
                 {!isLast && (

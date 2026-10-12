@@ -52,4 +52,28 @@ const DotIndicator: React.FC<DotIndicatorProps> = ({
 export { DotIndicator };
 export type { DotIndicatorProps };
 export { LABELS as dotLabels };
+
+/**
+ * 同步运行状态 → 指示灯等级映射（全站唯一来源）。
+ * running/stopping 是进行中状态而非异常，不得显示红色（原因：大屏此前把进行中误报为故障）。
+ */
+export function runStatusToDotLevel(
+  status: string | undefined,
+): HealthLevel {
+  switch (status) {
+    case 'success':
+      return 'ok';
+    case 'partial':
+    case 'running':
+    case 'stopping':
+      return 'unknown';
+    case 'failed':
+    case 'failed_abnormal_exit':
+    case 'stopped':
+      return 'error';
+    default:
+      return 'unknown';
+  }
+}
+
 export default DotIndicator;

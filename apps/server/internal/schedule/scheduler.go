@@ -173,6 +173,15 @@ func registerJob(job *gormdb.ScheduleJob, engine *syncengine.SyncEngine) error {
 	return nil
 }
 
+// resolveRunTimeout 按同步类型解析看门狗超时：优先配置，配置未加载时回退包级默认值。
+// （原因：全量耗时已逼近原 2 小时硬编码上限，需可配置放宽；保留包变量以兼容测试注入）
+func resolveRunTimeout(syncType string) time.Duration {
+	if d := config.GetSyncRunTimeout(syncType); d > 0 {
+		return d
+	}
+	return schedulerRunTimeout
+}
+
 // runJob executes a scheduled sync job.
 func runJob(job *gormdb.ScheduleJob, engine *syncengine.SyncEngine) {
 	mu.Lock()
@@ -250,9 +259,10 @@ func runJob(job *gormdb.ScheduleJob, engine *syncengine.SyncEngine) {
 	mu.Unlock()
 
 	// Trigger sync (non-blocking)
+	runTimeout := resolveRunTimeout(job.SyncType)
 	go func() {
 		defer notifyScheduleRunComplete(runID)
-		ctx, cancel := context.WithTimeout(context.Background(), schedulerRunTimeout)
+		ctx, cancel := context.WithTimeout(context.Background(), runTimeout)
 		defer cancel()
 		done := make(chan struct{})
 		var timeoutOnce sync.Once
@@ -268,7 +278,7 @@ func runJob(job *gormdb.ScheduleJob, engine *syncengine.SyncEngine) {
 			})
 		}
 		go func() {
-			timer := time.NewTimer(schedulerRunTimeout)
+			timer := time.NewTimer(runTimeout)
 			defer timer.Stop()
 			select {
 			case <-done:
@@ -452,6 +462,21 @@ func IsPaused() bool {
 	mu.Lock()
 	defer mu.Unlock()
 	return paused
+}
+
+// Resume 恢复 Pause 停止的调度：清除 paused 标志、重启 cron 并重新注册任务。
+// （原因：robfig/cron v3 在 Stop 后条目不再触发，而旧 startScheduler 只调 ReloadJobs
+// 不 Start、不清 paused——stop 后"启动"返回 200 但任务永不执行）
+func Resume() error {
+	mu.Lock()
+	paused = false
+	c := cronInstance
+	mu.Unlock()
+	if c == nil {
+		return fmt.Errorf("cron not initialized")
+	}
+	c.Start()
+	return ReloadJobs()
 }
 
 // SetEngine stores the sync engine reference for use by ReloadJobs.

@@ -625,8 +625,10 @@ func TestGracefulStopCancelsBlockingKingdeePaginationRequest(t *testing.T) {
 	resultDone := make(chan *SyncResult, 1)
 	go func() {
 		// 使用非游标表单名：销售订单已加入游标分页列表，游标路径不走 StartRow
-		// 分页且要求完整游标字段，与本测试的 httptest server（StartRow 0→2→4）不兼容
-		result, err := engine.SyncDataWithRunID(context.Background(), runID, []string{"测试表单"}, "full", false)
+		// 分页且要求完整游标字段，与本测试的 httptest server（StartRow 0→2→4）不兼容。
+		// 表单名必须能映射为合法 SQL 标识符（ASCII），否则会被表名安全闸门拒绝
+		// （原因：批二新增 FormToTableName 输出校验，中文兜底表名不再允许进入同步）
+		result, err := engine.SyncDataWithRunID(context.Background(), runID, []string{"TestForm"}, "full", false)
 		if err != nil {
 			t.Errorf("sync failed: %v", err)
 			return

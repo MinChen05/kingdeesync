@@ -3,6 +3,7 @@ import { Link } from '@umijs/max';
 import { Empty, Typography } from 'antd';
 import React from 'react';
 import Panel from '@/components/Panel';
+import { formatDuration } from '@/utils/format';
 import type { RecentRun } from '../hooks';
 
 const { Text } = Typography;
@@ -12,16 +13,17 @@ interface RecentRunsProps {
   loading?: boolean;
 }
 
-const STATUS_META: Record<string, { color: string; label: string }> = {
-  success: { color: 'var(--tk-success)', label: '成功' },
-  failed: { color: 'var(--tk-error)', label: '失败' },
-  failed_abnormal_exit: { color: 'var(--tk-error)', label: '失败' },
-  partial: { color: 'var(--tk-warning)', label: '部分' },
-  running: { color: 'var(--tk-primary)', label: '运行中' },
+// 灯点只用到颜色；状态文案的收敛点是 SyncStatusTag（此处 label 从未渲染，已移除，
+// 原因：删除与 Tag 映射漂移的死字段，避免两处文案各说各话）
+const STATUS_COLOR: Record<string, string> = {
+  success: 'var(--tk-success)',
+  failed: 'var(--tk-error)',
+  failed_abnormal_exit: 'var(--tk-error)',
+  partial: 'var(--tk-warning)',
+  running: 'var(--tk-primary)',
 };
 
-const getStatusMeta = (status: string) =>
-  STATUS_META[status] || { color: 'var(--tk-dim)', label: status || '未知' };
+const getStatusColor = (status: string) => STATUS_COLOR[status] || 'var(--tk-dim)';
 
 /**
  * 最近同步记录：状态指示灯 + 表单名 + 记录数/耗时/时间。
@@ -40,7 +42,7 @@ const RecentRuns: React.FC<RecentRunsProps> = ({ recent, loading }) => {
       {recent.length > 0 ? (
         <div className="space-y-2">
           {recent.map((run) => {
-            const meta = getStatusMeta(run.status);
+            const color = getStatusColor(run.status);
             return (
               <Link
                 key={run.id || run.run_id || run.start_time}
@@ -60,8 +62,8 @@ const RecentRuns: React.FC<RecentRunsProps> = ({ recent, loading }) => {
                     width: 8,
                     height: 8,
                     borderRadius: '50%',
-                    backgroundColor: meta.color,
-                    boxShadow: `0 0 8px ${meta.color}`,
+                    backgroundColor: color,
+                    boxShadow: `0 0 8px ${color}`,
                     flexShrink: 0,
                   }}
                 />
@@ -88,9 +90,7 @@ const RecentRuns: React.FC<RecentRunsProps> = ({ recent, loading }) => {
                   }}
                 >
                   {(run.record_count || 0).toLocaleString()} 条 ·{' '}
-                  {run.duration_seconds
-                    ? `${Math.round(run.duration_seconds)}秒`
-                    : '-'}{' '}
+                  {run.duration_seconds ? formatDuration(run.duration_seconds) : '-'}{' '}
                   · {run.start_time || '-'}
                 </span>
               </Link>

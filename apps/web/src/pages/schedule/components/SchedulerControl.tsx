@@ -12,10 +12,8 @@ interface SchedulerControlProps {
   jobCount: number;
   enabledCount: number;
   onStart: () => void;
-  onPause: () => void;
   onStop: () => void;
   starting: boolean;
-  pausing: boolean;
   stopping: boolean;
 }
 
@@ -27,10 +25,8 @@ const SchedulerControl: React.FC<SchedulerControlProps> = ({
   jobCount,
   enabledCount,
   onStart,
-  onPause,
   onStop,
   starting,
-  pausing,
   stopping,
 }) => {
   const dotColor = enabled ? '#22c55e' : '#f59e0b';
@@ -96,29 +92,15 @@ const SchedulerControl: React.FC<SchedulerControlProps> = ({
         {/* 右侧：操作按钮 */}
         <div style={{ display: 'flex', gap: 8 }}>
           {enabled ? (
-            <>
-              <Button
-                size="small"
-                loading={pausing}
-                onClick={onPause}
-                style={{
-                  backgroundColor: 'rgba(148,163,184,0.08)',
-                  borderColor: 'rgba(148,163,184,0.15)',
-                  color: '#cbd5e1',
-                }}
-              >
-                暂停
-              </Button>
-              <Button
-                size="small"
-                danger
-                icon={<StopOutlined />}
-                loading={stopping}
-                onClick={onStop}
-              >
-                停止
-              </Button>
-            </>
+            <Button
+              size="small"
+              danger
+              icon={<StopOutlined />}
+              loading={stopping}
+              onClick={onStop}
+            >
+              停止调度
+            </Button>
           ) : (
             <Button
               type="primary"

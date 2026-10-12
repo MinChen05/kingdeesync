@@ -2,10 +2,16 @@ package webhook
 
 import (
 	"bytes"
+	"crypto/hmac"
+	"crypto/sha256"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"log"
 	"net/http"
+	"net/url"
+	"strconv"
+	"strings"
 	"time"
 )
 
@@ -150,28 +156,63 @@ func (d *Dispatcher) SendDingTalk(url, title, content string) {
 
 // DingTalkNotifier wraps SendDingTalk for use as a completion hook.
 type DingTalkNotifier struct {
-	url string
+	url    string
+	secret string
 }
 
 // NewDingTalkNotifier creates a notifier for DingTalk alerts.
-func NewDingTalkNotifier(webhookURL string) *DingTalkNotifier {
-	return &DingTalkNotifier{url: webhookURL}
+// secret 为机器人"加签"安全设置的密钥（SEC 开头）；为空表示机器人未启用加签。
+func NewDingTalkNotifier(webhookURL, secret string) *DingTalkNotifier {
+	return &DingTalkNotifier{url: webhookURL, secret: secret}
+}
+
+// sendURL 按钉钉加签规范（sign = urlEncode(base64(HMAC-SHA256(secret, timestamp+"\n"+secret))))
+// 为 webhook URL 追加 timestamp 与 sign 参数；未配置密钥时原样返回。
+// （原因：机器人开启"加签"安全设置时，仅带 access_token 的请求会被拒绝 errcode 310000）
+func (n *DingTalkNotifier) sendURL() (string, error) {
+	if n.secret == "" {
+		return n.url, nil
+	}
+	timestamp := strconv.FormatInt(time.Now().UnixMilli(), 10)
+	mac := hmac.New(sha256.New, []byte(n.secret))
+	if _, err := mac.Write([]byte(timestamp + "\n" + n.secret)); err != nil {
+		return "", fmt.Errorf("dingtalk sign hmac: %w", err)
+	}
+	sign := url.QueryEscape(base64.StdEncoding.EncodeToString(mac.Sum(nil)))
+	sep := "?"
+	if strings.Contains(n.url, "?") {
+		sep = "&"
+	}
+	return fmt.Sprintf("%s%stimestamp=%s&sign=%s", n.url, sep, timestamp, sign), nil
+}
+
+// send 解析加签 URL 并发送。
+func (n *DingTalkNotifier) send(title, content string) {
+	if n.url == "" {
+		return
+	}
+	signed, err := n.sendURL()
+	if err != nil {
+		log.Printf("[DINGTALK] sign error: %v", err)
+		return
+	}
+	New().SendDingTalk(signed, title, content)
 }
 
 // OnCompleted sends a success notification.
 func (n *DingTalkNotifier) OnCompleted(runID string, duration float64, formCount int) {
-	if n.url == "" {
-		return
-	}
 	content := fmt.Sprintf("运行 %s 成功完成\n耗时: %.1f 秒\n同步表单: %d 个", runID[:8], duration, formCount)
-	New().SendDingTalk(n.url, "同步成功", content)
+	n.send("同步成功", content)
 }
 
 // OnFailed sends a failure notification.
 func (n *DingTalkNotifier) OnFailed(runID, message string, duration float64) {
-	if n.url == "" {
-		return
-	}
 	content := fmt.Sprintf("运行 %s 失败\n耗时: %.1f 秒\n错误: %s", runID[:8], duration, message)
-	New().SendDingTalk(n.url, "同步失败", content)
+	n.send("同步失败", content)
+}
+
+// SendAlert 发送系统级告警（如目标数据库断连/恢复），不依赖具体同步 run。
+// （原因：探活告警发生在两次同步任务之间，无法复用面向 run 生命周期的 OnCompleted/OnFailed）
+func (n *DingTalkNotifier) SendAlert(title, content string) {
+	n.send(title, content)
 }

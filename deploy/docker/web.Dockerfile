@@ -9,7 +9,9 @@ ENV NPM_CONFIG_REGISTRY=https://registry.npmmirror.com \
     COREPACK_HOME=/pnpm-store/corepack
 
 WORKDIR /src/apps/web
-RUN corepack enable && corepack prepare pnpm@latest --activate
+# pnpm 钉到已知可用版本：pnpm@latest 漂移后删除 --fetch-retries 等 CLI 标志，
+# 使 pnpm install 步骤失败。（原因：构建可重现性与标志兼容性锁定）
+RUN corepack enable && corepack prepare pnpm@11.17.0 --activate
 # 先复制全部源码再安装：prepare 脚本（husky + max setup）需要完整源码
 COPY apps/web ./
 RUN pnpm install --frozen-lockfile --store-dir /pnpm-store --fetch-retries=10 --fetch-timeout=300000 --network-concurrency=6

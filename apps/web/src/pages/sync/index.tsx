@@ -1,16 +1,14 @@
 import { App } from 'antd';
 import React, { useState } from 'react';
 import PageHeader from '@/components/PageHeader';
+import { errorMessage } from '@/utils/errorMessage';
+import { ApiProblemError } from '@/services/v1';
 import LastSyncSummary from './components/LastSyncSummary';
 import SyncConfigPanel from './components/SyncConfigPanel';
 import SyncLogViewer from './components/SyncLogViewer';
 import SyncProgressPanel from './components/SyncProgressPanel';
 import { useSyncPage } from './hooks';
 import type { SyncMode } from './types';
-
-function errorMessage(err: unknown): string {
-  return err instanceof Error ? err.message : String(err);
-}
 
 /**
  * 同步执行中心。
@@ -47,12 +45,11 @@ const SyncPage: React.FC = () => {
       });
       message.success('同步任务已启动');
     } catch (err) {
-      const msg = errorMessage(err);
-      // 409 冲突：有任务正在运行，给出友好提示（原因：避免暴露原始错误文本）
-      if (msg.includes('409') || msg.includes('Conflict') || msg.includes('already running')) {
+      // 409 冲突改读结构化 status/code（原因：字符串匹配会把含 "409" 的任意错误误判为冲突）
+      if (err instanceof ApiProblemError && (err.status === 409 || err.code === 'ALREADY_RUNNING')) {
         message.warning('已有同步任务正在运行，请稍后再试');
       } else {
-        message.error(msg || '启动同步失败');
+        message.error(errorMessage(err) || '启动同步失败');
       }
     }
   };

@@ -13,18 +13,18 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
+	"github.com/kingdee-sync/go/internal/config"
 	kingdeeDB "github.com/kingdee-sync/go/internal/db"
 	"github.com/kingdee-sync/go/internal/gormdb"
 	"github.com/kingdee-sync/go/internal/syncengine"
 )
 
 var (
-	syncEng              *syncengine.SyncEngine
-	activeTask           *activeSyncTask
-	syncMutex            sync.Mutex
-	lastSyncResult       *syncengine.SyncResult
-	syncExecutionTimeout = configuredSyncExecutionTimeout()
-	syncStopTimeout      = 30 * time.Second
+	syncEng         *syncengine.SyncEngine
+	activeTask      *activeSyncTask
+	syncMutex       sync.Mutex
+	lastSyncResult  *syncengine.SyncResult
+	syncStopTimeout = 30 * time.Second
 )
 
 type activeSyncTask struct {
@@ -35,19 +35,23 @@ type activeSyncTask struct {
 	stopWatcherStarted bool
 }
 
-func configuredSyncExecutionTimeout() time.Duration {
-	// 全量同步数据量可达 400 万+ 条，30 分钟不够；与调度任务保持一致。
-	// （原因：全量同步 403 万条实测需 58 分钟+，30 分钟必然超时中断）
+// syncExecutionTimeoutFor 按同步类型解析手动执行超时。优先级：
+// 环境变量 SYNC_EXECUTION_TIMEOUT（向后兼容既有部署）> ini 分型配置 > 默认 2 小时。
+// （原因：原实现只在进程启动时固定一个值，与调度侧的按类型配置脱节）
+func syncExecutionTimeoutFor(syncType string) time.Duration {
 	const defaultTimeout = 2 * time.Hour
-	raw := os.Getenv("SYNC_EXECUTION_TIMEOUT")
-	if raw == "" {
-		return defaultTimeout
+	if raw := os.Getenv("SYNC_EXECUTION_TIMEOUT"); raw != "" {
+		value, err := time.ParseDuration(raw)
+		if err != nil || value <= 0 {
+			log.Printf("[Sync] Invalid SYNC_EXECUTION_TIMEOUT=%q; falling back to config/default", raw)
+		} else {
+			return value
+		}
 	}
-	value, err := time.ParseDuration(raw)
-	if err != nil || value <= 0 {
-		log.Printf("[Sync] Invalid SYNC_EXECUTION_TIMEOUT=%q; using default %s", raw, defaultTimeout)
+	if d := config.GetSyncRunTimeout(syncType); d > 0 {
+		return d
 	}
-	return value
+	return defaultTimeout
 }
 
 // InitRunsRoutes registers the v1 run-related endpoints.
@@ -153,7 +157,7 @@ func createRun(c *gin.Context) {
 		return
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), syncExecutionTimeout)
+	ctx, cancel := context.WithTimeout(context.Background(), syncExecutionTimeoutFor(req.SyncType))
 	task := &activeSyncTask{runID: runID, cancel: cancel, done: make(chan struct{}), startedAt: time.Now()}
 	activeTask = task
 	db := gormdb.DB
@@ -241,6 +245,7 @@ func retryFailedForms(c *gin.Context) {
 
 	// Check if sync is already running
 	syncMutex.Lock()
+	defer syncMutex.Unlock() // 原因：此前所有出口都不解锁，首次调用即永久锁死 createRun/stopSync/getSyncStatus
 	currentRunID := ""
 	if activeTask != nil {
 		currentRunID = activeTask.runID
@@ -264,8 +269,12 @@ func retryFailedForms(c *gin.Context) {
 	}
 
 	// Start retry in background
+	// （原因：与 createRun 对齐加执行超时，防止重试 run 挂死后只能靠心跳恢复兜底）
+	runTimeout := syncExecutionTimeoutFor("incremental")
 	go func() {
-		result, err := syncEng.SyncDataWithRunID(context.Background(), newRunID, formNames, "incremental", false)
+		ctx, cancel := context.WithTimeout(context.Background(), runTimeout)
+		defer cancel()
+		result, err := syncEng.SyncDataWithRunID(ctx, newRunID, formNames, "incremental", false)
 		if err != nil {
 			gormdb.FinishSyncRunWithRetry(newRunID, string(syncengine.StatusFailed), 0, 0, 0, 0, 0, 0, 0, err.Error())
 			return

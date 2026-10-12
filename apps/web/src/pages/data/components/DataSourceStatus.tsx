@@ -4,9 +4,10 @@ import {
   DatabaseOutlined,
   ExclamationCircleOutlined,
 } from '@ant-design/icons';
-import { Space, Tag, Typography } from 'antd';
+import { Space, Typography } from 'antd';
 import React from 'react';
 import Panel from '@/components/Panel';
+import ServiceStatusTag from '@/components/ServiceStatusTag';
 
 const { Text } = Typography;
 
@@ -26,28 +27,16 @@ const DataSourceStatus: React.FC<DataSourceStatusProps> = ({
   database,
   loading,
 }) => {
-  const statusMeta = (status: string) => {
-    if (status === 'ok')
-      return {
-        icon: <CheckCircleOutlined />,
-        color: 'success' as const,
-        text: '正常',
-      };
-    if (status === 'error')
-      return {
-        icon: <ExclamationCircleOutlined />,
-        color: 'error' as const,
-        text: '异常',
-      };
-    return {
-      icon: <ExclamationCircleOutlined />,
-      color: 'default' as const,
-      text: '未知',
-    };
-  };
+  // 状态文案/颜色收敛到 ServiceStatusTag（原因：DRY），此处仅保留卡片右侧图标
+  const statusIcon = (status?: string) =>
+    status === 'ok' ? (
+      <CheckCircleOutlined style={{ color: 'var(--tk-success)' }} />
+    ) : (
+      <ExclamationCircleOutlined style={{ color: 'var(--tk-error)' }} />
+    );
 
-  const kd = kingdeeApi ? statusMeta(kingdeeApi.status) : statusMeta('unknown');
-  const db = database ? statusMeta(database.status) : statusMeta('unknown');
+  const kdStatus = kingdeeApi?.status;
+  const dbStatus = database?.status;
 
   return (
     <Panel title="数据源状态" loading={loading}>
@@ -62,7 +51,7 @@ const DataSourceStatus: React.FC<DataSourceStatusProps> = ({
             <div>
               <Text strong>金蝶 API</Text>
               <div>
-                <Tag color={kd.color}>{kd.text}</Tag>
+                <ServiceStatusTag status={kdStatus} />
                 {kingdeeApi?.response_ms !== undefined && (
                   <Text type="secondary" style={{ fontSize: 12 }}>
                     {kingdeeApi.response_ms}ms
@@ -71,7 +60,7 @@ const DataSourceStatus: React.FC<DataSourceStatusProps> = ({
               </div>
             </div>
           </Space>
-          {kd.icon}
+          {statusIcon(kdStatus)}
         </div>
 
         {/* 数据库 */}
@@ -84,7 +73,7 @@ const DataSourceStatus: React.FC<DataSourceStatusProps> = ({
             <div>
               <Text strong>数据库</Text>
               <div>
-                <Tag color={db.color}>{db.text}</Tag>
+                <ServiceStatusTag status={dbStatus} />
                 {database?.response_ms !== undefined && (
                   <Text type="secondary" style={{ fontSize: 12 }}>
                     {database.response_ms}ms
@@ -93,7 +82,7 @@ const DataSourceStatus: React.FC<DataSourceStatusProps> = ({
               </div>
             </div>
           </Space>
-          {db.icon}
+          {statusIcon(dbStatus)}
         </div>
       </div>
     </Panel>

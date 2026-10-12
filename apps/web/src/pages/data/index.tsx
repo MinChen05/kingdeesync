@@ -1,14 +1,9 @@
-import { App } from 'antd';
 import React from 'react';
 import PageHeader from '@/components/PageHeader';
 import DataSourceStatus from './components/DataSourceStatus';
 import FormsManager from './components/FormsManager';
 import { useDataPage } from './hooks';
 import type { FormItem } from './types';
-
-function errorMessage(err: unknown): string {
-  return err instanceof Error ? err.message : String(err);
-}
 
 /**
  * 数据配置页：数据源状态 + 同步范围（表单管理）。
@@ -17,7 +12,6 @@ function errorMessage(err: unknown): string {
  *  运维人员先确认数据源正常，再调整同步范围）
  */
 const DataPage: React.FC = () => {
-  const { message } = App.useApp();
   const {
     allForms,
     formsLoading,
@@ -30,20 +24,17 @@ const DataPage: React.FC = () => {
     updatingConfig,
   } = useDataPage();
 
+  // 失败一律 rethrow 且不再弹 toast：成功/失败提示由 FormsManager 统一负责
+  // （原因：此前 catch 吞错导致组件层"失败也报成功"，且与组件层形成双重 toast）
   const handleUpdateForm = async (formName: string, enabled: boolean) => {
-    try {
-      await updateForm(formName, enabled);
-    } catch (err) {
-      message.error(errorMessage(err) || '操作失败');
-    }
+    await updateForm(formName, enabled);
   };
 
-  const handleUpdateFormConfig = async (formName: string, data: Partial<FormItem>) => {
-    try {
-      await updateFormConfig(formName, data);
-    } catch (err) {
-      message.error(errorMessage(err) || '操作失败');
-    }
+  const handleUpdateFormConfig = async (
+    formName: string,
+    data: Partial<FormItem>,
+  ) => {
+    await updateFormConfig(formName, data);
   };
 
   return (

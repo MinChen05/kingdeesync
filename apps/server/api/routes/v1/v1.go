@@ -118,6 +118,9 @@ type HealthItem struct {
 	NextExec   string `json:"next_exec,omitempty"`
 	WriteSpeed string `json:"write_speed,omitempty"`
 	LogSize    string `json:"log_size,omitempty"`
+	// 探活状态（仅数据库项填充；原因：探活状态机结果需透传到前端才能展示目标库健康态）
+	ProbeHealthy *bool  `json:"probe_healthy,omitempty"`
+	ProbeAt      string `json:"probe_at,omitempty"`
 }
 
 // TrendDay is a single day in the 7-day trend.

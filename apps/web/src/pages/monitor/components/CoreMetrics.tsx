@@ -6,6 +6,7 @@ import {
 import { Col, Row, Statistic } from 'antd';
 import React from 'react';
 import Panel from '@/components/Panel';
+import { formatDuration } from '@/utils/format';
 import type { StatsSummary } from '../types';
 
 interface CoreMetricsProps {
@@ -59,9 +60,7 @@ const CoreMetrics: React.FC<CoreMetricsProps> = ({ stats, loading }) => {
         <Col span={6}>
           <Statistic
             title="平均耗时"
-            value={stats.avg_duration_sec}
-            precision={0}
-            suffix="秒"
+            value={formatDuration(stats.avg_duration_sec)}
             prefix={<ClockCircleOutlined style={{ color: 'var(--tk-muted)' }} />}
             valueStyle={{ color: 'var(--tk-text)' }}
           />

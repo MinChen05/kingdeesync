@@ -198,6 +198,14 @@ func updateForm(c *gin.Context) {
 		})
 		return
 	}
+	// 表单名映射出的表名会进入 TRUNCATE/查询拼接，注册入口即校验（原因：切断注入源头）
+	if err := config.ValidateSQLIdentifier(config.FormToTableName(formName)); err != nil {
+		WriteProblem(c, http.StatusBadRequest, Problem{
+			Code:    "INVALID_FORM_NAME",
+			Message: "表单名映射的表名不是合法的 SQL 标识符，请改用字母/数字/下划线组成的名称",
+		})
+		return
+	}
 
 	var req struct {
 		Enabled       *bool                   `json:"enabled"`

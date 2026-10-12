@@ -2,6 +2,7 @@ package syncengine
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"log"
@@ -1008,6 +1009,19 @@ func (e *SyncEngine) runSync(ctx context.Context, runID string, forms []string, 
 					FormName:  formName,
 					TableName: config.FormToTableName(formName),
 				}
+				// 表名必须通过 SQL 标识符校验才允许进入任何拼接（TRUNCATE/查询/写入），
+				// FormToTableName 兜底可透传任意字符（原因：防注入，失败仅置该表单 error）
+				if err := config.ValidateSQLIdentifier(stat.TableName); err != nil {
+					stat.Status = StatusFailed
+					stat.ErrorCount = 1
+					stat.Error = fmt.Sprintf("表单 %q 映射的表名不合法，已拒绝执行: %v", formName, err)
+					stat.DurationSec = time.Since(start).Seconds()
+					mu.Lock()
+					results = append(results, stat)
+					mu.Unlock()
+					e.logMsg(formName, "ERROR", stat.Error)
+					return
+				}
 				if ctx.Err() != nil || e.isFetchStopped() {
 					stat.Status = StatusStopped
 					stat.Error = "sync stopped"
@@ -1152,7 +1166,7 @@ func (e *SyncEngine) runSync(ctx context.Context, runID string, forms []string, 
 					result, err = e.fetchRows(fetchCtx, formName, startRow)
 				} else if formName == "科目余额表" {
 					e.logMsg(formName, "INFO", "使用 GetSysReportData API 按月同步...")
-					client := kind.NewKingdeeClient()
+					client := kind.SharedClient()
 					endYear, endPeriod := accountBalanceEndPeriod(time.Now())
 					startYear, startPeriod := 2025, 1
 					if syncType == "incremental" {
@@ -1196,7 +1210,7 @@ func (e *SyncEngine) runSync(ctx context.Context, runID string, forms []string, 
 						e.logMsg(formName, "INFO", msg)
 					}
 
-					client := kind.NewKingdeeClient()
+					client := kind.SharedClient()
 					result, err = client.QueryDataContext(fetchCtx, queryParams)
 				}
 				if err != nil {
@@ -1515,6 +1529,12 @@ func (e *SyncEngine) syncCursorForm(ctx, fetchCtx context.Context, runID, formNa
 		stat.Status, stat.ErrorCount, stat.Error = StatusFailed, 1, err.Error()
 		return
 	}
+	// 纵深防御：本函数内部有 TRUNCATE/暂存表名拼接，入口再校验一次表名
+	// （原因：即使调用方已过滤，任何未来新调用路径都不能绕过）
+	if err := config.ValidateSQLIdentifier(tableName); err != nil {
+		stat.Status, stat.ErrorCount, stat.Error = StatusFailed, 1, err.Error()
+		return
+	}
 	// Kingdee caps single-page responses at 10000 rows server-side
 	// (verified: Limit=50000 still returns 10000). Keep the cap aligned.
 	// （原因：实测金蝶服务端强制单页 10000 条，请求 50000 无效且会因
@@ -1523,15 +1543,47 @@ func (e *SyncEngine) syncCursorForm(ctx, fetchCtx context.Context, runID, formNa
 	if pageSize <= 0 || pageSize > 10000 {
 		pageSize = 10000
 	}
-	client := kind.NewKingdeeClient()
+	client := kind.SharedClient()
 	var previous []interface{}
 	truncated := false
+	resumed := false
+
+	// 游标断点续传：本 run 的 checkpoint 带持久化游标时恢复 previous 续拉。
+	// 同时视同已 TRUNCATE（断点前的页已写入目标表，再清表会丢已写数据）。
+	// （原因：千万级大表现状中断即整表重跑，是周日全量超时的放大器）
+	if !dryRun {
+		cp, cpErr := gormdb.GetCheckpoint(formName)
+		if cpErr != nil {
+			stat.Status, stat.ErrorCount, stat.Error = StatusFailed, 1, fmt.Sprintf("checkpoint load failed: %v", cpErr)
+			return
+		}
+		if cp != nil && cp.CursorValue != "" {
+			belongs, belongsErr := e.checkpointBelongsToRun(cp, runID)
+			if belongsErr != nil {
+				stat.Status, stat.ErrorCount, stat.Error = StatusFailed, 1, fmt.Sprintf("checkpoint identity validation failed: %v", belongsErr)
+				return
+			}
+			if belongs {
+				var restored []interface{}
+				if err := json.Unmarshal([]byte(cp.CursorValue), &restored); err != nil || len(restored) != len(cursorKeys) {
+					e.logMsg(formName, "WARN", fmt.Sprintf("游标断点格式不兼容，改为全量拉取: %v", err))
+				} else {
+					previous = restored
+					truncated = true
+					resumed = true
+					e.logMsg(formName, "INFO", "从游标断点续传: "+cp.CursorValue)
+				}
+			}
+		}
+	}
 
 	// Full sync: collect all fetched PKs into a staging table so we can later
 	// delete target rows that Kingdee no longer has (orphan cleanup).
 	// （原因：游标表单之前从不清理金蝶已删除的记录；PK 走 staging 表避免内存爆炸）
+	// 续传 run 禁用孤儿清理：staging 表只含本次续拉的页，断点前的已写行会被误判为孤儿
+	// （原因：宁可漏删一轮，不可误删已写数据）
 	var pkCollector *sourceKeyCollector
-	if syncType == "full" && !dryRun {
+	if syncType == "full" && !dryRun && !resumed {
 		pkStr := db.GetPrimaryKey(tableName)
 		if pkStr != "" {
 			pkCols := make([]string, 0, 2)
@@ -1624,6 +1676,15 @@ func (e *SyncEngine) syncCursorForm(ctx, fetchCtx context.Context, runID, formNa
 			}
 		}
 		previous = current
+		// 每页写库成功后持久化游标；写失败仅告警不中断（原因：与 StartRow 路径 :1349 语义一致，
+		// 断点丢失最多退化为整表重跑，不应让正常同步因元数据写入失败而中断）
+		if !dryRun {
+			if cpJSON, jErr := json.Marshal(previous); jErr == nil {
+				if sErr := gormdb.SaveCursorCheckpoint(formName, runID, int64(stat.FetchedCount), string(cpJSON)); sErr != nil {
+					log.Printf("[CHECKPOINT] Warning: failed to persist cursor for %s: %v", formName, sErr)
+				}
+			}
+		}
 		e.logMsg(formName, "INFO", fmt.Sprintf("同步进度: %d 条 (第 %d 页)", stat.FetchedCount, page))
 		if len(result.Rows) < pageSize {
 			break
@@ -1643,7 +1704,8 @@ func (e *SyncEngine) syncCursorForm(ctx, fetchCtx context.Context, runID, formNa
 		log.Printf("[SYNC] Warning: fetched/written mismatch for %s: fetched=%d written=%d (minor database filtering)", formName, stat.FetchedCount, stat.InsertedCount+stat.UpdatedCount)
 		return
 	}
-	if !dryRun && syncType == "reset" && stat.FetchedCount > 0 {
+	// 续传 run 跳过目标行数核对：targetCount 含断点前已写行，与本 run 拉取数必然不等（原因：核对仅对完整单 run 有意义）
+	if !dryRun && syncType == "reset" && stat.FetchedCount > 0 && !resumed {
 		if db.DB == nil {
 			stat.Status, stat.ErrorCount, stat.Error = StatusFailed, 1, "database not initialized"
 			return
@@ -1676,6 +1738,14 @@ func (e *SyncEngine) syncCursorForm(ctx, fetchCtx context.Context, runID, formNa
 				log.Printf("[FULL-SYNC] Deleted %d orphaned rows from %s (removed in Kingdee)", deleted, tableName)
 				e.logMsg(formName, "INFO", fmt.Sprintf("删除 %d 条孤儿记录", deleted))
 			}
+		}
+	}
+
+	// 游标表单大多不在 priority==2 组（调用方清理覆盖不到），成功终点自行清理断点，
+	// 防止残留游标（原因：残留虽不会被新 run 误恢复——runID 校验拦截——但属脏状态）
+	if !dryRun {
+		if err := gormdb.ClearCheckpoint(formName); err != nil {
+			log.Printf("[CHECKPOINT] Warning: failed to clear cursor checkpoint for %s: %v", formName, err)
 		}
 	}
 
@@ -1876,13 +1946,13 @@ func (e *SyncEngine) getTableColumns(tableName string) (map[string]string, error
 	}
 
 	cols := make(map[string]string)
-	// Use positional parameter (?) for SQL Server compatibility
-	rows, err := db.DB.Queryx(fmt.Sprintf(`
+	// go-mssqldb 仅识别 @pN 命名参数；表名改参数绑定（原因：消除拼接面，与 orphan_reconcile 等同类查询一致）
+	rows, err := db.DB.Queryx(`
 		SELECT COLUMN_NAME
 		FROM INFORMATION_SCHEMA.COLUMNS
-		WHERE TABLE_SCHEMA = 'dbo' AND TABLE_NAME = '%s'
+		WHERE TABLE_SCHEMA = 'dbo' AND TABLE_NAME = @p1
 		ORDER BY ORDINAL_POSITION
-	`, tableName))
+	`, tableName)
 	if err != nil {
 		return nil, err
 	}

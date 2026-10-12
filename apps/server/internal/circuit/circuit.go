@@ -118,11 +118,16 @@ var ErrOpen = gobreaker.ErrOpenState
 // 全局熔断器（用于金蝶 API，单例模式）
 // ///////////////////////////////////////////////////////////////////
 
-// InitGlobalBreaker 初始化全局金蝶 API 熔断器。
+// InitGlobalBreaker 初始化全局金蝶 API 熔断器（幂等：已初始化则不重建）。
+// （原因：此前每次 NewKingdeeClient 都重建熔断器，清零累计失败计数，
+// "连续 N 次失败才熔断"在高频建客户端的场景下永远凑不满）
 func InitGlobalBreaker(cfg Config) {
 	mu.Lock()
 	defer mu.Unlock()
 
+	if globalCB != nil {
+		return
+	}
 	globalCB = New(cfg)
 }
 

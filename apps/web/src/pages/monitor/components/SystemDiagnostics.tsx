@@ -1,7 +1,8 @@
 import { ReloadOutlined } from '@ant-design/icons';
-import { Button, Descriptions, Space, Tag, Typography } from 'antd';
+import { Button, Descriptions, Space, Typography } from 'antd';
 import React from 'react';
 import Panel from '@/components/Panel';
+import ServiceStatusTag from '@/components/ServiceStatusTag';
 import type { DiagInfo } from '../types';
 
 const { Text } = Typography;
@@ -22,12 +23,6 @@ const SystemDiagnostics: React.FC<SystemDiagnosticsProps> = ({
   loading,
   onRefresh,
 }) => {
-  const diagStatusTag = (status: string) => {
-    if (status === 'ok') return <Tag color="success">正常</Tag>;
-    if (status === 'error') return <Tag color="error">异常</Tag>;
-    return <Tag color="default">{status || '未知'}</Tag>;
-  };
-
   return (
     <Panel
       title="系统诊断"
@@ -43,7 +38,7 @@ const SystemDiagnostics: React.FC<SystemDiagnosticsProps> = ({
       <Descriptions column={1} size="small" bordered>
         <Descriptions.Item label="金蝶 API">
           <Space>
-            {diagStatusTag(info.kingdee_api?.status || 'unknown')}
+            <ServiceStatusTag status={info.kingdee_api?.status} />
             {info.kingdee_api?.response_ms !== undefined && (
               <Text type="secondary" style={{ fontSize: 12 }}>
                 {info.kingdee_api.response_ms}ms
@@ -53,7 +48,7 @@ const SystemDiagnostics: React.FC<SystemDiagnosticsProps> = ({
         </Descriptions.Item>
         <Descriptions.Item label="数据库">
           <Space>
-            {diagStatusTag(info.database?.status || 'unknown')}
+            <ServiceStatusTag status={info.database?.status} />
             {info.database?.response_ms !== undefined && (
               <Text type="secondary" style={{ fontSize: 12 }}>
                 {info.database.response_ms}ms
@@ -62,10 +57,10 @@ const SystemDiagnostics: React.FC<SystemDiagnosticsProps> = ({
           </Space>
         </Descriptions.Item>
         <Descriptions.Item label="调度器">
-          {diagStatusTag(info.scheduler?.status || 'unknown')}
+          <ServiceStatusTag status={info.scheduler?.status} />
         </Descriptions.Item>
         <Descriptions.Item label="日志服务">
-          {diagStatusTag(info.log_service?.status || 'unknown')}
+          <ServiceStatusTag status={info.log_service?.status} />
         </Descriptions.Item>
       </Descriptions>
     </Panel>

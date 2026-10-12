@@ -185,6 +185,6 @@ export const layout: RunTimeLayoutConfig = ({
  * Request 配置
  */
 export const request: RequestConfig = {
-  baseURL: isDev ? '' : '',
+  // 原 `baseURL: isDev ? '' : ''` 两分支相同、无意义，已移除（原因：请求走相对路径 + dev proxy）
   ...errorConfig,
 };

@@ -115,6 +115,22 @@ func NewKingdeeClient() *KingdeeClient {
 	}
 }
 
+var (
+	sharedClient     *KingdeeClient
+	sharedClientOnce sync.Once
+)
+
+// SharedClient 返回进程级金蝶客户端单例。
+// 客户端无 per-form 状态、登录由 loginGate 串行化；复用单例消除
+// 每表单 NewKingdeeClient 引发的重复登录与 cookiejar 重建
+// （原因：登录调用被表单数放大，且每次重建都会重置全局限流/熔断器）。
+func SharedClient() *KingdeeClient {
+	sharedClientOnce.Do(func() {
+		sharedClient = NewKingdeeClient()
+	})
+	return sharedClient
+}
+
 func (c *KingdeeClient) Login() error {
 	return c.LoginContext(context.Background())
 }

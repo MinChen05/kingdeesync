@@ -6,6 +6,7 @@ import { App, Button, Checkbox, Radio, Tag, Typography } from 'antd';
 import { useSearchParams } from '@umijs/max';
 import React, { useEffect, useMemo, useState } from 'react';
 import Panel from '@/components/Panel';
+import { FORM_CATEGORIES } from '@/constants/formCategories';
 import type { V1Form } from '@/services/v1';
 import type { SyncMode } from '../types';
 
@@ -13,17 +14,6 @@ const { Text } = Typography;
 const { Group: CheckboxGroup } = Checkbox;
 
 const STORAGE_KEY = 'kingdee-sync-last-config';
-
-const FORM_CATEGORIES: Record<string, { label: string; forms: string[] }> = {
-  procurement: { label: '采购', forms: ['采购订单', '采购入库单'] },
-  sales: { label: '销售', forms: ['销售订单', '销售出库单', '销售退货单', '发货通知单'] },
-  inventory: { label: '库存', forms: ['即时库存', '仓库'] },
-  master: { label: '基础资料', forms: ['物料', '客户资料'] },
-  production: { label: '生产', forms: ['生产订单主表', '生产订单明细', '生产入库单', '生产用料清单主表', '生产用料清单明细表'] },
-  bom: { label: 'BOM', forms: ['物料清单', '物料清单子项'] },
-  planning: { label: '计划', forms: ['预测订单', '委外订单'] },
-  finance: { label: '财务', forms: ['科目余额表', '应付单', '应收单'] },
-};
 
 const MODE_DESC: Record<SyncMode, string> = {
   incremental: '仅同步自上次以来的变更数据',

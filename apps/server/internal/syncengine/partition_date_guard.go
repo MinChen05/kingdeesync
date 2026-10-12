@@ -5,6 +5,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"strings"
+
+	"github.com/kingdee-sync/go/internal/config"
 )
 
 func validateSourceBusinessDates(rows []map[string]interface{}, businessKeys []string, partitionColumn string) error {
@@ -41,11 +43,11 @@ func (w *SQLServerWriter) ValidateStableBusinessDates(
 	businessKeys []string,
 	partitionColumn string,
 ) error {
-	if !sqlIdentifier.MatchString(targetTable) || !sqlIdentifier.MatchString(partitionColumn) || len(businessKeys) == 0 {
+	if !config.IsSQLIdentifier(targetTable) || !config.IsSQLIdentifier(partitionColumn) || len(businessKeys) == 0 {
 		return fmt.Errorf("invalid partition-date validation input")
 	}
 	for _, column := range businessKeys {
-		if !sqlIdentifier.MatchString(column) {
+		if !config.IsSQLIdentifier(column) {
 			return fmt.Errorf("invalid business key column %q", column)
 		}
 	}
@@ -66,7 +68,9 @@ func (w *SQLServerWriter) ValidateStableBusinessDates(
 	if err := createSourceKeyStaging(ctx, db, databaseName, targetTable, stagingTable, storageKeys); err != nil {
 		return err
 	}
-	defer func() { _, _ = db.ExecContext(context.Background(), "IF OBJECT_ID(N'dbo."+stagingTable+"', 'U') IS NOT NULL DROP TABLE dbo."+stagingTable) }()
+	defer func() {
+		_, _ = db.ExecContext(context.Background(), "IF OBJECT_ID(N'dbo."+stagingTable+"', 'U') IS NOT NULL DROP TABLE dbo."+stagingTable)
+	}()
 	// Insert canonical keys directly (not via the writer's business-table MERGE path).
 	written, err := batchInsertSourceKeys(ctx, db, stagingTable, canonical, storageKeys)
 	if err != nil || written != len(canonical) {

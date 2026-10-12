@@ -20,6 +20,7 @@ import (
 	"github.com/kingdee-sync/go/internal/db"
 	"github.com/kingdee-sync/go/internal/gormdb"
 	"github.com/kingdee-sync/go/internal/kind"
+	"github.com/kingdee-sync/go/internal/monitor"
 	runtimecontrol "github.com/kingdee-sync/go/internal/runtime"
 	"github.com/kingdee-sync/go/internal/schedule"
 	"github.com/kingdee-sync/go/internal/syncengine"
@@ -105,7 +106,7 @@ func main() {
 
 	// Register webhook completion hook
 	whDispatcher := webhook.New()
-	dingTalkNotifier := webhook.NewDingTalkNotifier(os.Getenv("DINGTALK_WEBHOOK_URL"))
+	dingTalkNotifier := webhook.NewDingTalkNotifier(os.Getenv("DINGTALK_WEBHOOK_URL"), os.Getenv("DINGTALK_WEBHOOK_SECRET"))
 	schedule.SetRunCompletionHook(func(runID string) {
 		go func() {
 			gdb := gormdb.DB
@@ -140,8 +141,41 @@ func main() {
 	})
 
 	// Start Kingdee session keepalive
-	keepAliveClient := kind.NewKingdeeClient()
+	keepAliveClient := kind.SharedClient()
 	keepAliveClient.StartSessionKeepAlive()
+
+	// Start target-database probe; alert via DingTalk on state transitions.
+	// （原因：周日不调度任何同步任务，目标库宕机此前只能等周一才发现，存在近一天监控盲区）
+	if config.IsDBProbeEnabled() {
+		target := "目标数据库"
+		if cfg != nil {
+			if eff := cfg.GetEffectiveDatabase(); eff.Host != "" {
+				target = fmt.Sprintf("%s:%d", eff.Host, eff.Port)
+			}
+		}
+		dbProbe := monitor.New(
+			func(ctx context.Context) error {
+				if db.DB == nil {
+					return fmt.Errorf("database connection not initialized")
+				}
+				return db.DB.PingContext(ctx)
+			},
+			config.GetDBProbeInterval(),
+			func(r monitor.ProbeResult) {
+				if r.Healthy {
+					dingTalkNotifier.SendAlert("目标数据库已恢复",
+						fmt.Sprintf("%s 连接已恢复\n中断开始于: %s\n总中断时长: %s",
+							target, r.DownSince.Format("2006-01-02 15:04:05"), r.DownFor.Round(time.Second)))
+				} else {
+					dingTalkNotifier.SendAlert("目标数据库不可用",
+						fmt.Sprintf("%s 无法连接\n开始时间: %s\n请检查数据库服务与网络",
+							target, r.DownSince.Format("2006-01-02 15:04:05")))
+				}
+			},
+		)
+		dbProbe.Start()
+		defer dbProbe.Stop()
+	}
 
 	// Store engine for schedule route reload
 	schedule.SetEngine(engine)
@@ -173,8 +207,8 @@ func main() {
 	// Readiness: config, SQLite, SQL Server connection
 	r.GET("/ready", func(c *gin.Context) {
 		notReady := []string{}
-		if gormdb.DB == nil {
-			notReady = append(notReady, "SQLite not initialized")
+		if err := gormdb.ProbeStateDB(); err != nil {
+			notReady = append(notReady, fmt.Sprintf("State DB probe failed: %s", err))
 		}
 		if db.DB == nil {
 			notReady = append(notReady, "Database connection not initialized")

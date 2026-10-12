@@ -16,7 +16,7 @@ import { useMonitorPage } from './hooks';
  * - 最近异常：定位"哪些运行失败了"
  * - 错误日志：钻取"具体什么原因"（支持 ?form= 联动与重跑入口）
  * - 同步历史：追溯任意运行，行点击查看完整详情
- * - 异常表单 Top5 + 系统诊断：聚合分析与环境状态
+ * - 异常表单 Top3 + 系统诊断：聚合分析与环境状态
  */
 const MonitorPage: React.FC = () => {
   const {

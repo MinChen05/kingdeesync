@@ -38,6 +38,18 @@ func (w *SQLServerWriter) Upsert(ctx context.Context, tableName string, rows []m
 	if len(rows) == 0 {
 		return UpsertResult{}, nil
 	}
+	// 纵深防御：表名与列名会拼接进 MERGE/暂存表 SQL，入口统一校验
+	// （原因：防任意表单名经映射后透传注入）
+	if err := config.ValidateSQLIdentifier(tableName); err != nil {
+		return UpsertResult{}, err
+	}
+	for _, cols := range [][]string{cols, pkCols} {
+		for _, col := range cols {
+			if err := config.ValidateSQLIdentifier(col); err != nil {
+				return UpsertResult{}, err
+			}
+		}
+	}
 	if ctx == nil {
 		ctx = context.Background()
 	}
@@ -286,12 +298,15 @@ func (w *SQLServerWriter) createStagingTable(ctx context.Context, sqlDB *sqlx.DB
 	tableName, stagingTable string, cols []string, pkCols []string) error {
 
 	// Get column types from target table
-	rows, err := sqlDB.QueryxContext(ctx, fmt.Sprintf(`
+	// 表名参数绑定必须用 @p1 命名参数——go-mssqldb 不认 "?" 占位符，
+	// 会原样透传导致"?'附近有语法错误"（与 orphan_reconcile.go createSourceKeyStaging 一致）。
+	// （原因：mssql 路径无单测覆盖，此坑曾以生产 staging 建表失败暴露）
+	rows, err := sqlDB.QueryxContext(ctx, `
 		SELECT COLUMN_NAME, DATA_TYPE, CHARACTER_MAXIMUM_LENGTH, NUMERIC_PRECISION, NUMERIC_SCALE
 		FROM INFORMATION_SCHEMA.COLUMNS
-		WHERE TABLE_SCHEMA = 'dbo' AND TABLE_NAME = '%s'
+		WHERE TABLE_SCHEMA = 'dbo' AND TABLE_NAME = @p1
 		ORDER BY ORDINAL_POSITION
-	`, tableName))
+	`, tableName)
 	if err != nil {
 		return fmt.Errorf("query column types for %s: %w", tableName, err)
 	}
@@ -636,6 +651,15 @@ func (w *SQLServerWriter) DeleteOrphaned(ctx context.Context, tableName string, 
 
 	if len(rows) == 0 || len(pkCols) == 0 {
 		return 0, nil
+	}
+	// 纵深防御：表名/主键列名拼接进 DELETE SQL（原因：同 Upsert）
+	if err := config.ValidateSQLIdentifier(tableName); err != nil {
+		return 0, err
+	}
+	for _, col := range pkCols {
+		if err := config.ValidateSQLIdentifier(col); err != nil {
+			return 0, err
+		}
 	}
 	if db.DB == nil {
 		return 0, fmt.Errorf("database not initialized")

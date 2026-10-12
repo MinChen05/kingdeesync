@@ -13,29 +13,10 @@ import Panel from '@/components/Panel';
 import SyncStatusTag from '@/components/SyncStatusTag';
 import SyncTypeTag from '@/components/SyncTypeTag';
 import { listRuns } from '@/services/v1';
-import type { V1Run } from '@/services/v1';
 import { formatDuration } from '@/utils/format';
+import { toHistoryRun } from '../mappers';
 import type { HistoryRun } from '../types';
 
-/** V1Run → HistoryRun 兼容转换 */
-function toHistoryRun(v1: V1Run): HistoryRun {
-  return {
-    id: 0,
-    run_id: v1.run_id,
-    task_name: v1.sync_type,
-    sync_type: v1.sync_type,
-    status: v1.status,
-    start_time: v1.started_at || '',
-    end_time: v1.finished_at,
-    duration_seconds: v1.duration_seconds,
-    total_records: v1.total_records,
-    success_records: v1.success_records,
-    failed_records: v1.failed_records,
-    form_count: v1.form_count,
-    success_forms: v1.success_forms,
-    failed_forms: v1.failed_forms,
-  };
-}
 import RunDetailDrawer from './RunDetailDrawer';
 
 const { RangePicker } = DatePicker;

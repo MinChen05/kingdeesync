@@ -1,5 +1,5 @@
 import { ExclamationCircleOutlined, HistoryOutlined } from '@ant-design/icons';
-import { App, Button, InputNumber, Result, Typography } from 'antd';
+import { App, Button, InputNumber, Popconfirm, Typography } from 'antd';
 import React, { useState } from 'react';
 import Panel from '@/components/Panel';
 
@@ -32,7 +32,7 @@ const MaintenancePanel: React.FC<MaintenancePanelProps> = ({
     try {
       const result = await onArchive(daysToKeep);
       setLastResult((result as ArchiveResult) || { total_deleted: 0 });
-      message.success(`已归档 ${daysToKeep} 天前的历史数据`);
+      message.success(`已清理 ${daysToKeep} 天前的同步记录和错误日志（保留最近 ${daysToKeep} 天）`);
     } catch (err) {
       message.error(err instanceof Error ? err.message : '归档失败');
     }
@@ -63,14 +63,23 @@ const MaintenancePanel: React.FC<MaintenancePanelProps> = ({
               addonAfter="天"
               style={{ width: 160 }}
             />
-            <Button
-              type="primary"
-              danger
-              loading={archiving}
-              onClick={handleArchive}
+            {/* 不可逆删除操作加二次确认（原因：归档直接删除历史数据，误触无法恢复） */}
+            <Popconfirm
+              title="确认执行归档？"
+              description={`将删除 ${daysToKeep} 天前的同步记录和错误日志，删除后不可恢复。`}
+              okText="确认删除"
+              okButtonProps={{ danger: true }}
+              cancelText="取消"
+              onConfirm={handleArchive}
             >
-              执行归档
-            </Button>
+              <Button
+                type="primary"
+                danger
+                loading={archiving}
+              >
+                执行归档
+              </Button>
+            </Popconfirm>
           </div>
           <Text type="secondary" className="mt-3 block text-xs">
             最小保留 30 天，最大 730 天，默认 180 天。

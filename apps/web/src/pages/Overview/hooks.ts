@@ -18,7 +18,7 @@ import type {
 export function useOverviewData() {
   const overviewReq = useQuery({
     queryKey: ['overview'],
-    queryFn: getOverview,
+    queryFn: () => getOverview(),
   });
   const sourcesReq = useQuery({
     queryKey: ['datasources'],

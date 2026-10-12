@@ -197,17 +197,39 @@ export type V1SystemConfig = Record<string, unknown>;
 // ─── 请求辅助 ───
 
 /**
+ * 将 axios 抛出的 HTTP 错误转换为 ApiProblemError（携带真实 HTTP status）。
+ * axios 对非 2xx 响应直接 reject，因此错误必须从 error.response 提取，
+ * 而非响应体判型（原因：此前 status 恒为 0，调用方只能字符串匹配 409）。
+ */
+function normalizeV1Error(err: unknown): unknown {
+  const response = (err as { response?: { status?: number; data?: unknown } })?.response;
+  if (typeof response?.status === 'number') {
+    const body = response.data as Partial<ProblemResponse> | undefined;
+    const problem = body && typeof body === 'object' && 'error' in body ? body.error : undefined;
+    return new ApiProblemError(
+      response.status,
+      problem?.code ?? 'HTTP_ERROR',
+      problem?.message ?? `HTTP ${response.status}`,
+      problem?.details,
+    );
+  }
+  return err;
+}
+
+/**
  * 发起 v1 请求并解包 data。若后端返回 error，抛出 ApiProblemError。
  */
 async function v1Request<T>(url: string, options?: Record<string, unknown>): Promise<T> {
   const resp: Envelope<T> | ProblemResponse = await request(url, {
     ...(options || {}) as any,
+  }).catch((err: unknown) => {
+    throw normalizeV1Error(err);
   }) as any;
 
-  // 判断是错误响应
-  if ('error' in resp) {
+  // 兜底：2xx 响应体内含 error 信封（理论上不会出现，保留防御）
+  if (resp && typeof resp === 'object' && 'error' in resp) {
     const err = (resp as ProblemResponse).error;
-    throw new ApiProblemError(0, err.code, err.message, err.details);
+    throw new ApiProblemError(200, err.code, err.message, err.details);
   }
 
   return (resp as Envelope<T>).data;
@@ -222,11 +244,13 @@ async function v1Paginated<T>(
 ): Promise<{ data: T; meta: PageMeta }> {
   const resp: Envelope<T> | ProblemResponse = await request(url, {
     ...(options || {}) as any,
+  }).catch((err: unknown) => {
+    throw normalizeV1Error(err);
   }) as any;
 
-  if ('error' in resp) {
+  if (resp && typeof resp === 'object' && 'error' in resp) {
     const err = (resp as ProblemResponse).error;
-    throw new ApiProblemError(0, err.code, err.message, err.details);
+    throw new ApiProblemError(200, err.code, err.message, err.details);
   }
 
   const envelope = resp as Envelope<T> & { meta: PageMeta };
@@ -252,13 +276,18 @@ export async function getRun(runId: string) {
   return v1Request<V1Run>(`/api/v1/runs/${runId}`, { method: 'GET' });
 }
 
-export async function listRunEvents(runId: string) {
-  return v1Request<V1RunEvent[]>(`/api/v1/runs/${runId}/events`, { method: 'GET' });
+export async function listRunEvents(
+  runId: string,
+  opts?: { skipErrorHandler?: boolean },
+) {
+  return v1Request<V1RunEvent[]>(`/api/v1/runs/${runId}/events`, {
+    method: 'GET',
+    ...(opts || {}),
+  });
 }
 
 /**
- * 创建运行 — v1 暂返回 501，委托旧路由。
- * 保留接口签名，后续迁移后直接可用。
+ * 创建运行（启动同步）— POST /api/v1/runs，冲突时后端返回 409 ALREADY_RUNNING。
  */
 export async function createRun(params: { forms?: string[]; sync_type: string }) {
   return v1Request<V1Run>('/api/v1/runs', { method: 'POST', data: params });
@@ -266,8 +295,11 @@ export async function createRun(params: { forms?: string[]; sync_type: string })
 
 // ─── Overview ───
 
-export async function getOverview() {
-  return v1Request<V1Overview>('/api/v1/overview', { method: 'GET' });
+export async function getOverview(opts?: { skipErrorHandler?: boolean }) {
+  return v1Request<V1Overview>('/api/v1/overview', {
+    method: 'GET',
+    ...(opts || {}),
+  });
 }
 
 // ─── Schedules ───
@@ -276,8 +308,11 @@ export async function listSchedules() {
   return v1Request<V1Schedule[]>('/api/v1/schedules', { method: 'GET' });
 }
 
-export async function getSchedulerStatus() {
-  return v1Request<V1SchedulerStatus>('/api/v1/schedules/status', { method: 'GET' });
+export async function getSchedulerStatus(opts?: { skipErrorHandler?: boolean }) {
+  return v1Request<V1SchedulerStatus>('/api/v1/schedules/status', {
+    method: 'GET',
+    ...(opts || {}),
+  });
 }
 
 export async function createSchedule(data: {

@@ -79,11 +79,26 @@ func Init() error {
 // Close closes the GORM database connection.
 func Close() {
 	if DB != nil {
-		sqlDB, _ := DB.DB()
-		if sqlDB != nil {
-			sqlDB.Close()
-		}
+	sqlDB, _ := DB.DB()
+	if sqlDB != nil {
+	sqlDB.Close()
 	}
+	}
+}
+
+// ProbeStateDB verifies the SQLite state file with a real read (count of
+// go_sync_runs) instead of a driver-level Ping.
+// （原因：SQLite 驱动的 Ping 不访问磁盘，状态文件被删除后健康检查假绿，监控全零无人感知）
+func ProbeStateDB() error {
+	if DB == nil {
+	return fmt.Errorf("gorm database not initialized")
+	}
+
+	var count int64
+	if err := DB.Model(&SyncRun{}).Count(&count).Error; err != nil {
+	return fmt.Errorf("state db probe failed: %w", err)
+	}
+	return nil
 }
 
 // AutoMigrate runs auto migration for all Go internal models.
@@ -529,6 +544,35 @@ func SaveCheckpointForRun(formName, runID string, position int64, lastSyncTime s
 	cp.LastPosition = position
 	cp.LastSyncTime = lastSyncTime
 	cp.RunID = runID
+	// StartRow 路径与游标路径互斥：切换分页方式时清除残留游标，防止误恢复
+	cp.CursorValue = ""
+
+	if cp.ID == 0 {
+		return DB.Create(&cp).Error
+	}
+	return DB.Save(&cp).Error
+}
+
+// SaveCursorCheckpoint persists the cursor JSON of a cursor-paged form after
+// each durably written page, allowing an interrupted run to resume from the
+// cursor instead of refetching the whole table.
+// （原因：千万级大表中断路径此前整表重跑；writtenRows 复用 LastPosition 记录已拉取行数）
+func SaveCursorCheckpoint(formName, runID string, writtenRows int64, cursorJSON string) error {
+	if DB == nil {
+		return fmt.Errorf("gorm database not initialized")
+	}
+
+	// 预置 FormName：First 未命中时保持零值结构可直接 Create（与 SaveCheckpointForRun 一致，
+	// 原因：GORM First 未命中不会回填查询条件字段，直接 Create 会插入空 form_name 行）
+	cp := Checkpoint{FormName: formName}
+	if err := DB.Where("form_name = ?", formName).First(&cp).Error; err != nil && err != gorm.ErrRecordNotFound {
+		return fmt.Errorf("save cursor checkpoint for %s: %w", formName, err)
+	}
+
+	cp.LastPosition = writtenRows
+	cp.CursorValue = cursorJSON
+	cp.RunID = runID
+	// 保留已有 LastSyncTime（First 已载入），游标写入不清理增量水位
 
 	if cp.ID == 0 {
 		return DB.Create(&cp).Error
@@ -682,10 +726,10 @@ func RecoverStaleRunningRuns() (int, error) {
 		return 0, nil
 	}
 	result := DB.Model(&SyncRun{}).
-		Where("status = ? AND started_at < ?", "running", time.Now().Add(-3*time.Hour)).
+		Where("status = ? AND start_time < ?", "running", time.Now().Add(-3*time.Hour)).
 		Updates(map[string]interface{}{
-			"status":        "failed",
-			"error_message": "recovered from stale running state on server restart",
+		"status":        "failed",
+		"error_message": "recovered from stale running state on server restart",
 		})
 	return int(result.RowsAffected), result.Error
 }

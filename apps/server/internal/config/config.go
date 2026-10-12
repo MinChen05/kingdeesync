@@ -11,9 +11,11 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"regexp"
 	"sort"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/fsnotify/fsnotify"
 	"github.com/kingdee-sync/go/internal/gormdb"
@@ -75,7 +77,7 @@ type DatabaseConfig struct {
 
 type Config struct {
 	Kingdee KingdeeConfig `ini:"KINGDEE"`
-Sync    struct {
+	Sync    struct {
 			AutoSync         bool   `ini:"auto_sync"`
 			SyncInterval     int    `ini:"sync_interval"`
 			SyncType         string `ini:"sync_type"`
@@ -83,6 +85,14 @@ Sync    struct {
 			TimeWindowStart  string `ini:"time_window_start"`  // "HH:MM" format, empty = no limit
 			TimeWindowEnd    string `ini:"time_window_end"`    // "HH:MM" format, empty = no limit
 			TableConcurrency int    `ini:"table_concurrency"`
+			// 看门狗超时按同步类型分开配置
+			// （原因：周日全量耗时已逼近原 2 小时硬编码上限，增量最坏仅 10 分钟，统一超时无法兼顾）
+			FullRunTimeoutMinutes        int `ini:"full_run_timeout_minutes"`
+			IncrementalRunTimeoutMinutes int `ini:"incremental_run_timeout_minutes"`
+			// 目标数据库定期探活（指针以区分"未配置"与"显式 false"，未配置默认开启）
+			// （原因：周日不调度任何任务，目标库宕机只能等周一增量才暴露）
+			DBProbeEnabled       *bool `ini:"db_probe_enabled"`
+			DBProbeIntervalSecs  int   `ini:"db_probe_interval_secs"`
 		} `ini:"SYNC"`
 	Database DatabaseConfig `ini:"DATABASE"`
 	// Also read from [SQLSERVER] or [MYSQL] sections for compatibility with existing config.local.ini
@@ -208,49 +218,12 @@ func fixPasswordsFromFile(path string, cfg *Config) error {
 	return nil
 }
 
-func Load(path string) (*Config, error) {
-	mu.Lock()
-	defer mu.Unlock()
-
-	if instance != nil {
-		return instance, nil
-	}
-
-	if path == "" {
-		candidates := []string{
-			"config.local.ini",
-			"config.ini",
-			filepath.Join("..", "config.local.ini"),
-			filepath.Join("..", "config.ini"),
-		}
-		for _, p := range candidates {
-			if _, err := os.Stat(p); err == nil {
-				path = p
-				break
-			}
-		}
-		if path == "" {
-			return nil, fmt.Errorf("config file not found")
-		}
-	}
-
-	// Resolve to absolute path
-	path, _ = filepath.Abs(path)
-	configPath = path
-
-	// Config dir is project root (config.local.ini is at project root)
-	configDir := filepath.Dir(path)
-
-	f, err := ini.Load(path)
-	if err != nil {
-		return nil, fmt.Errorf("load config: %w", err)
-	}
-
-	cfg := &Config{}
-	if err := f.MapTo(cfg); err != nil {
-		return nil, fmt.Errorf("parse config: %w", err)
-	}
-
+// finalizeConfig 执行 MapTo 之后的完整后处理链：密码修复/解密、默认值、
+// INCREMENTAL_FIELDS、form-queries.json。三个调用点（Load / Reload / watchConfig）
+// 均已持有 mu 锁，本函数自身不加锁。
+// （原因：此前只有 Load 走完整链路，Reload 丢默认值、watchConfig 连密码解密都没有——
+// 热重载一次 INI 就会静默丢失默认值与加密密码，行为与冷启动不一致）
+func finalizeConfig(f *ini.File, path string, cfg *Config) {
 	// Fix passwords that contain # or ; (ini library treats them as comments)
 	// Manually parse the raw file to get correct password values.
 	if err := fixPasswordsFromFile(path, cfg); err != nil {
@@ -291,6 +264,19 @@ func Load(path string) (*Config, error) {
 	if cfg.Sync.TableConcurrency == 0 {
 		cfg.Sync.TableConcurrency = 8
 	}
+	if cfg.Sync.FullRunTimeoutMinutes == 0 {
+		cfg.Sync.FullRunTimeoutMinutes = 240
+	}
+	if cfg.Sync.IncrementalRunTimeoutMinutes == 0 {
+		cfg.Sync.IncrementalRunTimeoutMinutes = 30
+	}
+	if cfg.Sync.DBProbeEnabled == nil {
+		enabled := true
+		cfg.Sync.DBProbeEnabled = &enabled
+	}
+	if cfg.Sync.DBProbeIntervalSecs == 0 {
+		cfg.Sync.DBProbeIntervalSecs = 300
+	}
 	if cfg.Database.Type == "" {
 		cfg.Database.Type = "mysql"
 	}
@@ -310,9 +296,52 @@ func Load(path string) (*Config, error) {
 	}
 
 	// Load form-queries.json relative to config dir
-	if err := loadFormQueries(cfg, configDir); err != nil {
+	if err := loadFormQueries(cfg, filepath.Dir(path)); err != nil {
 		fmt.Printf("Warning: failed to load form-queries.json: %v\n", err)
 	}
+}
+
+func Load(path string) (*Config, error) {
+	mu.Lock()
+	defer mu.Unlock()
+
+	if instance != nil {
+		return instance, nil
+	}
+
+	if path == "" {
+		candidates := []string{
+			"config.local.ini",
+			"config.ini",
+			filepath.Join("..", "config.local.ini"),
+			filepath.Join("..", "config.ini"),
+		}
+		for _, p := range candidates {
+			if _, err := os.Stat(p); err == nil {
+				path = p
+				break
+			}
+		}
+		if path == "" {
+			return nil, fmt.Errorf("config file not found")
+		}
+	}
+
+	// Resolve to absolute path
+	path, _ = filepath.Abs(path)
+	configPath = path
+
+	f, err := ini.Load(path)
+	if err != nil {
+		return nil, fmt.Errorf("load config: %w", err)
+	}
+
+	cfg := &Config{}
+	if err := f.MapTo(cfg); err != nil {
+		return nil, fmt.Errorf("parse config: %w", err)
+	}
+
+	finalizeConfig(f, path, cfg)
 
 	instance = cfg
 
@@ -425,6 +454,39 @@ func Get() *Config {
 	return instance
 }
 
+// GetSyncRunTimeout 返回指定同步类型（"full"/其他）的看门狗超时。
+// 配置未加载时返回 0，由调用方回退各自的默认值。
+// （原因：全量与增量耗时差距约 20 倍，分开配置才能既容纳全量增长又快速发现增量挂死）
+func GetSyncRunTimeout(syncType string) time.Duration {
+	c := Get()
+	if c == nil {
+		return 0
+	}
+	if syncType == "full" {
+		return time.Duration(c.Sync.FullRunTimeoutMinutes) * time.Minute
+	}
+	return time.Duration(c.Sync.IncrementalRunTimeoutMinutes) * time.Minute
+}
+
+// IsDBProbeEnabled 返回目标数据库探活是否开启；配置未加载时默认开启。
+// （原因：默认开启才能闭合"周日无任务即无监控"的盲区）
+func IsDBProbeEnabled() bool {
+	c := Get()
+	if c == nil || c.Sync.DBProbeEnabled == nil {
+		return true
+	}
+	return *c.Sync.DBProbeEnabled
+}
+
+// GetDBProbeInterval 返回探活间隔；配置未加载或未配置时默认 5 分钟。
+func GetDBProbeInterval() time.Duration {
+	c := Get()
+	if c == nil || c.Sync.DBProbeIntervalSecs <= 0 {
+		return 5 * time.Minute
+	}
+	return time.Duration(c.Sync.DBProbeIntervalSecs) * time.Second
+}
+
 // ConfigPath returns the resolved config file path.
 func ConfigPath() string {
 	mu.RLock()
@@ -451,26 +513,9 @@ func Reload(path string) {
 		return
 	}
 
-	// Fix passwords
-	fixPasswordsFromFile(path, cfg)
-
-	// Decrypt encrypted password fields
-	cfg.Kingdee.Password = MaybeDecryptPassword(cfg.Kingdee.Password)
-	cfg.Database.Password = MaybeDecryptPassword(cfg.Database.Password)
-	cfg.SQLServer.Password = MaybeDecryptPassword(cfg.SQLServer.Password)
-	cfg.MySQL.Password = MaybeDecryptPassword(cfg.MySQL.Password)
-
-	// Reload incremental fields
-	cfg.IncrementalFields = make(map[string]string)
-	if section, err := f.GetSection("INCREMENTAL_FIELDS"); err == nil {
-		for _, key := range section.Keys() {
-			cfg.IncrementalFields[strings.ToLower(key.Name())] = key.String()
-		}
-	}
-
-	// Reload form queries
-	configDir := filepath.Dir(path)
-	loadFormQueries(cfg, configDir)
+	// 与 Load 完全一致的后处理链（原因：此前 Reload 缺默认值段，
+	// 经 API 改配置后热重载会静默丢失全部默认值，行为与冷启动不一致）
+	finalizeConfig(f, path, cfg)
 
 	instance = cfg
 }
@@ -531,6 +576,25 @@ func FormToTableName(formName string) string {
 	return s
 }
 
+// sqlIdentifierPattern 限定可安全拼接进 SQL 的对象名（表名/列名）字符集。
+// 兜底的 FormToTableName 只做小写去空格，可能透传任意字符，
+// 因此一切进入 TRUNCATE / 表名拼接的值必须先过这里。
+var sqlIdentifierPattern = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_]*$`)
+
+// IsSQLIdentifier reports whether name can be safely interpolated into SQL as an object name.
+func IsSQLIdentifier(name string) bool {
+	return sqlIdentifierPattern.MatchString(name)
+}
+
+// ValidateSQLIdentifier returns an error when name is not a safe SQL object identifier.
+// （原因：切断"注册任意表单名 → 表名拼接进 TRUNCATE/查询"的注入链路）
+func ValidateSQLIdentifier(name string) error {
+	if !IsSQLIdentifier(name) {
+		return fmt.Errorf("invalid SQL identifier: %q", name)
+	}
+	return nil
+}
+
 func watchConfig(path string) {
 	watcher, err := fsnotify.NewWatcher()
 	if err != nil {
@@ -549,9 +613,12 @@ func watchConfig(path string) {
 				return
 			}
 			mu.Lock()
+			// 与 Load 完全一致的后处理链（原因：此前只做 MapTo，
+			// 手工编辑 INI 触发热重载后密码解密与默认值全部丢失）
 			if f, err := ini.Load(path); err == nil {
 				cfg := &Config{}
 				if err := f.MapTo(cfg); err == nil {
+					finalizeConfig(f, path, cfg)
 					instance = cfg
 				}
 			}

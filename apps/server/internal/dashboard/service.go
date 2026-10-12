@@ -9,6 +9,7 @@ import (
 	"github.com/kingdee-sync/go/internal/db"
 	"github.com/kingdee-sync/go/internal/gormdb"
 	"github.com/kingdee-sync/go/internal/kind"
+	"github.com/kingdee-sync/go/internal/monitor"
 )
 
 // Health cache to avoid frequent slow checks
@@ -66,6 +67,9 @@ Database struct {
 			WaitDurationMs  int64  `json:"wait_duration_ms"`
 			MaxIdleClosed   int64  `json:"max_idle_closed"`
 			MaxIdleTimeClosed int64 `json:"max_idle_time_closed"`
+			// 最近一次定期探活结果（原因：探活状态无需等告警即可在 overview 观察）
+			ProbeHealthy *bool  `json:"probe_healthy,omitempty"`
+			ProbeAt      string `json:"probe_at,omitempty"`
 		} `json:"database"`
 	Scheduler struct {
 		Status   string `json:"status"`
@@ -268,7 +272,7 @@ func GetHealthStatus() HealthStatus {
 	var duration int64
 	go func() {
 		start := time.Now()
-		client := kind.NewKingdeeClient()
+		client := kind.SharedClient()
 		ok = client.TestConnection()
 		duration = time.Since(start).Milliseconds()
 		close(done)
@@ -289,12 +293,21 @@ func GetHealthStatus() HealthStatus {
 
 	// Database health
 	if db.DB != nil {
-		start := time.Now()
-		err := db.DB.Ping()
-		duration := time.Since(start).Milliseconds()
+	start := time.Now()
+	err := db.DB.Ping()
+	duration := time.Since(start).Milliseconds()
 
-		health.Database.Status = map[bool]string{true: "ok", false: "error"}[err == nil]
-		health.Database.ResponseMs = int(duration)
+	health.Database.Status = map[bool]string{true: "ok", false: "error"}[err == nil]
+	health.Database.ResponseMs = int(duration)
+
+	// State SQLite probe: real read so a deleted or corrupt state file cannot
+	// stay green behind the business-DB Ping.
+	// （原因：09-05 状态文件被删除后 dashboard 仍报 ok，全零监控无人感知）
+	probeStart := time.Now()
+	if err := gormdb.ProbeStateDB(); err != nil {
+	health.Database.Status = "error"
+	health.Database.ResponseMs = int(time.Since(probeStart).Milliseconds())
+	}
 
 stats := db.DB.Stats()
 			health.Database.ConnCount = int(stats.InUse)
@@ -308,6 +321,12 @@ stats := db.DB.Stats()
 			health.Database.MaxIdleTimeClosed = stats.MaxIdleTimeClosed
 	} else {
 		health.Database.Status = "error"
+	}
+
+	// 定期探活最近状态（monitor.DBProbe 写入，未启动探活时保持缺省不展示）
+	if healthy, at, ok := monitor.LastState(); ok {
+		health.Database.ProbeHealthy = &healthy
+		health.Database.ProbeAt = at.Format("2006-01-02 15:04:05")
 	}
 
 	// Scheduler health

@@ -1,14 +1,11 @@
 import { App } from 'antd';
 import React from 'react';
 import PageHeader from '@/components/PageHeader';
+import { errorMessage } from '@/utils/errorMessage';
 import JobTable from './components/JobTable';
 import SchedulerControl from './components/SchedulerControl';
 import { useSchedule } from './hooks';
 import type { ScheduleJobSubmit } from './types';
-
-function errorMessage(err: unknown): string {
-  return err instanceof Error ? err.message : String(err);
-}
 
 /**
  * 任务调度页。
@@ -26,8 +23,6 @@ const SchedulePage: React.FC = () => {
     loading,
     startScheduler,
     starting,
-    pauseScheduler,
-    pausing,
     stopScheduler,
     stopping,
     createJob,
@@ -51,15 +46,6 @@ const SchedulePage: React.FC = () => {
     }
   };
 
-  const handlePause = async () => {
-    try {
-      await pauseScheduler();
-      message.info('调度器已暂停');
-    } catch (err) {
-      message.error(errorMessage(err) || '暂停失败');
-    }
-  };
-
   const handleStop = async () => {
     try {
       await stopScheduler();
@@ -69,11 +55,14 @@ const SchedulePage: React.FC = () => {
     }
   };
 
+  // 以下 handler 失败时必须 rethrow：
+  // （原因：调用方组件 await 后无条件弹"成功"，吞掉异常会让失败也报成功）
   const handleCreateJob = async (data: ScheduleJobSubmit) => {
     try {
       await createJob(data);
     } catch (err) {
       message.error(errorMessage(err) || '创建失败');
+      throw err;
     }
   };
 
@@ -82,6 +71,7 @@ const SchedulePage: React.FC = () => {
       await updateJob(id, data);
     } catch (err) {
       message.error(errorMessage(err) || '更新失败');
+      throw err;
     }
   };
 
@@ -90,6 +80,7 @@ const SchedulePage: React.FC = () => {
       await deleteJob(id);
     } catch (err) {
       message.error(errorMessage(err) || '删除失败');
+      throw err;
     }
   };
 
@@ -98,6 +89,7 @@ const SchedulePage: React.FC = () => {
       await batchAction(action, ids);
     } catch (err) {
       message.error(errorMessage(err) || '批量操作失败');
+      throw err;
     }
   };
 
@@ -111,10 +103,8 @@ const SchedulePage: React.FC = () => {
         jobCount={jobs.length}
         enabledCount={enabledCount}
         onStart={handleStart}
-        onPause={handlePause}
         onStop={handleStop}
         starting={starting}
-        pausing={pausing}
         stopping={stopping}
       />
 

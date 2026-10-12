@@ -12,7 +12,8 @@ interface ErrorFormsProps {
 }
 
 /**
- * 异常表单 Top5：按失败记录数排序。
+ * 异常表单 Top3：按失败记录数排序（后端 GetRiskItems(3) 仅返回 3 条，
+ * 标题与数据条数保持一致，原因：避免承诺不存在的名次）。
  * 从 monitor 页面提升为共享组件，data 页面也可复用。
  */
 const ErrorForms: React.FC<ErrorFormsProps> = ({ forms, loading }) => {
@@ -21,7 +22,7 @@ const ErrorForms: React.FC<ErrorFormsProps> = ({ forms, loading }) => {
       title={
         <Space>
           <ExclamationCircleOutlined style={{ color: 'var(--tk-error)' }} />
-          异常表单 Top5
+          异常表单 Top3
         </Space>
       }
       loading={loading}
@@ -39,9 +40,8 @@ const ErrorForms: React.FC<ErrorFormsProps> = ({ forms, loading }) => {
                 </Text>
                 <Text style={{ color: 'var(--tk-text)' }}>{form.form_name}</Text>
               </Space>
-              <Text type="secondary">
-                失败 {form.failed_records || 0} · 运行 {form.total_runs || 0}次
-              </Text>
+              {/* 不再展示"运行 N 次"：total_runs 无后端数据来源恒为 0（原因：假数据误导判断） */}
+              <Text type="secondary">失败 {form.failed_records || 0} 条</Text>
             </div>
           ))}
         </div>

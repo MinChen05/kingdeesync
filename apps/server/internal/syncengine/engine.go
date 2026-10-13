@@ -1927,6 +1927,11 @@ func (e *SyncEngine) writeRowsWithContext(ctx context.Context, tableName string,
 		}
 	}
 
+	// SYNC_TIME 是写入侧审计列而非金蝶字段，必须显式加入写列白名单
+	// （原因：此前不在 cols 中被 staging/MERGE 过滤，SYNC_TIME 永不更新，
+	// 增量窗口下界失效导致每轮按近全量拉取）
+	cols = appendSyncTimeCol(cols, existingCols)
+
 	if len(cols) == 0 {
 		return UpsertResult{}, fmt.Errorf("no matching columns between Kingdee fields and table %s", tableName)
 	}

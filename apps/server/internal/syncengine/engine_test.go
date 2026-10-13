@@ -194,6 +194,67 @@ if written.Total != 1 || writer.tableName != "saleorder" {
 	}
 }
 
+// 目标表存在 SYNC_TIME 列时必须追加进写列白名单（原因：SYNC_TIME 非金蝶字段，
+// 不加则被 staging/MERGE 过滤，增量窗口下界失效）；不存在或已包含时不改动。
+func TestAppendSyncTimeCol(t *testing.T) {
+	cases := []struct {
+		name         string
+		cols         []string
+		existingCols map[string]string
+		want         []string
+	}{
+		{
+			name:         "目标表有 SYNC_TIME 列时追加",
+			cols:         []string{"FID", "FBILLNO"},
+			existingCols: map[string]string{"FID": "FID", "FBILLNO": "FBILLNO", "SYNC_TIME": "SYNC_TIME"},
+			want:         []string{"FID", "FBILLNO", "SYNC_TIME"},
+		},
+		{
+			name:         "目标表无 SYNC_TIME 列时不追加",
+			cols:         []string{"FID"},
+			existingCols: map[string]string{"FID": "FID"},
+			want:         []string{"FID"},
+		},
+		{
+			name:         "金蝶字段已映射出 SYNC_TIME 时不重复追加",
+			cols:         []string{"FID", "sync_time"},
+			existingCols: map[string]string{"SYNC_TIME": "SYNC_TIME"},
+			want:         []string{"FID", "sync_time"},
+		},
+	}
+	for _, c := range cases {
+		got := appendSyncTimeCol(c.cols, c.existingCols)
+		if !reflect.DeepEqual(got, c.want) {
+			t.Fatalf("%s: appendSyncTimeCol() = %#v, want %#v", c.name, got, c.want)
+		}
+	}
+}
+
+func TestInjectSyncTime(t *testing.T) {
+	// 写列不含 SYNC_TIME 时不得注入
+	rows := []map[string]interface{}{{"FID": 1}}
+	injectSyncTime(rows, []string{"FID"})
+	if _, ok := rows[0]["SYNC_TIME"]; ok {
+		t.Fatal("cols 无 SYNC_TIME 却注入了该键")
+	}
+
+	// 含 SYNC_TIME（大小写不敏感）时为每行注入东八区时间戳并覆盖旧值
+	rows = []map[string]interface{}{{"FID": 1}, {"FID": 2, "SYNC_TIME": "2020-01-01 00:00:00"}}
+	injectSyncTime(rows, []string{"FID", "sync_time"})
+	for _, row := range rows {
+		v, ok := row["SYNC_TIME"].(string)
+		if !ok {
+			t.Fatalf("SYNC_TIME 未注入: %#v", row)
+		}
+		if _, err := time.Parse("2006-01-02 15:04:05", v); err != nil {
+			t.Fatalf("SYNC_TIME 格式非法: %q", v)
+		}
+	}
+	if rows[1]["SYNC_TIME"] == "2020-01-01 00:00:00" {
+		t.Fatal("旧 SYNC_TIME 未被刷新，MERGE 的 ISNULL 语义下将导致增量窗口停滞")
+	}
+}
+
 func TestSyncDataProcessesPriorityGroupsInOrder(t *testing.T) {
 	setupRecoveryTest(t)
 	const runID = "priority-groups"
@@ -305,7 +366,10 @@ func (columnTestConn) Begin() (driver.Tx, error)           { return nil, driver.
 
 func (columnTestConn) QueryContext(_ context.Context, query string, args []driver.NamedValue) (driver.Rows, error) {
 	// 表名通过 @p1 命名参数绑定，mock 校验参数值而非 SQL 文本拼接
-	if !strings.Contains(query, "INFORMATION_SCHEMA.COLUMNS") || len(args) != 1 || args[0].Value != "saleorder" {
+	if !strings.Contains(query, "INFORMATION_SCHEMA.COLUMNS") || len(args) != 1 {
+		return nil, fmt.Errorf("unexpected table metadata query: %s args=%v", query, args)
+	}
+	if args[0].Value != "saleorder" {
 		return nil, fmt.Errorf("unexpected table metadata query: %s args=%v", query, args)
 	}
 	return &columnTestRows{values: []string{"FID", "FENTRYID", "FBILLNO"}}, nil

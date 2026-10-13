@@ -58,6 +58,10 @@ func (w *SQLServerWriter) Upsert(ctx context.Context, tableName string, rows []m
 		return UpsertResult{}, fmt.Errorf("database not initialized")
 	}
 
+	// 为 SYNC_TIME 审计列注入写入时刻（原因：该列不来自金蝶字段，行数据中不存在，
+	// 不注入则 staging 装载取到 NULL，MERGE 的 ISNULL 语义会保留旧值不刷新）
+	injectSyncTime(rows, cols)
+
 	// Check if this is a force-staging table
 	forceStaging := w.isForceStagingTable(tableName)
 
@@ -601,6 +605,38 @@ func (w *SQLServerWriter) mapDataType(dataType string, maxLen sql.NullInt64,
 	default:
 		return "NVARCHAR(500)"
 	}
+}
+
+// appendSyncTimeCol 在目标表存在 SYNC_TIME 列时把它追加进写列白名单。
+// existingCols 的 key 为大写列名、value 为实际列名。
+func appendSyncTimeCol(cols []string, existingCols map[string]string) []string {
+	actual, ok := existingCols["SYNC_TIME"]
+	if !ok || containsStringFold(cols, actual) {
+		return cols
+	}
+	return append(cols, actual)
+}
+
+// injectSyncTime 在写列包含 SYNC_TIME 时为每行注入当前写入时刻。
+// 格式与本地时区约定同 normalization.go（容器与金蝶修改时间字段同为东八区），
+// 保证 GetLastSyncTime 的 MAX(SYNC_TIME) 能作为增量窗口下界正常推进。
+func injectSyncTime(rows []map[string]interface{}, cols []string) {
+	if !containsStringFold(cols, "SYNC_TIME") {
+		return
+	}
+	now := time.Now().Format("2006-01-02 15:04:05")
+	for _, row := range rows {
+		row["SYNC_TIME"] = now
+	}
+}
+
+func containsStringFold(list []string, target string) bool {
+	for _, s := range list {
+		if strings.EqualFold(s, target) {
+			return true
+		}
+	}
+	return false
 }
 
 func (w *SQLServerWriter) lookupValue(row map[string]interface{}, col string, colToKingdee map[string][]string) interface{} {

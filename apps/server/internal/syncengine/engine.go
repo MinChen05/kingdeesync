@@ -1080,7 +1080,10 @@ func (e *SyncEngine) runSync(ctx context.Context, runID string, forms []string, 
 				baseFilter := formQuery.GetFilter()
 				effectiveFilter := baseFilter
 
-				if syncType == "incremental" {
+				// 快照报表表单（即时库存/科目余额表）每轮 TRUNCATE 全量重写当前时点数据，
+				// 严禁叠加增量时间过滤（原因：金蝶即时库存接口对 FModifyDate 过滤返回错误响应；
+				// 即便接口接受该过滤，TRUNCATE 后仅写入窗口内数据会造成存量快照全部丢失）
+				if syncType == "incremental" && !isSnapshotForm(formName) {
 					// Get increment field for this table/form
 					incField := config.GetIncrementField(stat.TableName, formName)
 
@@ -1101,7 +1104,7 @@ func (e *SyncEngine) runSync(ctx context.Context, runID string, forms []string, 
 					}
 				}
 
-				if e.fetchRows == nil && formName != "科目余额表" && formName != "即时库存" && len(cursorKeysForForm(formName)) > 0 {
+				if e.fetchRows == nil && !isSnapshotForm(formName) && len(cursorKeysForForm(formName)) > 0 {
 					e.syncCursorForm(ctx, fetchCtx, runID, formName, stat.TableName, formQuery, fieldKeyList, effectiveFilter, syncType, dryRun, &stat)
 					if stat.Status == StatusSuccess && GetFormPriority(formName) == 2 && !dryRun {
 						if err := gormdb.ClearCheckpoint(formName); err != nil {
@@ -1285,7 +1288,7 @@ func (e *SyncEngine) runSync(ctx context.Context, runID string, forms []string, 
 				} else {
 					// Reset mode and snapshot forms (科目余额表/即时库存): truncate before write.
 					// （原因：快照表每次都需要全量覆盖，无论同步模式）
-					isSnapshot := formName == "科目余额表" || formName == "即时库存"
+					isSnapshot := isSnapshotForm(formName)
 					if (syncType == "reset" || isSnapshot) && len(result.Rows) > 0 {
 						TableName := stat.TableName
 						if isSnapshot {
@@ -1851,6 +1854,12 @@ func accountBalanceStartPeriod(now time.Time, months int) (int, int) {
 	t := time.Date(endYear, time.Month(endPeriod), 1, 0, 0, 0, 0, time.Local)
 	t = t.AddDate(0, -(months - 1), 0)
 	return t.Year(), int(t.Month())
+}
+
+// isSnapshotForm 判断是否为快照报表表单：这类表单每轮取当前时点全量并 TRUNCATE 重写，
+// 不参与增量过滤与游标续传。
+func isSnapshotForm(formName string) bool {
+	return formName == "科目余额表" || formName == "即时库存"
 }
 
 // writeRows maps Kingdee fields to DB columns and delegates to the configured RowWriter.

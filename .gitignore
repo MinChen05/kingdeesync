@@ -96,3 +96,4 @@ deploy/deploy.env
 form-queries.json
 form-queries.json.new
 go_state.db.new
+usage_log.jsonl

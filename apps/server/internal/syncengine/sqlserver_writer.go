@@ -111,8 +111,8 @@ func (w *SQLServerWriter) stagingUpsert(ctx context.Context, tableName string, r
 			pkConds[i] = fmt.Sprintf("target.[%s] = source.[%s]", pk, pk)
 		}
 		countSQL := fmt.Sprintf(
-			"SELECT COUNT(*) FROM dbo.%s AS target INNER JOIN dbo.%s AS source ON %s",
-			tableName, stagingTable, strings.Join(pkConds, " AND "),
+			"SELECT COUNT(*) FROM dbo.%s AS source WHERE EXISTS (SELECT 1 FROM dbo.%s AS target WHERE %s)",
+			stagingTable, tableName, strings.Join(pkConds, " AND "),
 		)
 		var count int
 		if err := sqlDB.GetContext(ctx, &count, countSQL); err == nil {
@@ -268,23 +268,15 @@ result, err := db.DB.ExecContext(ctx, builder.String(), args...)
 				return UpsertResult{}, fmt.Errorf("direct MERGE for %s: %w", tableName, err)
 			}
 			affected, _ := result.RowsAffected()
-			// For direct MERGE, estimate updated rows by checking PK overlap before this batch.
-			// Simple heuristic: count PKs in target that match this batch.
+			// Count PK overlap by the full composite key; a first-column-only
+			// IN check counts sibling entries of the same bill and inflates
+			// "updated", which then blocks orphan cleanup as a partial write.
+			// （原因：采购入库单单据头下多条分录共用一个 FID，曾导致 written 大于 fetched）
 			batchInserted := len(batch)
 			if len(pkCols) > 0 && affected > 0 {
-				// Build IN clause for first PK column values from this batch
-				firstPk := pkCols[0]
-				var pkVals []interface{}
-				var pkPlaceholders []string
-				for _, row := range batch {
-					v := w.lookupValue(row, firstPk, colToKingdee)
-					pkVals = append(pkVals, v)
-					pkPlaceholders = append(pkPlaceholders, "@p"+fmt.Sprint(len(pkVals)))
-				}
-				countSQL := fmt.Sprintf("SELECT COUNT(*) FROM dbo.%s WHERE [%s] IN (%s)",
-					tableName, firstPk, strings.Join(pkPlaceholders, ", "))
+				countSQL, countArgs := w.buildDirectKeyCountQuery(tableName, pkCols, batch, colToKingdee)
 				var existingCount int
-				if err := db.DB.GetContext(ctx, &existingCount, countSQL, pkVals...); err == nil {
+				if err := db.DB.GetContext(ctx, &existingCount, countSQL, countArgs...); err == nil {
 					totalUpdated += existingCount
 					batchInserted = len(batch) - existingCount
 					if batchInserted < 0 {
@@ -296,6 +288,36 @@ result, err := db.DB.ExecContext(ctx, builder.String(), args...)
 		}
 
 		return UpsertResult{Inserted: totalInserted, Updated: totalUpdated, Total: len(rows)}, nil
+}
+
+// buildDirectKeyCountQuery counts how many rows in one batch already exist in
+// the target, matched by the full composite key. Each source row contributes at
+// most one match, so the result never exceeds len(batch) even when the target
+// contains duplicate keys.
+func (w *SQLServerWriter) buildDirectKeyCountQuery(tableName string, pkCols []string, batch []map[string]interface{}, colToKingdee map[string][]string) (string, []interface{}) {
+	valueRows := make([]string, 0, len(batch))
+	args := make([]interface{}, 0, len(batch)*len(pkCols))
+	argIndex := 0
+	for _, row := range batch {
+		parts := make([]string, len(pkCols))
+		for i, pk := range pkCols {
+			argIndex++
+			parts[i] = fmt.Sprintf("@p%d", argIndex)
+			args = append(args, w.lookupValue(row, pk, colToKingdee))
+		}
+		valueRows = append(valueRows, "("+strings.Join(parts, ",")+")")
+	}
+	columns := make([]string, len(pkCols))
+	matches := make([]string, len(pkCols))
+	for i, pk := range pkCols {
+		columns[i] = "[" + pk + "]"
+		matches[i] = fmt.Sprintf("t.[%s] = s.[%s]", pk, pk)
+	}
+	query := fmt.Sprintf(
+		"SELECT COUNT(*) FROM (VALUES %s) AS s(%s) WHERE EXISTS (SELECT 1 FROM dbo.%s AS t WHERE %s)",
+		strings.Join(valueRows, ","), strings.Join(columns, ", "), tableName, strings.Join(matches, " AND "),
+	)
+	return query, args
 }
 
 func (w *SQLServerWriter) createStagingTable(ctx context.Context, sqlDB *sqlx.DB,

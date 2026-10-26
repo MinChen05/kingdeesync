@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"sort"
+	"strconv"
 	"strings"
 
 	"github.com/jmoiron/sqlx"
@@ -311,7 +312,10 @@ func renderKeyLiteral(value interface{}) string {
 	case int64:
 		return fmt.Sprintf("%d", val)
 	case float64:
-		return fmt.Sprintf("%v", val)
+		// 禁止 %v：大整数会被格式化为科学计数法（9181671 -> 9.181671e+06），
+		// 写入 nvarchar 键列后无法与目标表的 "9181671" 匹配，孤儿反连接会全量失配。
+		// （原因：生产表 FID/FENTRYID 为 nvarchar，曾导致 495 万行被误判为孤儿）
+		return strconv.FormatFloat(val, 'f', -1, 64)
 	case bool:
 		if val {
 			return "1"

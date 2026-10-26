@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"database/sql/driver"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -105,6 +106,35 @@ func TestValidateCursorPageSkipsEmptyCursorKeyRows(t *testing.T) {
 	}
 	if v, ok := last[1].(float64); !ok || v != 200 {
 		t.Fatalf("last FENTRYID = %v, want 200", last[1])
+	}
+}
+
+func TestValidateCursorPageMarksAllEmptyCursorKeys(t *testing.T) {
+	_, err := ValidateCursorPage([]map[string]interface{}{
+		{"FID": float64(5), "FENTRYID": nil},
+	}, []string{"FID", "FENTRYID"}, []interface{}{float64(4), float64(100)})
+	if !errors.Is(err, errCursorPageWithoutKeys) {
+		t.Fatalf("err = %v, want errCursorPageWithoutKeys", err)
+	}
+}
+
+func TestIsTerminalEmptyCursorPage(t *testing.T) {
+	tests := []struct {
+		name     string
+		rowCount int
+		pageSize int
+		want     bool
+	}{
+		{"short tail page", 1, 10000, true},
+		{"full page", 10000, 10000, false},
+		{"empty page", 0, 10000, false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := isTerminalEmptyCursorPage(tt.rowCount, tt.pageSize); got != tt.want {
+				t.Fatalf("isTerminalEmptyCursorPage(%d, %d) = %v, want %v", tt.rowCount, tt.pageSize, got, tt.want)
+			}
+		})
 	}
 }
 

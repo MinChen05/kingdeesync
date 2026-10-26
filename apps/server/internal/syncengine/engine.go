@@ -1645,6 +1645,12 @@ func (e *SyncEngine) syncCursorForm(ctx, fetchCtx context.Context, runID, formNa
 		}
 		current, err := ValidateCursorPage(result.Rows, cursorKeys, previous)
 		if err != nil {
+			// 末页整页都是无游标键的头行（金蝶割接数据）时，继续翻页只会重复同一过滤条件；
+			// 按数据末尾处理，避免整表单被误判失败。（原因：weekly_full 曾因 1 条头行中断）
+			if errors.Is(err, errCursorPageWithoutKeys) && isTerminalEmptyCursorPage(len(result.Rows), pageSize) {
+				e.logMsg(formName, "WARN", fmt.Sprintf("第 %d 页 %d 行均缺少游标键，按末页跳过: %v", page, len(result.Rows), err))
+				break
+			}
 			stat.Status, stat.ErrorCount, stat.Error = StatusFailed, 1, fmt.Sprintf("cursor page %d: %v", page, err)
 			return
 		}

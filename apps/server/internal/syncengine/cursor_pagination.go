@@ -1,10 +1,16 @@
 package syncengine
 
 import (
+	"errors"
 	"fmt"
 	"strconv"
 	"strings"
 )
+
+// errCursorPageWithoutKeys marks a page whose rows all lack cursor key values.
+// It is not always fatal: a short tail page made only of header-only rows can
+// be treated as end-of-data by the caller.
+var errCursorPageWithoutKeys = errors.New("cursor page has no valid cursor keys")
 
 var standardCursorKeys = map[string][]string{
 	"发货通知单": {"FID", "FEntity_FENTRYID"}, "生产入库单": {"FID", "FEntity_FENTRYID"},
@@ -133,7 +139,8 @@ func compareCursorValues(left, right []interface{}) (int, error) {
 // ValidateCursorPage rejects missing, duplicate, or non-monotonic cursor rows.
 // Rows with empty or null cursor key values are skipped (e.g. header-only rows
 // without entry lines in Kingdee cutover forms) instead of failing hard.
-// If all rows in a page are skipped, returns an error to prevent infinite loops.
+// If all rows in a page are skipped, returns errCursorPageWithoutKeys so the
+// caller can decide whether the page is a terminal tail page or a hard failure.
 func ValidateCursorPage(rows []map[string]interface{}, columns []string, previous []interface{}) ([]interface{}, error) {
 	last := previous
 	validCount := 0
@@ -156,9 +163,17 @@ func ValidateCursorPage(rows []map[string]interface{}, columns []string, previou
 		last = current
 	}
 	if validCount == 0 && len(rows) > 0 {
-		return nil, fmt.Errorf("all %d rows have empty cursor keys; cursor pagination cannot proceed", len(rows))
+		return nil, fmt.Errorf("%w: all %d rows have empty cursor keys; cursor pagination cannot proceed", errCursorPageWithoutKeys, len(rows))
 	}
 	return last, nil
+}
+
+// isTerminalEmptyCursorPage reports whether an all-invalid cursor page can be
+// treated as end-of-data. Kingdee caps a single page at 10000 rows, so a short
+// page means the source is exhausted; without any valid cursor key the next
+// page request would repeat the same filter and loop forever.
+func isTerminalEmptyCursorPage(rowCount, pageSize int) bool {
+	return rowCount > 0 && rowCount < pageSize
 }
 
 func cursorLiteral(value interface{}) (string, error) {

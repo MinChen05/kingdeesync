@@ -108,11 +108,11 @@ type ScheduleRun struct {
 
 // Checkpoint represents a sync checkpoint for large tables (断点续传).
 type Checkpoint struct {
-	ID           uint      `gorm:"primaryKey" json:"id"`
-	FormName     string    `gorm:"type:varchar(128);uniqueIndex;not null" json:"form_name"`
-	RunID        string    `gorm:"type:varchar(64);index" json:"run_id,omitempty"`
-	LastPosition int64     `gorm:"not null;default:0" json:"last_position"`          // StartRow（StartRow 路径）或已拉取行数（游标路径）
-	LastSyncTime string    `gorm:"type:varchar(64)" json:"last_sync_time,omitempty"` // Last successful sync timestamp from Kingdee
+	ID           uint   `gorm:"primaryKey" json:"id"`
+	FormName     string `gorm:"type:varchar(128);uniqueIndex;not null" json:"form_name"`
+	RunID        string `gorm:"type:varchar(64);index" json:"run_id,omitempty"`
+	LastPosition int64  `gorm:"not null;default:0" json:"last_position"`          // StartRow（StartRow 路径）或已拉取行数（游标路径）
+	LastSyncTime string `gorm:"type:varchar(64)" json:"last_sync_time,omitempty"` // Last successful sync timestamp from Kingdee
 	// CursorValue 持久化游标分页表单的中断游标（JSON 数组），
 	// 使中断的 run 能从断点续拉而非整表重跑（原因：千万级大表中断重跑是周日全量超时的放大器）
 	CursorValue string    `gorm:"type:text" json:"cursor_value,omitempty"`
@@ -197,7 +197,7 @@ type ConfigSnapshot struct {
 	ID         uint      `gorm:"primaryKey" json:"id"`
 	ConfigHash string    `gorm:"type:varchar(64);not null;index" json:"config_hash"`
 	IniContent string    `gorm:"type:text" json:"ini_content"`
-	JsonConfig string    `gorm:"type:text" json:"json_config"` // form-queries JSON
+	JsonConfig string    `gorm:"type:text" json:"json_config"`    // form-queries JSON
 	Labels     string    `gorm:"type:varchar(256)" json:"labels"` // free-form labels
 	CreatedAt  time.Time `gorm:"autoCreateTime;index" json:"created_at"`
 }

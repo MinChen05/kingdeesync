@@ -24,7 +24,7 @@ var (
 	once                sync.Once
 	mu                  sync.Mutex
 	paused              bool
-		schedulerRunTimeout = 2 * time.Hour
+	schedulerRunTimeout = 2 * time.Hour
 	scheduledSyncRunner = func(ctx context.Context, engine *syncengine.SyncEngine, runID string, forms []string, syncType string) (*syncengine.SyncResult, error) {
 		return engine.SyncDataWithRunID(ctx, runID, forms, syncType, false)
 	}
@@ -326,17 +326,17 @@ func runJob(job *gormdb.ScheduleJob, engine *syncengine.SyncEngine) {
 		// Aggregate stats from form results and write form-level records
 		for _, fs := range result.FormStats {
 			// Write form-level record
-if err := db.Create(&gormdb.SyncRunForm{
-					RunID:           runID,
-					FormName:        fs.FormName,
-					Status:          string(fs.Status),
-					TotalRecords:    int64(fs.FetchedCount),
-					Inserted:        int64(fs.InsertedCount),
-					Updated:         int64(fs.UpdatedCount),
-					Failed:          int64(fs.ErrorCount),
-					DurationSeconds: fs.DurationSec,
-					ErrorMessage:    fs.Error,
-				}).Error; err != nil {
+			if err := db.Create(&gormdb.SyncRunForm{
+				RunID:           runID,
+				FormName:        fs.FormName,
+				Status:          string(fs.Status),
+				TotalRecords:    int64(fs.FetchedCount),
+				Inserted:        int64(fs.InsertedCount),
+				Updated:         int64(fs.UpdatedCount),
+				Failed:          int64(fs.ErrorCount),
+				DurationSeconds: fs.DurationSec,
+				ErrorMessage:    fs.Error,
+			}).Error; err != nil {
 				log.Printf("[Schedule] Failed to persist form result for run %s form %s: %v", runID, fs.FormName, err)
 			}
 

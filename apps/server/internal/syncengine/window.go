@@ -55,7 +55,7 @@ type WindowFormSummary struct {
 	TableName string `json:"table_name"`
 	Fetched   int    `json:"fetched"`
 	Inserted  int    `json:"inserted"`
-	Updated int    `json:"updated"`
+	Updated   int    `json:"updated"`
 	Filter    string `json:"filter"`
 	Error     string `json:"error,omitempty"`
 }
@@ -191,7 +191,7 @@ func (r *WindowRunner) SyncManifestRows(ctx context.Context, mapping WindowTable
 		TableName: mapping.TargetTable,
 		Fetched:   fetched,
 		Inserted:  inserted.Inserted,
-			Updated: inserted.Updated,
+		Updated:   inserted.Updated,
 		Filter:    filter,
 	}, nil
 }

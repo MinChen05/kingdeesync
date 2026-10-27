@@ -6,9 +6,9 @@ import (
 
 func TestLookupSourceKeyValueDirectAndCaseInsensitive(t *testing.T) {
 	row := map[string]interface{}{
-		"FID":         float64(10),
-		"FENTRYID":    "20",
-		"FSaleOrgId":  100,
+		"FID":          float64(10),
+		"FENTRYID":     "20",
+		"FSaleOrgId":   100,
 		"FGROUP.FNAME": "测试组",
 	}
 	// direct key match

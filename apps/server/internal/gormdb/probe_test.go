@@ -16,11 +16,12 @@ import (
 // forcing a file reopen — the same path production hits after the 30-minute
 // ConnMaxLifetime expiry.
 // （原因：生产环境句柄保留 fd，读取仅在连接池回收后重新打开路径并失败；
-//  测试必须模拟回收触发 reopen 才能复现状态文件删除事故）
+//
+//	测试必须模拟回收触发 reopen 才能复现状态文件删除事故）
 func setupStateFileTestDB(t *testing.T, path string) *gorm.DB {
 	t.Helper()
 	oldDB := DB
-	db, err := gorm.Open(sqlite.Open(path + "?_journal_mode=WAL&_busy_timeout=5000"), &gorm.Config{})
+	db, err := gorm.Open(sqlite.Open(path+"?_journal_mode=WAL&_busy_timeout=5000"), &gorm.Config{})
 	if err != nil {
 		t.Fatalf("open sqlite state file: %v", err)
 	}
@@ -36,7 +37,7 @@ func setupStateFileTestDB(t *testing.T, path string) *gorm.DB {
 	t.Cleanup(func() {
 		DB = oldDB
 		if sqlDB, err := db.DB(); err == nil {
-		_ = sqlDB.Close()
+			_ = sqlDB.Close()
 		}
 	})
 	return db

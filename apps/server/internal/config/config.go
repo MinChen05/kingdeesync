@@ -78,22 +78,22 @@ type DatabaseConfig struct {
 type Config struct {
 	Kingdee KingdeeConfig `ini:"KINGDEE"`
 	Sync    struct {
-			AutoSync         bool   `ini:"auto_sync"`
-			SyncInterval     int    `ini:"sync_interval"`
-			SyncType         string `ini:"sync_type"`
-			TimeWindowDays   int    `ini:"time_window_days"`
-			TimeWindowStart  string `ini:"time_window_start"`  // "HH:MM" format, empty = no limit
-			TimeWindowEnd    string `ini:"time_window_end"`    // "HH:MM" format, empty = no limit
-			TableConcurrency int    `ini:"table_concurrency"`
-			// 看门狗超时按同步类型分开配置
-			// （原因：周日全量耗时已逼近原 2 小时硬编码上限，增量最坏仅 10 分钟，统一超时无法兼顾）
-			FullRunTimeoutMinutes        int `ini:"full_run_timeout_minutes"`
-			IncrementalRunTimeoutMinutes int `ini:"incremental_run_timeout_minutes"`
-			// 目标数据库定期探活（指针以区分"未配置"与"显式 false"，未配置默认开启）
-			// （原因：周日不调度任何任务，目标库宕机只能等周一增量才暴露）
-			DBProbeEnabled       *bool `ini:"db_probe_enabled"`
-			DBProbeIntervalSecs  int   `ini:"db_probe_interval_secs"`
-		} `ini:"SYNC"`
+		AutoSync         bool   `ini:"auto_sync"`
+		SyncInterval     int    `ini:"sync_interval"`
+		SyncType         string `ini:"sync_type"`
+		TimeWindowDays   int    `ini:"time_window_days"`
+		TimeWindowStart  string `ini:"time_window_start"` // "HH:MM" format, empty = no limit
+		TimeWindowEnd    string `ini:"time_window_end"`   // "HH:MM" format, empty = no limit
+		TableConcurrency int    `ini:"table_concurrency"`
+		// 看门狗超时按同步类型分开配置
+		// （原因：周日全量耗时已逼近原 2 小时硬编码上限，增量最坏仅 10 分钟，统一超时无法兼顾）
+		FullRunTimeoutMinutes        int `ini:"full_run_timeout_minutes"`
+		IncrementalRunTimeoutMinutes int `ini:"incremental_run_timeout_minutes"`
+		// 目标数据库定期探活（指针以区分"未配置"与"显式 false"，未配置默认开启）
+		// （原因：周日不调度任何任务，目标库宕机只能等周一增量才暴露）
+		DBProbeEnabled      *bool `ini:"db_probe_enabled"`
+		DBProbeIntervalSecs int   `ini:"db_probe_interval_secs"`
+	} `ini:"SYNC"`
 	Database DatabaseConfig `ini:"DATABASE"`
 	// Also read from [SQLSERVER] or [MYSQL] sections for compatibility with existing config.local.ini
 	SQLServer DatabaseConfig `ini:"SQLSERVER"`
@@ -163,9 +163,9 @@ func (c *Config) GetEffectiveDatabase() DatabaseConfig {
 }
 
 var (
-	instance    *Config
-	configPath  string // resolved config file path
-	mu          sync.RWMutex
+	instance   *Config
+	configPath string // resolved config file path
+	mu         sync.RWMutex
 )
 
 // fixPasswordsFromFile manually parses the INI file to fix passwords that contain

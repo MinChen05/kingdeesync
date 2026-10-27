@@ -79,10 +79,10 @@ func Init() error {
 // Close closes the GORM database connection.
 func Close() {
 	if DB != nil {
-	sqlDB, _ := DB.DB()
-	if sqlDB != nil {
-	sqlDB.Close()
-	}
+		sqlDB, _ := DB.DB()
+		if sqlDB != nil {
+			sqlDB.Close()
+		}
 	}
 }
 
@@ -91,12 +91,12 @@ func Close() {
 // （原因：SQLite 驱动的 Ping 不访问磁盘，状态文件被删除后健康检查假绿，监控全零无人感知）
 func ProbeStateDB() error {
 	if DB == nil {
-	return fmt.Errorf("gorm database not initialized")
+		return fmt.Errorf("gorm database not initialized")
 	}
 
 	var count int64
 	if err := DB.Model(&SyncRun{}).Count(&count).Error; err != nil {
-	return fmt.Errorf("state db probe failed: %w", err)
+		return fmt.Errorf("state db probe failed: %w", err)
 	}
 	return nil
 }
@@ -117,11 +117,11 @@ func AutoMigrate() error {
 		&SnapshotMeta{},
 		&OrphanDeleteApproval{},
 		&FormSetting{},
-&FormQueryConfig{},
-			&WebhookConfig{},
-			&ConfigSnapshot{},
-			&FormQueryTemplate{},
-		)
+		&FormQueryConfig{},
+		&WebhookConfig{},
+		&ConfigSnapshot{},
+		&FormQueryTemplate{},
+	)
 }
 
 func CreateOrphanDeleteApproval(approval *OrphanDeleteApproval) error {
@@ -728,8 +728,8 @@ func RecoverStaleRunningRuns() (int, error) {
 	result := DB.Model(&SyncRun{}).
 		Where("status = ? AND start_time < ?", "running", time.Now().Add(-3*time.Hour)).
 		Updates(map[string]interface{}{
-		"status":        "failed",
-		"error_message": "recovered from stale running state on server restart",
+			"status":        "failed",
+			"error_message": "recovered from stale running state on server restart",
 		})
 	return int(result.RowsAffected), result.Error
 }

@@ -224,8 +224,8 @@ func batchScheduleAction(c *gin.Context) {
 	}
 
 	var req struct {
-		Action string   `json:"action" binding:"required"` // enable, disable, delete
-		IDs    []uint   `json:"ids" binding:"required"`
+		Action string `json:"action" binding:"required"` // enable, disable, delete
+		IDs    []uint `json:"ids" binding:"required"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
 		WriteProblem(c, http.StatusBadRequest, Problem{

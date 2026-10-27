@@ -7,7 +7,7 @@ import (
 
 func TestRecoverStaleRunningRunsFreshDBNoError(t *testing.T) {
 	setupStateTestDB(t)
-		_, err := RecoverStaleRunningRuns()
+	_, err := RecoverStaleRunningRuns()
 	if err != nil {
 		t.Fatalf("startup recovery on fresh state db must not error: %v", err)
 	}

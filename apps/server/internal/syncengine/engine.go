@@ -1668,16 +1668,16 @@ func (e *SyncEngine) syncCursorForm(ctx, fetchCtx context.Context, runID, formNa
 		stat.FetchedCount += len(result.Rows)
 		if dryRun {
 			stat.InsertedCount += len(result.Rows)
-} else {
-				upsertRes, err := e.writeRowsWithContext(ctx, tableName, result.Rows, appendDerivedWriteFields(formName, fieldKeys), formQuery.FieldMap)
-				if err != nil {
-					stat.Status, stat.ErrorCount = StatusFailed, 1
-					stat.Error = fmt.Sprintf("cursor page %d write: total=%d err=%v", page, upsertRes.Total, err)
-					return
-				}
-				stat.InsertedCount += upsertRes.Inserted
-				stat.UpdatedCount += upsertRes.Updated
+		} else {
+			upsertRes, err := e.writeRowsWithContext(ctx, tableName, result.Rows, appendDerivedWriteFields(formName, fieldKeys), formQuery.FieldMap)
+			if err != nil {
+				stat.Status, stat.ErrorCount = StatusFailed, 1
+				stat.Error = fmt.Sprintf("cursor page %d write: total=%d err=%v", page, upsertRes.Total, err)
+				return
 			}
+			stat.InsertedCount += upsertRes.Inserted
+			stat.UpdatedCount += upsertRes.Updated
+		}
 		// Accumulate PKs for full-sync orphan cleanup
 		if pkCollector != nil {
 			if err := pkCollector.AddPage(ctx, result.Rows); err != nil {
@@ -1720,7 +1720,7 @@ func (e *SyncEngine) syncCursorForm(ctx, fetchCtx context.Context, runID, formNa
 			return
 		}
 		var targetCount int
-		if err := db.DB.QueryRowContext(ctx, "SELECT COUNT(*) FROM dbo." + tableName + "").Scan(&targetCount); err != nil {
+		if err := db.DB.QueryRowContext(ctx, "SELECT COUNT(*) FROM dbo."+tableName+"").Scan(&targetCount); err != nil {
 			stat.Status, stat.ErrorCount, stat.Error = StatusFailed, 1, "target count failed: "+err.Error()
 			return
 		}

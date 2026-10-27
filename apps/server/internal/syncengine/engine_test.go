@@ -213,8 +213,8 @@ func TestWriteRowsPassesCompositePrimaryKeyToWriter(t *testing.T) {
 	if err != nil {
 		t.Fatalf("writeRows() error = %v", err)
 	}
-if written.Total != 1 || writer.tableName != "saleorder" {
-			t.Fatalf("writeRows() = (%d, table %q), want one saleorder row", written.Total, writer.tableName)
+	if written.Total != 1 || writer.tableName != "saleorder" {
+		t.Fatalf("writeRows() = (%d, table %q), want one saleorder row", written.Total, writer.tableName)
 	}
 	if !reflect.DeepEqual(writer.pkCols, []string{"FID", "FENTRYID"}) {
 		t.Fatalf("writer PK columns = %#v, want ordered composite key", writer.pkCols)
@@ -302,9 +302,9 @@ func TestSyncDataProcessesPriorityGroupsInOrder(t *testing.T) {
 			starts = append(starts, formName)
 			return &kind.QueryResult{Rows: []map[string]interface{}{{"FID": formName}}}, nil
 		},
-writeRowsFunc: func(_ context.Context, _ string, rows []map[string]interface{}, _ []string, _ map[string]string) (UpsertResult, error) {
-				return UpsertResult{Inserted: len(rows), Total: len(rows)}, nil
-			},
+		writeRowsFunc: func(_ context.Context, _ string, rows []map[string]interface{}, _ []string, _ map[string]string) (UpsertResult, error) {
+			return UpsertResult{Inserted: len(rows), Total: len(rows)}, nil
+		},
 	}
 	if err := engine.PrepareRun(runID, true); err != nil {
 		t.Fatal(err)

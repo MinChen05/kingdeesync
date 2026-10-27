@@ -167,11 +167,11 @@ func (w *SQLServerWriter) directUpsert(ctx context.Context, tableName string, ro
 		colToKingdee[strings.ToUpper(dbCol)] = append(colToKingdee[strings.ToUpper(dbCol)], kField)
 	}
 
-// Direct upsert without staging table: MERGE ... USING (VALUES ...)
-		// with @pN named parameters (go-mssqldb rejects "?").
-		// （原因：小批量直接写目标表，避免 staging 建表开销；@pN 是 mssql 唯一支持的占位符）
-		totalInserted := 0
-		totalUpdated := 0
+	// Direct upsert without staging table: MERGE ... USING (VALUES ...)
+	// with @pN named parameters (go-mssqldb rejects "?").
+	// （原因：小批量直接写目标表，避免 staging 建表开销；@pN 是 mssql 唯一支持的占位符）
+	totalInserted := 0
+	totalUpdated := 0
 	// SQL Server caps parameters at 2100, so at most 100 rows per batch.
 	const batchRows = 100
 
@@ -263,31 +263,31 @@ func (w *SQLServerWriter) directUpsert(ctx context.Context, tableName string, ro
 			args = append(args, vals...)
 		}
 
-result, err := db.DB.ExecContext(ctx, builder.String(), args...)
-			if err != nil {
-				return UpsertResult{}, fmt.Errorf("direct MERGE for %s: %w", tableName, err)
-			}
-			affected, _ := result.RowsAffected()
-			// Count PK overlap by the full composite key; a first-column-only
-			// IN check counts sibling entries of the same bill and inflates
-			// "updated", which then blocks orphan cleanup as a partial write.
-			// （原因：采购入库单单据头下多条分录共用一个 FID，曾导致 written 大于 fetched）
-			batchInserted := len(batch)
-			if len(pkCols) > 0 && affected > 0 {
-				countSQL, countArgs := w.buildDirectKeyCountQuery(tableName, pkCols, batch, colToKingdee)
-				var existingCount int
-				if err := db.DB.GetContext(ctx, &existingCount, countSQL, countArgs...); err == nil {
-					totalUpdated += existingCount
-					batchInserted = len(batch) - existingCount
-					if batchInserted < 0 {
-						batchInserted = 0
-					}
+		result, err := db.DB.ExecContext(ctx, builder.String(), args...)
+		if err != nil {
+			return UpsertResult{}, fmt.Errorf("direct MERGE for %s: %w", tableName, err)
+		}
+		affected, _ := result.RowsAffected()
+		// Count PK overlap by the full composite key; a first-column-only
+		// IN check counts sibling entries of the same bill and inflates
+		// "updated", which then blocks orphan cleanup as a partial write.
+		// （原因：采购入库单单据头下多条分录共用一个 FID，曾导致 written 大于 fetched）
+		batchInserted := len(batch)
+		if len(pkCols) > 0 && affected > 0 {
+			countSQL, countArgs := w.buildDirectKeyCountQuery(tableName, pkCols, batch, colToKingdee)
+			var existingCount int
+			if err := db.DB.GetContext(ctx, &existingCount, countSQL, countArgs...); err == nil {
+				totalUpdated += existingCount
+				batchInserted = len(batch) - existingCount
+				if batchInserted < 0 {
+					batchInserted = 0
 				}
 			}
-			totalInserted += batchInserted
 		}
+		totalInserted += batchInserted
+	}
 
-		return UpsertResult{Inserted: totalInserted, Updated: totalUpdated, Total: len(rows)}, nil
+	return UpsertResult{Inserted: totalInserted, Updated: totalUpdated, Total: len(rows)}, nil
 }
 
 // buildDirectKeyCountQuery counts how many rows in one batch already exist in
@@ -526,22 +526,22 @@ func (w *SQLServerWriter) buildMergeSQL(tableName, stagingTable string,
 		matchConditions[i] = fmt.Sprintf("target.[%s] = source.[%s]", pk, pk)
 	}
 
-updateSet := make([]string, len(cols))
-		for i, c := range cols {
-			// Skip PK columns in UPDATE
-			isPK := false
-			for _, pk := range pkCols {
-				if pk == c {
-					isPK = true
-					break
-				}
-			}
-			if !isPK {
-				// Use ISNULL to prevent NULL being written to NOT NULL columns
-				// （原因：staging 表允许 NULL，但目标表列可能为 NOT NULL）
-				updateSet[i] = fmt.Sprintf("target.[%s] = ISNULL(source.[%s], target.[%s])", c, c, c)
+	updateSet := make([]string, len(cols))
+	for i, c := range cols {
+		// Skip PK columns in UPDATE
+		isPK := false
+		for _, pk := range pkCols {
+			if pk == c {
+				isPK = true
+				break
 			}
 		}
+		if !isPK {
+			// Use ISNULL to prevent NULL being written to NOT NULL columns
+			// （原因：staging 表允许 NULL，但目标表列可能为 NOT NULL）
+			updateSet[i] = fmt.Sprintf("target.[%s] = ISNULL(source.[%s], target.[%s])", c, c, c)
+		}
+	}
 	// Remove empty entries
 	updateSetClean := make([]string, 0, len(updateSet))
 	for _, s := range updateSet {
@@ -810,6 +810,7 @@ func (w *SQLServerWriter) lookupValueByCol(row map[string]interface{}, col strin
 func (w *SQLServerWriter) Close() error {
 	return nil
 }
+
 // getSQLTarget returns the SQL Server connection target.
 func (w *SQLServerWriter) getSQLTarget() (host, user, password string, err error) {
 	if w.cfg.Host == "" {
@@ -881,4 +882,3 @@ func (w *SQLServerWriter) DeleteKeys(ctx context.Context, tableName string, rows
 	log.Printf("[SQLSERVER-DELETE-KEYS] Deleted %d rows from %s", n, tableName)
 	return int(n), nil
 }
-

@@ -55,22 +55,22 @@ type HealthStatus struct {
 		ResponseMs int    `json:"response_ms"`
 		TodayCalls int    `json:"today_calls"`
 	} `json:"kingdee_api"`
-Database struct {
-			Status          string `json:"status"`
-			ResponseMs      int    `json:"response_ms"`
-			ConnCount       int    `json:"conn_count"`
-			OpenConnections int    `json:"open_connections"`
-			InUse           int    `json:"in_use"`
-			Idle            int    `json:"idle"`
-			MaxOpenConns    int    `json:"max_open_conns"`
-			WaitCount       int64  `json:"wait_count"`
-			WaitDurationMs  int64  `json:"wait_duration_ms"`
-			MaxIdleClosed   int64  `json:"max_idle_closed"`
-			MaxIdleTimeClosed int64 `json:"max_idle_time_closed"`
-			// 最近一次定期探活结果（原因：探活状态无需等告警即可在 overview 观察）
-			ProbeHealthy *bool  `json:"probe_healthy,omitempty"`
-			ProbeAt      string `json:"probe_at,omitempty"`
-		} `json:"database"`
+	Database struct {
+		Status            string `json:"status"`
+		ResponseMs        int    `json:"response_ms"`
+		ConnCount         int    `json:"conn_count"`
+		OpenConnections   int    `json:"open_connections"`
+		InUse             int    `json:"in_use"`
+		Idle              int    `json:"idle"`
+		MaxOpenConns      int    `json:"max_open_conns"`
+		WaitCount         int64  `json:"wait_count"`
+		WaitDurationMs    int64  `json:"wait_duration_ms"`
+		MaxIdleClosed     int64  `json:"max_idle_closed"`
+		MaxIdleTimeClosed int64  `json:"max_idle_time_closed"`
+		// 最近一次定期探活结果（原因：探活状态无需等告警即可在 overview 观察）
+		ProbeHealthy *bool  `json:"probe_healthy,omitempty"`
+		ProbeAt      string `json:"probe_at,omitempty"`
+	} `json:"database"`
 	Scheduler struct {
 		Status   string `json:"status"`
 		Uptime   string `json:"uptime"`
@@ -293,32 +293,32 @@ func GetHealthStatus() HealthStatus {
 
 	// Database health
 	if db.DB != nil {
-	start := time.Now()
-	err := db.DB.Ping()
-	duration := time.Since(start).Milliseconds()
+		start := time.Now()
+		err := db.DB.Ping()
+		duration := time.Since(start).Milliseconds()
 
-	health.Database.Status = map[bool]string{true: "ok", false: "error"}[err == nil]
-	health.Database.ResponseMs = int(duration)
+		health.Database.Status = map[bool]string{true: "ok", false: "error"}[err == nil]
+		health.Database.ResponseMs = int(duration)
 
-	// State SQLite probe: real read so a deleted or corrupt state file cannot
-	// stay green behind the business-DB Ping.
-	// （原因：09-05 状态文件被删除后 dashboard 仍报 ok，全零监控无人感知）
-	probeStart := time.Now()
-	if err := gormdb.ProbeStateDB(); err != nil {
-	health.Database.Status = "error"
-	health.Database.ResponseMs = int(time.Since(probeStart).Milliseconds())
-	}
+		// State SQLite probe: real read so a deleted or corrupt state file cannot
+		// stay green behind the business-DB Ping.
+		// （原因：09-05 状态文件被删除后 dashboard 仍报 ok，全零监控无人感知）
+		probeStart := time.Now()
+		if err := gormdb.ProbeStateDB(); err != nil {
+			health.Database.Status = "error"
+			health.Database.ResponseMs = int(time.Since(probeStart).Milliseconds())
+		}
 
-stats := db.DB.Stats()
-			health.Database.ConnCount = int(stats.InUse)
-			health.Database.OpenConnections = int(stats.OpenConnections)
-			health.Database.InUse = int(stats.InUse)
-			health.Database.Idle = int(stats.Idle)
-			health.Database.MaxOpenConns = int(stats.MaxOpenConnections)
-			health.Database.WaitCount = stats.WaitCount
-			health.Database.WaitDurationMs = stats.WaitDuration.Milliseconds()
-			health.Database.MaxIdleClosed = stats.MaxIdleClosed
-			health.Database.MaxIdleTimeClosed = stats.MaxIdleTimeClosed
+		stats := db.DB.Stats()
+		health.Database.ConnCount = int(stats.InUse)
+		health.Database.OpenConnections = int(stats.OpenConnections)
+		health.Database.InUse = int(stats.InUse)
+		health.Database.Idle = int(stats.Idle)
+		health.Database.MaxOpenConns = int(stats.MaxOpenConnections)
+		health.Database.WaitCount = stats.WaitCount
+		health.Database.WaitDurationMs = stats.WaitDuration.Milliseconds()
+		health.Database.MaxIdleClosed = stats.MaxIdleClosed
+		health.Database.MaxIdleTimeClosed = stats.MaxIdleTimeClosed
 	} else {
 		health.Database.Status = "error"
 	}

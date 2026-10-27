@@ -17,12 +17,12 @@ import (
 
 // Payload is the JSON body sent to webhook endpoints.
 type Payload struct {
-	Event    string `json:"event"`    // "sync.completed" or "sync.failed"
-	RunID    string `json:"run_id"`
-	Status   string `json:"status"`
-	Duration float64 `json:"duration_seconds"`
-	Message  string `json:"message,omitempty"`
-	Timestamp string `json:"timestamp"`
+	Event     string  `json:"event"` // "sync.completed" or "sync.failed"
+	RunID     string  `json:"run_id"`
+	Status    string  `json:"status"`
+	Duration  float64 `json:"duration_seconds"`
+	Message   string  `json:"message,omitempty"`
+	Timestamp string  `json:"timestamp"`
 }
 
 // Dispatcher sends webhook HTTP POST requests.

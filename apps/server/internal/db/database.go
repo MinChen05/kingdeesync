@@ -7,9 +7,9 @@ import (
 	"net/url"
 	"strings"
 
-	_ "github.com/microsoft/go-mssqldb"
 	"github.com/jmoiron/sqlx"
 	"github.com/kingdee-sync/go/internal/config"
+	_ "github.com/microsoft/go-mssqldb"
 )
 
 var DB *sqlx.DB

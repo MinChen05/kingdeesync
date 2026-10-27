@@ -1,20 +1,13 @@
-/* Hallmark · component: config-drawer · genre: utilitarian
- * states: default · hover · focus · active · disabled · loading · error · success
- * contrast: pass (46–50)
- */
-
 import {
+  ArrowRightOutlined,
   CheckOutlined,
   CopyOutlined,
   DeleteOutlined,
   PlusOutlined,
 } from '@ant-design/icons';
-import { Button, Drawer, Input, message, Space, Tag, Tooltip } from 'antd';
-import type { InputRef } from 'antd';
+import { Button, Drawer, Input, Space, Tag, Tooltip } from 'antd';
 import React, { useEffect, useRef, useState } from 'react';
 import type { FormItem } from '../types';
-
-const Textarea = Input.TextArea;
 
 interface FormConfigDrawerProps {
   visible: boolean;
@@ -24,193 +17,194 @@ interface FormConfigDrawerProps {
   submitting: boolean;
 }
 
-/* ── FieldKeys tag editor ── */
-
 const FieldKeysEditor: React.FC<{
   value: string;
-  onChange: (v: string) => void;
+  onChange: (value: string) => void;
 }> = ({ value, onChange }) => {
   const [input, setInput] = useState('');
-  const tags = value ? value.split(',').map((s) => s.trim()).filter(Boolean) : [];
+  const tags = Array.from(
+    new Set(
+      value
+        ? value
+            .split(',')
+            .map((item) => item.trim())
+            .filter(Boolean)
+        : [],
+    ),
+  );
 
   const addTag = () => {
-    const t = input.trim();
-    if (t && !tags.includes(t)) {
-      const next = [...tags, t].join(', ');
-      onChange(next);
+    const nextTag = input.trim();
+    if (nextTag && !tags.includes(nextTag)) {
+      onChange([...tags, nextTag].join(', '));
       setInput('');
     }
   };
 
-  const removeTag = (i: number) => {
+  const removeTag = (index: number) => {
     const next = [...tags];
-    next.splice(i, 1);
+    next.splice(index, 1);
     onChange(next.join(', '));
   };
 
   return (
-    <div>
-      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, minHeight: 32 }}>
-        {tags.map((t, i) => (
+    <div className="field-keys-editor">
+      <div className="field-tag-list">
+        {tags.map((tag, index) => (
           <Tag
-            key={`${t}-${i}`}
+            key={tag}
+            className="field-key-tag"
             closable
-            onClose={() => removeTag(i)}
-            style={{
-              margin: 0,
-              backgroundColor: 'var(--tk-surface)',
-              borderColor: 'var(--tk-border)',
-              color: 'var(--tk-text)',
-              fontSize: 12,
-              fontFamily: 'monospace',
-            }}
+            onClose={() => removeTag(index)}
           >
-            {t}
+            {tag}
           </Tag>
         ))}
+        {tags.length === 0 && (
+          <span className="field-empty-tip">尚未配置同步字段</span>
+        )}
+      </div>
+      <div className="field-key-input-row">
         <Input
-          size="small"
           value={input}
-          onChange={(e) => setInput(e.target.value)}
+          onChange={(event) => setInput(event.target.value)}
           onPressEnter={addTag}
-          placeholder={tags.length ? '+ 添加字段' : ''}
-          style={{ width: 140, flex: 'none' }}
-          variant="borderless"
+          placeholder="输入金蝶 API 字段名，按回车添加"
+          aria-label="新增同步字段"
+        />
+        <Button
+          icon={<PlusOutlined />}
+          onClick={addTag}
+          disabled={!input.trim()}
+          aria-label="添加字段"
         />
       </div>
-      <div style={{ fontSize: 12, color: 'var(--tk-dim)', marginTop: 6 }}>
-        {tags.length} 个字段，逗号分隔的 金蝶 API 字段名
+      <div className="field-helper-text">
+        已配置 {tags.length} 个字段，字段名不可重复
       </div>
     </div>
   );
 };
 
-/* ── FieldMap key-value editor ── */
-
 interface MappingRow {
+  id: number;
   key: string;
   value: string;
 }
 
 const FieldMapEditor: React.FC<{
   value: Record<string, string> | undefined;
-  onChange: (v: Record<string, string>) => void;
+  onChange: (value: Record<string, string>) => void;
 }> = ({ value, onChange }) => {
   const [rows, setRows] = useState<MappingRow[]>([]);
+  const nextRowId = useRef(0);
 
   useEffect(() => {
     if (value && Object.keys(value).length > 0) {
-      setRows(Object.entries(value).map(([k, v]) => ({ key: k, value: v })));
+      setRows((currentRows) =>
+        Object.entries(value).map(([key, item], index) => ({
+          id: currentRows[index]?.id ?? nextRowId.current++,
+          key,
+          value: item,
+        })),
+      );
     } else {
       setRows([]);
     }
   }, [value]);
 
-  const update = (i: number, field: 'key' | 'value', v: string) => {
-    const next = [...rows];
-    next[i] = { ...next[i], [field]: v };
-    setRows(next);
+  const emitChange = (next: MappingRow[]) => {
     const map: Record<string, string> = {};
-    next.forEach((r) => {
-      if (r.key) map[r.key] = r.value;
+    next.forEach((row) => {
+      if (row.key) map[row.key] = row.value;
     });
     onChange(map);
   };
 
-  const remove = (i: number) => {
+  const update = (index: number, field: 'key' | 'value', nextValue: string) => {
     const next = [...rows];
-    next.splice(i, 1);
+    next[index] = { ...next[index], [field]: nextValue };
     setRows(next);
-    const map: Record<string, string> = {};
-    next.forEach((r) => {
-      if (r.key) map[r.key] = r.value;
-    });
-    onChange(map);
+    emitChange(next);
   };
 
-  const add = () => {
-    setRows([...rows, { key: '', value: '' }]);
+  const remove = (index: number) => {
+    const next = [...rows];
+    next.splice(index, 1);
+    setRows(next);
+    emitChange(next);
   };
 
   return (
-    <div>
+    <div className="field-map-editor">
+      {rows.length > 0 && (
+        <div className="field-map-heading" aria-hidden="true">
+          <span>金蝶源字段</span>
+          <span>数据库目标列</span>
+          <span />
+        </div>
+      )}
       {rows.length === 0 ? (
-        <div style={{ fontSize: 12, color: 'var(--tk-dim)', padding: '8px 0' }}>
-          将 金蝶 API 字段名映射为目标数据库列名
+        <div className="field-map-empty">
+          暂无字段映射，添加后将金蝶字段名转换为数据库列名
         </div>
       ) : (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-          {rows.map((r, i) => (
-            <Space key={i} style={{ width: '100%' }} align="start">
+        <div className="field-map-list">
+          {rows.map((row, index) => (
+            <div className="field-map-row" key={row.id}>
               <Input
-                size="small"
-                value={r.key}
-                onChange={(e) => update(i, 'key', e.target.value)}
-                placeholder="源字段"
-                style={{ flex: 1, fontFamily: 'monospace', fontSize: 12 }}
+                value={row.key}
+                onChange={(event) => update(index, 'key', event.target.value)}
+                placeholder="例如 FBillNo"
+                aria-label={`第 ${index + 1} 行源字段`}
               />
-              <span style={{ color: 'var(--tk-dim)', fontSize: 12, lineHeight: '32px' }}>
-                →
-              </span>
+              <ArrowRightOutlined className="field-map-arrow" />
               <Input
-                size="small"
-                value={r.value}
-                onChange={(e) => update(i, 'value', e.target.value)}
-                placeholder="目标列"
-                style={{ flex: 1, fontFamily: 'monospace', fontSize: 12 }}
+                value={row.value}
+                onChange={(event) => update(index, 'value', event.target.value)}
+                placeholder="例如 bill_no"
+                aria-label={`第 ${index + 1} 行目标列`}
               />
-              <Tooltip title="删除">
+              <Tooltip title="删除映射">
                 <Button
                   type="text"
-                  size="small"
                   danger
                   icon={<DeleteOutlined />}
-                  onClick={() => remove(i)}
-                  style={{ fontSize: 14 }}
+                  onClick={() => remove(index)}
+                  aria-label={`删除第 ${index + 1} 行映射`}
                 />
               </Tooltip>
-            </Space>
+            </div>
           ))}
         </div>
       )}
       <Button
-        type="text"
-        size="small"
+        type="dashed"
+        block
         icon={<PlusOutlined />}
-        onClick={add}
-        style={{
-          marginTop: 8,
-          color: 'var(--tk-primary)',
-          fontSize: 12,
-        }}
+        onClick={() =>
+          setRows([...rows, { id: nextRowId.current++, key: '', value: '' }])
+        }
       >
-        添加映射
+        添加字段映射
       </Button>
     </div>
   );
 };
 
-/* ── Section wrapper ── */
-
 const Section: React.FC<{
   title: string;
-  description?: string;
+  description: string;
   children: React.ReactNode;
 }> = ({ title, description, children }) => (
-  <div style={{ marginBottom: 24 }}>
-    <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--tk-text)', marginBottom: 2 }}>
-      {title}
+  <section className="form-config-section">
+    <div className="form-config-section-heading">
+      <h3>{title}</h3>
+      <p>{description}</p>
     </div>
-    {description && (
-      <div style={{ fontSize: 12, color: 'var(--tk-dim)', marginBottom: 10 }}>
-        {description}
-      </div>
-    )}
     {children}
-  </div>
+  </section>
 );
-
-/* ── Drawer ── */
 
 const FormConfigDrawer: React.FC<FormConfigDrawerProps> = ({
   visible,
@@ -224,7 +218,7 @@ const FormConfigDrawer: React.FC<FormConfigDrawerProps> = ({
   const [filterString, setFilterString] = useState('');
   const [fieldMap, setFieldMap] = useState<Record<string, string>>({});
   const [copied, setCopied] = useState(false);
-  const codeRef = useRef<InputRef>(null);
+  const copyTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
     if (visible && form) {
@@ -236,146 +230,100 @@ const FormConfigDrawer: React.FC<FormConfigDrawerProps> = ({
     }
   }, [visible, form]);
 
+  useEffect(
+    () => () => {
+      if (copyTimer.current) clearTimeout(copyTimer.current);
+    },
+    [],
+  );
+
   const handleCopyFormId = async () => {
     try {
       await navigator.clipboard.writeText(formId);
       setCopied(true);
-      setTimeout(() => setCopied(false), 1500);
+      if (copyTimer.current) clearTimeout(copyTimer.current);
+      copyTimer.current = setTimeout(() => setCopied(false), 1500);
     } catch {
-      // fallback
+      setCopied(false);
     }
-  };
-
-  const handleSubmit = () => {
-    onSubmit({
-      form_id: formId,
-      field_keys: fieldKeys,
-      filter_string: filterString,
-      field_map: fieldMap,
-    });
   };
 
   return (
     <Drawer
+      rootClassName="form-config-drawer"
       title={
-        <div>
-          <div style={{ fontSize: 15, fontWeight: 600 }}>编辑表单配置</div>
-          <div style={{ fontSize: 12, color: 'var(--tk-dim)', marginTop: 2 }}>
-            {form?.form_name}
-          </div>
+        <div className="form-config-drawer-title">
+          <strong>编辑表单配置</strong>
+          <span title={form?.form_name}>{form?.form_name}</span>
         </div>
       }
-      width={600}
+      size={640}
       open={visible}
       onClose={onCancel}
-      extra={
-        <Space>
-          <Button onClick={onCancel} variant="filled">
-            取消
-          </Button>
-          <Button type="primary" loading={submitting} onClick={handleSubmit}>
-            保存配置
-          </Button>
-        </Space>
-      }
-      styles={{
-        body: { padding: '24px 24px 24px 28px' },
-      }}
-    >
-      {/* FormID badge */}
-      <Section title="金蝶表单 ID" description="金蝶数据接口中的表单标识符">
-        <div
-          style={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: 8,
-            backgroundColor: 'var(--tk-surface)',
-            border: '1px solid var(--tk-border)',
-            borderRadius: 6,
-            padding: '8px 12px',
-          }}
-        >
-          <Input
-            ref={codeRef}
-            value={formId}
-            onChange={(e) => setFormId(e.target.value)}
-            placeholder="例如：SAL_SaleOrder"
-            style={{
-              border: 'none',
-              padding: 0,
-              fontFamily: 'monospace',
-              fontSize: 13,
-              backgroundColor: 'transparent',
-              flex: 1,
-            }}
-            variant="borderless"
-          />
-          <Tooltip title={copied ? '已复制' : '复制'}>
+      footer={
+        <div className="form-config-drawer-footer">
+          <span>保存后立即应用到后续同步任务</span>
+          <Space>
+            <Button onClick={onCancel}>取消</Button>
             <Button
-              type="text"
-              size="small"
-              icon={copied ? <CheckOutlined /> : <CopyOutlined />}
-              onClick={handleCopyFormId}
-              style={{
-                color: copied ? 'var(--tk-success)' : 'var(--tk-muted)',
-                fontSize: 14,
-              }}
+              type="primary"
+              loading={submitting}
+              onClick={() =>
+                onSubmit({
+                  form_id: formId,
+                  field_keys: fieldKeys,
+                  filter_string: filterString,
+                  field_map: fieldMap,
+                })
+              }
+            >
+              保存配置
+            </Button>
+          </Space>
+        </div>
+      }
+    >
+      <div className="form-config-content">
+        <Section title="表单标识" description="金蝶数据接口使用的 FormID">
+          <div className="form-id-input">
+            <Input
+              value={formId}
+              onChange={(event) => setFormId(event.target.value)}
+              placeholder="例如 SAL_SaleOrder"
+              aria-label="金蝶表单 ID"
+              variant="borderless"
             />
-          </Tooltip>
-        </div>
-      </Section>
-
-      <div
-        style={{
-          height: 1,
-          backgroundColor: 'var(--tk-border)',
-          margin: '0 0 24px',
-        }}
-      />
-
-      {/* FieldKeys */}
-      <Section title="字段列表" description="从金蝶 API 拉取的字段">
-        <div
-          style={{
-            backgroundColor: 'var(--tk-surface)',
-            border: '1px solid var(--tk-border)',
-            borderRadius: 6,
-            padding: '10px 12px',
-          }}
-        >
-          <FieldKeysEditor value={fieldKeys} onChange={setFieldKeys} />
-        </div>
-      </Section>
-
-      {/* FilterString */}
-      <Section title="过滤条件" description="金蝶查询过滤表达式">
-        <Textarea
-          value={filterString}
-          onChange={(e) => setFilterString(e.target.value)}
-          placeholder="例如：FSaleOrgId = 171190"
-          rows={2}
-          style={{
-            fontFamily: 'monospace',
-            fontSize: 12,
-            backgroundColor: 'var(--tk-surface)',
-            borderColor: 'var(--tk-border)',
-          }}
-        />
-      </Section>
-
-      {/* FieldMap */}
-      <Section title="字段映射" description="金蝶字段名到数据库列名的映射">
-        <div
-          style={{
-            backgroundColor: 'var(--tk-surface)',
-            border: '1px solid var(--tk-border)',
-            borderRadius: 6,
-            padding: '10px 12px',
-          }}
-        >
-          <FieldMapEditor value={fieldMap} onChange={setFieldMap} />
-        </div>
-      </Section>
+            <Tooltip title={copied ? '已复制' : '复制表单 ID'}>
+              <Button
+                type="text"
+                icon={copied ? <CheckOutlined /> : <CopyOutlined />}
+                className={copied ? 'is-copied' : undefined}
+                onClick={handleCopyFormId}
+                aria-label="复制表单 ID"
+              />
+            </Tooltip>
+          </div>
+        </Section>
+        <Section title="同步字段" description="仅拉取此处配置的金蝶 API 字段">
+          <div className="field-editor-surface">
+            <FieldKeysEditor value={fieldKeys} onChange={setFieldKeys} />
+          </div>
+        </Section>
+        <Section title="查询过滤" description="可选的金蝶查询过滤表达式">
+          <Input.TextArea
+            className="filter-expression-input"
+            value={filterString}
+            onChange={(event) => setFilterString(event.target.value)}
+            placeholder="例如 FSaleOrgId = 171190"
+            autoSize={{ minRows: 3, maxRows: 7 }}
+          />
+        </Section>
+        <Section title="字段映射" description="将源字段名转换为目标数据库列名">
+          <div className="field-editor-surface">
+            <FieldMapEditor value={fieldMap} onChange={setFieldMap} />
+          </div>
+        </Section>
+      </div>
     </Drawer>
   );
 };

@@ -1,10 +1,10 @@
-import { describe, it, expect } from 'vitest';
 import { render, screen } from '@testing-library/react';
+import { describe, expect, it } from 'vitest';
 import {
   SyncStatusContent,
-  syncIconForStatus,
   syncButtonBg,
   syncButtonBorder,
+  syncIconForStatus,
 } from './SyncStatusContent';
 
 const baseInfo = {
@@ -52,6 +52,15 @@ describe('SyncStatusContent', () => {
     render(<SyncStatusContent status="failed_abnormal_exit" {...baseInfo} />);
     expect(screen.getByText('同步失败')).toBeInTheDocument();
   });
+
+  it('shows partial and stopped states', () => {
+    const { rerender } = render(
+      <SyncStatusContent status="partial" {...baseInfo} />,
+    );
+    expect(screen.getByText('部分表单同步完成')).toBeInTheDocument();
+    rerender(<SyncStatusContent status="stopped" {...baseInfo} />);
+    expect(screen.getByText('同步已停止')).toBeInTheDocument();
+  });
 });
 
 describe('syncIconForStatus', () => {
@@ -78,11 +87,11 @@ describe('syncButtonBg', () => {
   });
 
   it('returns success color for success', () => {
-    expect(syncButtonBg('success')).toBe('#064e3b');
+    expect(syncButtonBg('success')).toBe('var(--tk-success-soft)');
   });
 
   it('returns error color for failed', () => {
-    expect(syncButtonBg('failed')).toBe('#7f1d1d');
+    expect(syncButtonBg('failed')).toBe('var(--tk-error-soft)');
   });
 });
 

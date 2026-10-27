@@ -76,7 +76,9 @@ const RecentErrors: React.FC<RecentErrorsProps> = ({ runs, loading }) => {
       key: 'failed_forms',
       width: 90,
       render: (v: number) => (
-        <Text style={{ color: v > 0 ? 'var(--tk-error)' : 'var(--tk-muted)' }}>{v || '-'}</Text>
+        <Text style={{ color: v > 0 ? 'var(--tk-error)' : 'var(--tk-muted)' }}>
+          {v || '-'}
+        </Text>
       ),
     },
     {
@@ -101,26 +103,27 @@ const RecentErrors: React.FC<RecentErrorsProps> = ({ runs, loading }) => {
         <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
           <ExclamationCircleOutlined style={{ color: 'var(--tk-warning)' }} />
           最近异常
-          <Text
-            type="secondary"
-            style={{ fontSize: 12, fontWeight: 400 }}
-          >
+          <Text type="secondary" style={{ fontSize: 12, fontWeight: 400 }}>
             ({runs.length}条)
           </Text>
         </span>
       }
       extra={
-        <Link to="/monitor" style={{ fontSize: 12, color: 'var(--tk-primary)' }}>
+        <Link
+          to="/monitor"
+          style={{ fontSize: 12, color: 'var(--tk-primary)' }}
+        >
           查看全部 →
         </Link>
       }
     >
       <Table
+        className="monitor-table monitor-recent-table"
         columns={columns}
         dataSource={runs}
         rowKey="run_id"
         pagination={false}
-        size="small"
+        size="middle"
         scroll={{ x: 700 }}
       />
     </Panel>

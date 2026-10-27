@@ -1,11 +1,11 @@
-import { FileSearchOutlined } from '@ant-design/icons';
-import { useSearchParams } from '@umijs/max';
+import { FileSearchOutlined, ReloadOutlined } from '@ant-design/icons';
 import { useQuery } from '@tanstack/react-query';
-import { Empty, Table } from 'antd';
+import { useSearchParams } from '@umijs/max';
+import { Button, Empty, Table } from 'antd';
 import React, { useMemo, useState } from 'react';
 import Panel from '@/components/Panel';
-import { listLogs } from '@/services/v1';
 import type { V1RunEvent } from '@/services/v1';
+import { listLogs } from '@/services/v1';
 import { LogFilterBar, useLogColumns } from './LogColumns';
 
 /**
@@ -18,7 +18,12 @@ const ErrorLogPanel: React.FC = () => {
   const [days, setDays] = useState(7);
 
   const params = useMemo(() => {
-    const p: { level?: string; form_name?: string; days?: number; limit: number } = {
+    const p: {
+      level?: string;
+      form_name?: string;
+      days?: number;
+      limit: number;
+    } = {
       limit: 50,
       days,
     };
@@ -51,9 +56,15 @@ const ErrorLogPanel: React.FC = () => {
       }
       loading={loading && logs.length === 0}
       extra={
-        <a onClick={() => logsReq.refetch()} style={{ fontSize: 12, color: 'var(--tk-primary)' }}>
+        <Button
+          size="small"
+          icon={<ReloadOutlined />}
+          loading={logsReq.isRefetching}
+          onClick={() => logsReq.refetch()}
+          aria-label="刷新错误日志"
+        >
           刷新
-        </a>
+        </Button>
       }
     >
       <LogFilterBar
@@ -66,6 +77,7 @@ const ErrorLogPanel: React.FC = () => {
         onClearFocusForm={clearFocusForm}
       />
       <Table<V1RunEvent>
+        className="monitor-table monitor-log-table"
         columns={columns}
         dataSource={logs}
         rowKey={(record, index) => `${record.created_at}-${index}`}

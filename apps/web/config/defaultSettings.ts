@@ -1,12 +1,50 @@
 import type { ProLayoutProps } from '@ant-design/pro-components';
+import { theme as antdTheme } from 'antd';
 
-/**
- * @name
- */
+export const themeConfig = {
+  algorithm: antdTheme.defaultAlgorithm,
+  token: {
+    fontFamily:
+      "AlibabaSans, -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Noto Sans SC', sans-serif",
+    colorPrimary: '#0f766e',
+    colorInfo: '#0f766e',
+    colorSuccess: '#15803d',
+    colorWarning: '#d97706',
+    colorError: '#dc2626',
+    colorText: '#334155',
+    colorTextSecondary: '#64748b',
+    colorBgLayout: '#f3f6f4',
+    colorBgContainer: '#ffffff',
+    colorBorder: '#e1e8e4',
+    colorBorderSecondary: '#e9efec',
+    borderRadius: 10,
+    controlHeight: 40,
+    motionDurationMid: '0.2s',
+  },
+  components: {
+    Button: {
+      fontWeight: 500,
+      primaryShadow: '0 4px 12px rgba(15, 118, 110, 0.18)',
+    },
+    Table: {
+      headerBg: '#f7f9f8',
+      headerColor: '#52646c',
+      rowHoverBg: '#f0f8f5',
+    },
+    Card: {
+      headerBg: '#ffffff',
+    },
+    Tabs: {
+      itemSelectedColor: '#0f766e',
+      inkBarColor: '#0f766e',
+    },
+  },
+};
+
 const Settings: ProLayoutProps = {
   navTheme: 'realDark',
-  colorPrimary: '#38bdf8',
-  layout: 'mix',
+  colorPrimary: '#0f766e',
+  layout: 'side',
   contentWidth: 'Fluid',
   fixedHeader: true,
   fixSiderbar: true,
@@ -14,25 +52,23 @@ const Settings: ProLayoutProps = {
   title: '',
   logo: false,
   iconfontUrl: '',
+  siderWidth: 232,
   token: {
-    // 侧边栏：近黑蓝 + 玻璃质感，选中项主色半透明高亮
     sider: {
-      colorMenuBackground: '#0d1526',
-      colorTextMenu: 'rgba(226,232,240,0.72)',
-      colorTextMenuSelected: '#ffffff',
-      colorBgMenuItemSelected: 'rgba(56,189,248,0.16)',
-      colorTextMenuActive: '#38bdf8',
+      colorMenuBackground: '#102c30',
+      colorTextMenu: 'rgba(226, 239, 235, 0.68)',
+      colorTextMenuSelected: '#f4fffc',
+      colorBgMenuItemSelected: 'rgba(45, 212, 191, 0.14)',
+      colorTextMenuActive: '#5eead4',
     },
-    // 页面容器：透明背景，透出全局深色渐变
     pageContainer: {
       colorBgPageContainer: 'transparent',
-      paddingInlinePageContainerContent: 24,
-      paddingBlockPageContainerContent: 24,
+      paddingInlinePageContainerContent: 32,
+      paddingBlockPageContainerContent: 28,
     },
-    // Header：深色半透明，配合全局毛玻璃
     header: {
-      colorBgHeader: 'rgba(13,21,38,0.85)',
-      heightLayoutHeader: 56,
+      colorBgHeader: 'rgba(255, 255, 255, 0.94)',
+      heightLayoutHeader: 64,
     },
   },
 };

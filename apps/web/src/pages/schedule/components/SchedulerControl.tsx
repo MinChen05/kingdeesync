@@ -1,11 +1,14 @@
 import {
+  CalendarOutlined,
+  CheckCircleOutlined,
   ClockCircleOutlined,
+  PauseCircleOutlined,
   PlayCircleOutlined,
-  ScheduleOutlined,
   StopOutlined,
 } from '@ant-design/icons';
 import { Button } from 'antd';
 import React from 'react';
+import Panel from '@/components/Panel';
 
 interface SchedulerControlProps {
   enabled: boolean;
@@ -17,9 +20,6 @@ interface SchedulerControlProps {
   stopping: boolean;
 }
 
-/**
- * 调度器状态卡片：状态指示 + 统计指标 + 控制按钮
- */
 const SchedulerControl: React.FC<SchedulerControlProps> = ({
   enabled,
   jobCount,
@@ -29,92 +29,76 @@ const SchedulerControl: React.FC<SchedulerControlProps> = ({
   starting,
   stopping,
 }) => {
-  const dotColor = enabled ? '#22c55e' : '#f59e0b';
-
   return (
-    <div className="glass-card" style={{ padding: '20px 24px' }}>
-      <div
-        className="flex items-center justify-between"
-        style={{ flexWrap: 'wrap', gap: 16 }}
-      >
-        {/* 左侧：状态 + 指标 */}
-        <div
-          style={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: 32,
-            flexWrap: 'wrap',
-          }}
-        >
-          {/* 状态指示 */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-            <div
-              className="rounded-full"
-              style={{
-                width: 10,
-                height: 10,
-                backgroundColor: dotColor,
-                boxShadow: `0 0 8px ${dotColor}, 0 0 16px ${dotColor}55`,
-              }}
-            />
-            <span style={{ fontSize: 15, fontWeight: 600, color: '#e2e8f0' }}>
-              {enabled ? '调度器运行中' : '调度器已停止'}
-            </span>
-          </div>
-
-          {/* 指标 */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: 24 }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-              <ScheduleOutlined
-                style={{ fontSize: 14, color: 'var(--tk-dim)' }}
-              />
-              <span style={{ fontSize: 13, color: 'var(--tk-dim)' }}>
-                全部{' '}
-                <span style={{ color: '#e2e8f0', fontWeight: 600 }}>
-                  {jobCount}
-                </span>
+    <Panel
+      title="调度器状态"
+      extra={
+        enabled ? (
+          <Button
+            danger
+            icon={<StopOutlined />}
+            loading={stopping}
+            disabled={starting}
+            onClick={onStop}
+          >
+            停止调度
+          </Button>
+        ) : (
+          <Button
+            type="primary"
+            icon={<PlayCircleOutlined />}
+            loading={starting}
+            disabled={stopping}
+            onClick={onStart}
+          >
+            启动调度
+          </Button>
+        )
+      }
+    >
+      <div className="scheduler-control-content">
+        <div className="scheduler-state">
+          <span
+            className={`scheduler-state-icon${enabled ? ' is-running' : ' is-stopped'}`}
+          >
+            {enabled ? <CheckCircleOutlined /> : <PauseCircleOutlined />}
+          </span>
+          <div>
+            <div className="scheduler-state-title">
+              <strong>{enabled ? '自动调度运行中' : '自动调度已停止'}</strong>
+              <span
+                className={`scheduler-state-badge${enabled ? ' is-running' : ''}`}
+              >
+                <span />
+                {enabled ? '运行中' : '待机'}
               </span>
             </div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-              <ClockCircleOutlined
-                style={{ fontSize: 14, color: 'var(--tk-dim)' }}
-              />
-              <span style={{ fontSize: 13, color: 'var(--tk-dim)' }}>
-                启用{' '}
-                <span style={{ color: '#e2e8f0', fontWeight: 600 }}>
-                  {enabledCount}
-                </span>
-              </span>
-            </div>
+            <p>
+              {enabled
+                ? '系统将按照任务计划自动执行，启用中的任务会按时触发'
+                : '所有定时触发均已暂停，已有任务配置会继续保留'}
+            </p>
           </div>
         </div>
-
-        {/* 右侧：操作按钮 */}
-        <div style={{ display: 'flex', gap: 8 }}>
-          {enabled ? (
-            <Button
-              size="small"
-              danger
-              icon={<StopOutlined />}
-              loading={stopping}
-              onClick={onStop}
-            >
-              停止调度
-            </Button>
-          ) : (
-            <Button
-              type="primary"
-              size="small"
-              icon={<PlayCircleOutlined />}
-              loading={starting}
-              onClick={onStart}
-            >
-              启动调度
-            </Button>
-          )}
+        <div className="scheduler-metrics">
+          <div>
+            <CalendarOutlined />
+            <span>全部任务</span>
+            <strong>{jobCount}</strong>
+          </div>
+          <div>
+            <CheckCircleOutlined />
+            <span>已启用</span>
+            <strong>{enabledCount}</strong>
+          </div>
+          <div>
+            <ClockCircleOutlined />
+            <span>已停用</span>
+            <strong>{jobCount - enabledCount}</strong>
+          </div>
         </div>
       </div>
-    </div>
+    </Panel>
   );
 };
 

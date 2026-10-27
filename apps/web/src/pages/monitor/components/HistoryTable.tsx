@@ -1,12 +1,6 @@
 import { ReloadOutlined } from '@ant-design/icons';
 import { useQuery } from '@tanstack/react-query';
-import {
-  Button,
-  DatePicker,
-  Select,
-  Table,
-  Typography,
-} from 'antd';
+import { Button, DatePicker, Select, Table, Typography } from 'antd';
 import type dayjs from 'dayjs';
 import React, { useMemo, useState } from 'react';
 import Panel from '@/components/Panel';
@@ -41,7 +35,14 @@ const HistoryTable: React.FC<HistoryTableProps> = ({ loading }) => {
 
   // 构建请求参数
   const params = useMemo(() => {
-    const p: { page?: number; page_size?: number; status?: string; sync_type?: string; from_date?: string; to_date?: string } = {
+    const p: {
+      page?: number;
+      page_size?: number;
+      status?: string;
+      sync_type?: string;
+      from_date?: string;
+      to_date?: string;
+    } = {
       page: page.current,
       page_size: page.pageSize,
     };
@@ -104,7 +105,11 @@ const HistoryTable: React.FC<HistoryTableProps> = ({ loading }) => {
           (record.success_forms / record.form_count) * 100,
         );
         const color =
-          rate === 100 ? 'var(--tk-success)' : rate >= 50 ? 'var(--tk-warning)' : 'var(--tk-error)';
+          rate === 100
+            ? 'var(--tk-success)'
+            : rate >= 50
+              ? 'var(--tk-warning)'
+              : 'var(--tk-error)';
         return (
           <Text style={{ color }}>
             {record.success_forms}/{record.form_count} ({rate}%)
@@ -148,18 +153,23 @@ const HistoryTable: React.FC<HistoryTableProps> = ({ loading }) => {
           size="small"
           onClick={() => req.refetch()}
           icon={<ReloadOutlined />}
+          loading={req.isRefetching}
+          aria-label="刷新同步历史"
         >
           刷新
         </Button>
       }
       loading={loading || req.isPending}
     >
-      {/* 筛选栏 */}
-      <div className="mb-4 flex flex-wrap items-center gap-3">
+      <fieldset
+        className="filter-toolbar monitor-filter-toolbar"
+        aria-label="同步历史筛选"
+      >
         <Select
-          placeholder="状态"
+          placeholder="全部状态"
+          aria-label="按运行状态筛选"
           allowClear
-          style={{ width: 100 }}
+          className="monitor-filter-toolbar__status"
           value={filters.status}
           onChange={(v) => {
             setFilters((f) => ({ ...f, status: v || '' }));
@@ -173,9 +183,10 @@ const HistoryTable: React.FC<HistoryTableProps> = ({ loading }) => {
           ]}
         />
         <Select
-          placeholder="类型"
+          placeholder="全部类型"
+          aria-label="按同步类型筛选"
           allowClear
-          style={{ width: 100 }}
+          className="monitor-filter-toolbar__type"
           value={filters.syncType}
           onChange={(v) => {
             setFilters((f) => ({ ...f, syncType: v || '' }));
@@ -188,6 +199,8 @@ const HistoryTable: React.FC<HistoryTableProps> = ({ loading }) => {
           ]}
         />
         <RangePicker
+          aria-label="按开始日期筛选"
+          className="monitor-filter-toolbar__date"
           value={filters.dateRange.length ? filters.dateRange : undefined}
           onChange={(vals) => {
             const range = vals as [dayjs.Dayjs | null, dayjs.Dayjs | null];
@@ -197,14 +210,14 @@ const HistoryTable: React.FC<HistoryTableProps> = ({ loading }) => {
             }));
             setPage((p) => ({ ...p, current: 1 }));
           }}
-          style={{ width: 240 }}
         />
-        <Button size="small" onClick={handleReset}>
+        <Button className="monitor-filter-toolbar__reset" onClick={handleReset}>
           重置
         </Button>
-      </div>
+      </fieldset>
 
       <Table
+        className="interactive-list monitor-table monitor-history-table"
         columns={columns}
         dataSource={data}
         rowKey="run_id"
@@ -217,10 +230,17 @@ const HistoryTable: React.FC<HistoryTableProps> = ({ loading }) => {
           onChange: (current, pageSize) => setPage({ current, pageSize }),
         }}
         scroll={{ x: 900 }}
-        size="small"
+        size="middle"
         onRow={(record) => ({
           onClick: () => setDetailRunId(record.run_id),
-          style: { cursor: 'pointer' },
+          onKeyDown: (event) => {
+            if (event.key === 'Enter' || event.key === ' ') {
+              event.preventDefault();
+              setDetailRunId(record.run_id);
+            }
+          },
+          tabIndex: 0,
+          'aria-label': `查看运行 ${record.run_id} 的详情`,
         })}
       />
       <RunDetailDrawer

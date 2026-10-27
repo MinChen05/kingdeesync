@@ -1,9 +1,9 @@
 import { SettingOutlined } from '@ant-design/icons';
+import { Button, Switch, Tooltip, Typography } from 'antd';
 import type { ColumnsType } from 'antd/es/table';
-import { Button, Switch } from 'antd';
 import dayjs from 'dayjs';
 import SyncStatusTag from '@/components/SyncStatusTag';
-import type { FormItem, FormStat } from '../../data/types';
+import type { FormItem, FormStat } from '../types';
 
 interface FormColumnsDeps {
   statsMap: Map<string, FormStat>;
@@ -12,7 +12,6 @@ interface FormColumnsDeps {
   onEdit: (form: FormItem) => void;
 }
 
-/** 表单管理表格列定义（抽离 FormsManager 的 columns 数组） */
 const useFormColumns = ({
   statsMap,
   updating,
@@ -23,41 +22,62 @@ const useFormColumns = ({
     title: '表单名称',
     dataIndex: 'form_name',
     key: 'form_name',
-    width: 200,
-    render: (v: string) => <span style={{ fontWeight: 600 }}>{v}</span>,
+    width: 240,
+    fixed: 'left',
+    render: (value: string) => (
+      <Typography.Text
+        className="data-form-name"
+        strong
+        ellipsis={{ tooltip: value }}
+      >
+        {value}
+      </Typography.Text>
+    ),
   },
   {
-    title: '启用',
+    title: '同步开关',
     dataIndex: 'enabled',
     key: 'enabled',
-    width: 80,
+    width: 96,
     render: (enabled: boolean, record: FormItem) => (
-      <Switch
-        checked={enabled}
-        size="small"
-        loading={updating}
-        onChange={(v) => onToggle(record.form_name, v)}
-      />
+      <div
+        onClick={(event) => event.stopPropagation()}
+        onKeyDown={(event) => event.stopPropagation()}
+      >
+        <Switch
+          aria-label={`${enabled ? '禁用' : '启用'} ${record.form_name}`}
+          checked={enabled}
+          size="small"
+          loading={updating}
+          onChange={(value) => onToggle(record.form_name, value)}
+        />
+      </div>
     ),
   },
   {
     title: '上次状态',
     dataIndex: 'last_status',
     key: 'last_status',
-    width: 100,
-    render: (v: string) => <SyncStatusTag status={v} />,
+    width: 112,
+    render: (value: string) => <SyncStatusTag status={value} />,
   },
   {
     title: '上次同步',
     dataIndex: 'last_sync_time',
     key: 'last_sync_time',
-    width: 160,
-    render: (v: string) => v ? dayjs(v).format('MM-DD HH:mm:ss') : '-',
+    width: 168,
+    render: (value: string) => (
+      <span className={value ? 'data-sync-time' : 'data-empty-value'}>
+        {value ? dayjs(value).format('YYYY-MM-DD HH:mm') : '尚未同步'}
+      </span>
+    ),
   },
   {
     title: '记录数',
     key: 'record_count',
     width: 120,
+    align: 'right',
+    className: 'data-number-cell',
     render: (_: unknown, record: FormItem) => {
       const stat = statsMap.get(record.form_name);
       return (stat?.total_records || record.record_count || 0).toLocaleString();
@@ -66,31 +86,41 @@ const useFormColumns = ({
   {
     title: '错误数',
     key: 'error_count',
-    width: 100,
+    width: 96,
+    align: 'right',
+    className: 'data-number-cell',
     render: (_: unknown, record: FormItem) => {
       const stat = statsMap.get(record.form_name);
       const count = stat?.failed_records || record.error_count || 0;
       return (
-        <span style={{ color: count > 0 ? 'var(--tk-error)' : 'var(--tk-muted)' }}>
+        <span className={count > 0 ? 'data-error-count' : 'data-empty-value'}>
           {count}
         </span>
       );
     },
   },
   {
-    title: '操作',
+    title: '配置',
     key: 'action',
-    width: 80,
+    width: 72,
+    fixed: 'right',
+    align: 'center',
     render: (_: unknown, record: FormItem) => (
-      <Button
-        type="text"
-        size="small"
-        icon={<SettingOutlined />}
-        onClick={() => onEdit(record)}
-      />
+      <Tooltip title="编辑字段配置">
+        <Button
+          type="text"
+          size="small"
+          aria-label={`配置 ${record.form_name}`}
+          icon={<SettingOutlined />}
+          onClick={(event) => {
+            event.stopPropagation();
+            onEdit(record);
+          }}
+        />
+      </Tooltip>
     ),
   },
 ];
 
-export { useFormColumns };
 export type { FormColumnsDeps };
+export { useFormColumns };

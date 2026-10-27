@@ -1,4 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import type { V1Diagnostics } from '@/services/v1';
 import {
   archiveSystem,
   getDiagnostics,
@@ -6,7 +7,6 @@ import {
   getVersion,
   testConnections,
 } from '@/services/v1';
-import type { V1Diagnostics } from '@/services/v1';
 import type { ConfigData } from './types';
 
 /** useSystemPage 返回值类型 */
@@ -49,12 +49,17 @@ export function useSystemPage(): UseSystemPageResult {
     queryKey: ['v1', 'diagnostics'],
     queryFn: getDiagnostics,
   });
-  const diagnostics = diagReq.data ?? { kingdee_api: { status: 'unknown' }, database: { status: 'unknown' }, scheduler: { status: 'unknown' }, log_service: { status: 'unknown' } };
+  const diagnostics = diagReq.data ?? {
+    kingdee_api: { status: 'unknown' },
+    database: { status: 'unknown' },
+    scheduler: { status: 'unknown' },
+    log_service: { status: 'unknown' },
+  };
 
   // 归档日志（v1）
   const archiveReq = useMutation({
     mutationFn: (daysToKeep: number) => archiveSystem(daysToKeep),
-    onSuccess: (data) => {
+    onSuccess: () => {
       // Refresh diagnostics after archive
       queryClient?.invalidateQueries({ queryKey: ['v1', 'diagnostics'] });
     },

@@ -1,9 +1,11 @@
-import { ExclamationCircleOutlined, HistoryOutlined } from '@ant-design/icons';
-import { App, Button, InputNumber, Popconfirm, Typography } from 'antd';
+import {
+  DeleteOutlined,
+  HistoryOutlined,
+  SafetyCertificateOutlined,
+} from '@ant-design/icons';
+import { App, Button, InputNumber, Popconfirm } from 'antd';
 import React, { useState } from 'react';
 import Panel from '@/components/Panel';
-
-const { Text } = Typography;
 
 interface MaintenancePanelProps {
   onArchive: (days: number) => Promise<unknown>;
@@ -16,10 +18,6 @@ interface ArchiveResult {
   runs_deleted?: number;
 }
 
-/**
- * 维护操作面板：归档历史数据。
- * 使用 .glass-card 样式包裹操作区，归档后展示删除统计。
- */
 const MaintenancePanel: React.FC<MaintenancePanelProps> = ({
   onArchive,
   archiving,
@@ -32,38 +30,45 @@ const MaintenancePanel: React.FC<MaintenancePanelProps> = ({
     try {
       const result = await onArchive(daysToKeep);
       setLastResult((result as ArchiveResult) || { total_deleted: 0 });
-      message.success(`已清理 ${daysToKeep} 天前的同步记录和错误日志（保留最近 ${daysToKeep} 天）`);
-    } catch (err) {
-      message.error(err instanceof Error ? err.message : '归档失败');
+      message.success(
+        `已清理 ${daysToKeep} 天前的同步记录和错误日志（保留最近 ${daysToKeep} 天）`,
+      );
+    } catch (error) {
+      message.error(error instanceof Error ? error.message : '归档失败');
     }
   };
 
   return (
-    <Panel title="维护操作">
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-        {/* 归档操作 */}
-        <div className="glass-card" style={{ padding: '20px 24px' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 16 }}>
-            <span style={{ color: 'var(--tk-warning)', fontSize: 18 }}>
-              <ExclamationCircleOutlined />
+    <Panel
+      title="历史数据维护"
+      extra={<span className="system-panel-caption">操作前请确认保留周期</span>}
+    >
+      <div className="system-maintenance-grid">
+        <section className="system-archive-card">
+          <div className="system-maintenance-heading">
+            <span className="system-maintenance-icon is-warning">
+              <DeleteOutlined />
             </span>
-            <Text strong style={{ fontSize: 14, color: 'var(--tk-text)' }}>
-              归档历史数据
-            </Text>
+            <div>
+              <h3>归档历史数据</h3>
+              <p>清理过期同步记录与错误日志，释放数据库存储空间</p>
+            </div>
           </div>
-          <Text type="secondary" className="mb-4 block text-sm" style={{ paddingLeft: 26 }}>
-            删除指定天数前的同步记录和错误日志，释放存储空间。
-          </Text>
-          <div className="flex items-center gap-4">
+          <div className="system-archive-warning">
+            <SafetyCertificateOutlined />
+            <span>归档将永久删除目标数据，执行后无法恢复。</span>
+          </div>
+          <div className="system-archive-controls">
+            <label htmlFor="archive-days">保留最近</label>
             <InputNumber
+              id="archive-days"
               min={30}
               max={730}
               value={daysToKeep}
-              onChange={(v) => setDaysToKeep(v || 180)}
+              onChange={(value) => setDaysToKeep(value || 180)}
               addonAfter="天"
-              style={{ width: 160 }}
+              disabled={archiving}
             />
-            {/* 不可逆删除操作加二次确认（原因：归档直接删除历史数据，误触无法恢复） */}
             <Popconfirm
               title="确认执行归档？"
               description={`将删除 ${daysToKeep} 天前的同步记录和错误日志，删除后不可恢复。`}
@@ -76,55 +81,58 @@ const MaintenancePanel: React.FC<MaintenancePanelProps> = ({
                 type="primary"
                 danger
                 loading={archiving}
+                icon={<DeleteOutlined />}
               >
                 执行归档
               </Button>
             </Popconfirm>
           </div>
-          <Text type="secondary" className="mt-3 block text-xs">
-            最小保留 30 天，最大 730 天，默认 180 天。
-          </Text>
-        </div>
-
-        {/* 上次归档结果 */}
-        <div className="glass-card" style={{ padding: '20px 24px' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 16 }}>
-            <span style={{ color: 'var(--tk-primary)', fontSize: 18 }}>
+          <p className="system-maintenance-help">
+            可设置 30—730 天，默认保留最近 180 天。
+          </p>
+        </section>
+        <section className="system-archive-result">
+          <div className="system-maintenance-heading">
+            <span className="system-maintenance-icon is-primary">
               <HistoryOutlined />
             </span>
-            <Text strong style={{ fontSize: 14, color: 'var(--tk-text)' }}>
-              上次归档结果
-            </Text>
+            <div>
+              <h3>上次归档结果</h3>
+              <p>本次会话最近一次操作的清理统计</p>
+            </div>
           </div>
           {lastResult ? (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-              <div className="list-row" style={{ display: 'flex', justifyContent: 'space-between', padding: '6px 12px' }}>
-                <span style={{ fontSize: 12, color: 'var(--tk-dim)' }}>错误日志</span>
-                <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--tk-text)' }}>
-                  {lastResult.errors_deleted ?? 0} 条
-                </span>
+            <>
+              <div className="system-archive-total">
+                <span>清理记录合计</span>
+                <strong>
+                  {(lastResult.total_deleted ?? 0).toLocaleString()}
+                </strong>
+                <span>条</span>
               </div>
-              <div className="list-row" style={{ display: 'flex', justifyContent: 'space-between', padding: '6px 12px' }}>
-                <span style={{ fontSize: 12, color: 'var(--tk-dim)' }}>同步记录</span>
-                <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--tk-text)' }}>
-                  {lastResult.runs_deleted ?? 0} 条
-                </span>
+              <div className="system-archive-breakdown">
+                <div>
+                  <span>错误日志</span>
+                  <strong>
+                    {(lastResult.errors_deleted ?? 0).toLocaleString()} 条
+                  </strong>
+                </div>
+                <div>
+                  <span>同步记录</span>
+                  <strong>
+                    {(lastResult.runs_deleted ?? 0).toLocaleString()} 条
+                  </strong>
+                </div>
               </div>
-              <div className="list-row" style={{ display: 'flex', justifyContent: 'space-between', padding: '6px 12px', borderTop: '1px solid rgba(148,163,184,0.12)' }}>
-                <span style={{ fontSize: 12, color: 'var(--tk-dim)' }}>合计</span>
-                <span style={{ fontSize: 14, fontWeight: 700, color: 'var(--tk-primary)' }}>
-                  {lastResult.total_deleted ?? 0} 条
-                </span>
-              </div>
-            </div>
+            </>
           ) : (
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: 80 }}>
-              <Text type="secondary" style={{ fontSize: 13 }}>
-                尚未执行归档操作
-              </Text>
+            <div className="system-archive-empty">
+              <HistoryOutlined />
+              <span>尚未执行归档操作</span>
+              <p>完成归档后，这里会显示清理数量</p>
             </div>
           )}
-        </div>
+        </section>
       </div>
     </Panel>
   );

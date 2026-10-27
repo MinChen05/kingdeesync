@@ -6,15 +6,8 @@ import JobTable from './components/JobTable';
 import SchedulerControl from './components/SchedulerControl';
 import { useSchedule } from './hooks';
 import type { ScheduleJobSubmit } from './types';
+import './schedule.less';
 
-/**
- * 任务调度页。
- *
- * 信息架构：
- * - 顶部：调度器状态卡片 + 任务统计卡片
- * - 主体：任务列表（搜索、编辑、删除）
- * - 右侧抽屉：任务创建/编辑
- */
 const SchedulePage: React.FC = () => {
   const { message } = App.useApp();
   const {
@@ -35,7 +28,7 @@ const SchedulePage: React.FC = () => {
     batchActioning,
   } = useSchedule();
 
-  const enabledCount = jobs.filter((j) => j.enabled).length;
+  const enabledCount = jobs.filter((job) => job.enabled).length;
 
   const handleStart = async () => {
     try {
@@ -55,8 +48,6 @@ const SchedulePage: React.FC = () => {
     }
   };
 
-  // 以下 handler 失败时必须 rethrow：
-  // （原因：调用方组件 await 后无条件弹"成功"，吞掉异常会让失败也报成功）
   const handleCreateJob = async (data: ScheduleJobSubmit) => {
     try {
       await createJob(data);
@@ -94,10 +85,11 @@ const SchedulePage: React.FC = () => {
   };
 
   return (
-    <div className="space-y-6">
-      <PageHeader title="任务调度" />
-
-      {/* 顶部：调度器状态 + 统计卡片 */}
+    <div className="page-stack schedule-page">
+      <PageHeader
+        title="任务调度"
+        description="管理自动同步计划，掌握启停状态与下一次执行时间"
+      />
       <SchedulerControl
         enabled={status.enabled}
         jobCount={jobs.length}
@@ -107,8 +99,6 @@ const SchedulePage: React.FC = () => {
         starting={starting}
         stopping={stopping}
       />
-
-      {/* 任务列表 */}
       <JobTable
         jobs={jobs}
         loading={loading}

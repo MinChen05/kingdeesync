@@ -1,41 +1,65 @@
 import {
+  CheckOutlined,
+  DatabaseOutlined,
   PlayCircleOutlined,
+  RestOutlined,
   StopOutlined,
+  ThunderboltOutlined,
 } from '@ant-design/icons';
-import { App, Button, Checkbox, Radio, Tag, Typography } from 'antd';
 import { useSearchParams } from '@umijs/max';
+import { Button, Checkbox, Radio, Tag } from 'antd';
 import React, { useEffect, useMemo, useState } from 'react';
 import Panel from '@/components/Panel';
 import { FORM_CATEGORIES } from '@/constants/formCategories';
 import type { V1Form } from '@/services/v1';
 import type { SyncMode } from '../types';
 
-const { Text } = Typography;
 const { Group: CheckboxGroup } = Checkbox;
 
 const STORAGE_KEY = 'kingdee-sync-last-config';
 
-const MODE_DESC: Record<SyncMode, string> = {
-  incremental: '仅同步自上次以来的变更数据',
-  full: '全量拉取并合并数据',
-  reset: '清空后全量拉取',
-};
+const MODE_OPTIONS: {
+  value: SyncMode;
+  label: string;
+  description: string;
+  icon: React.ReactNode;
+}[] = [
+  {
+    value: 'incremental',
+    label: '增量同步',
+    description: '仅拉取上次同步后的变更',
+    icon: <ThunderboltOutlined />,
+  },
+  {
+    value: 'full',
+    label: '全量同步',
+    description: '完整拉取并合并现有数据',
+    icon: <DatabaseOutlined />,
+  },
+  {
+    value: 'reset',
+    label: '重置同步',
+    description: '清空现有数据后重新拉取',
+    icon: <RestOutlined />,
+  },
+];
 
 interface SyncConfigPanelProps {
   forms: V1Form[];
   formsLoading: boolean;
   status: string;
+  starting: boolean;
+  stopping: boolean;
   onStart: (mode: SyncMode, selectedForms: string[]) => void;
   onStop: () => void;
 }
 
-/**
- * 同步配置面板：模式 + 表单选择 + 操作按钮。
- */
 const SyncConfigPanel: React.FC<SyncConfigPanelProps> = ({
   forms,
   formsLoading,
   status,
+  starting,
+  stopping,
   onStart,
   onStop,
 }) => {
@@ -44,27 +68,29 @@ const SyncConfigPanel: React.FC<SyncConfigPanelProps> = ({
   const [selectedForms, setSelectedForms] = useState<string[]>([]);
 
   const isRunning = status === 'running' || status === 'stopping';
+  const controlsLocked = isRunning || starting;
 
-  // 按业务分类组织表单
   const categorizedForms = useMemo(() => {
-    const result: { label: string; items: { name: string; enabled: boolean }[] }[] = [];
+    const result: {
+      label: string;
+      items: { name: string; enabled: boolean }[];
+    }[] = [];
     const allKnownForms = new Set<string>();
 
     for (const cat of Object.values(FORM_CATEGORIES)) {
-      const items = cat.forms
-        .map(name => {
-          const f = forms.find(f => f.form_name === name);
-          if (f) allKnownForms.add(name);
-          return { name, enabled: f?.enabled ?? true };
-        });
+      const items = cat.forms.map((name) => {
+        const form = forms.find((item) => item.form_name === name);
+        if (form) allKnownForms.add(name);
+        return { name, enabled: form?.enabled ?? true };
+      });
       if (items.length > 0) {
         result.push({ label: cat.label, items });
       }
     }
 
     const others = forms
-      .filter(f => !allKnownForms.has(f.form_name))
-      .map(f => ({ name: f.form_name, enabled: f.enabled }));
+      .filter((form) => !allKnownForms.has(form.form_name))
+      .map((form) => ({ name: form.form_name, enabled: form.enabled }));
     if (others.length > 0) {
       result.push({ label: '其他', items: others });
     }
@@ -72,13 +98,22 @@ const SyncConfigPanel: React.FC<SyncConfigPanelProps> = ({
     return result;
   }, [forms]);
 
-  const allFormNames = useMemo(() => forms.map(f => f.form_name), [forms]);
+  const allFormNames = useMemo(
+    () => forms.map((form) => form.form_name),
+    [forms],
+  );
+  const allSelected =
+    allFormNames.length > 0 &&
+    allFormNames.every((name) => selectedForms.includes(name));
+  const partiallySelected = selectedForms.length > 0 && !allSelected;
 
-  // 加载配置
   useEffect(() => {
     const urlForms = searchParams.get('forms');
     if (urlForms) {
-      const list = urlForms.split(',').map(s => s.trim()).filter(Boolean);
+      const list = urlForms
+        .split(',')
+        .map((item) => item.trim())
+        .filter(Boolean);
       if (list.length > 0) {
         setSelectedForms(list);
         return;
@@ -87,17 +122,20 @@ const SyncConfigPanel: React.FC<SyncConfigPanelProps> = ({
     try {
       const last = localStorage.getItem(STORAGE_KEY);
       if (last) {
-        const cfg = JSON.parse(last);
-        if (cfg.mode) setMode(cfg.mode);
-        if (Array.isArray(cfg.forms)) setSelectedForms(cfg.forms);
+        const config = JSON.parse(last);
+        if (config.mode) setMode(config.mode);
+        if (Array.isArray(config.forms)) setSelectedForms(config.forms);
       }
-    } catch { /* ignore */ }
+    } catch {}
   }, [searchParams]);
 
   const saveLastConfig = () => {
     try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify({ mode, forms: selectedForms }));
-    } catch { /* ignore */ }
+      localStorage.setItem(
+        STORAGE_KEY,
+        JSON.stringify({ mode, forms: selectedForms }),
+      );
+    } catch {}
   };
 
   const handleStart = () => {
@@ -106,98 +144,177 @@ const SyncConfigPanel: React.FC<SyncConfigPanelProps> = ({
   };
 
   return (
-    <Panel title="同步配置" loading={formsLoading}>
-      <div className="space-y-5">
-        {/* 同步模式 */}
-        <div>
-          <Text strong className="mb-2 block">同步模式</Text>
+    <Panel
+      title="同步配置"
+      loading={formsLoading}
+      extra={
+        <span
+          className={`sync-config-state${isRunning ? ' is-active' : ''}`}
+          aria-live="polite"
+        >
+          <span className="sync-config-state-dot" />
+          {isRunning ? '配置已锁定' : '等待配置'}
+        </span>
+      }
+    >
+      <div className="sync-config-content">
+        <section
+          className="sync-config-section"
+          aria-labelledby="sync-mode-title"
+        >
+          <div className="sync-section-heading">
+            <div>
+              <span className="sync-section-eyebrow">01</span>
+              <span id="sync-mode-title">同步模式</span>
+            </div>
+            <span>选择本次执行方式</span>
+          </div>
           <Radio.Group
             value={mode}
-            onChange={(e) => setMode(e.target.value)}
-            buttonStyle="solid"
-            disabled={isRunning}
-            className="w-full"
+            onChange={(event) => setMode(event.target.value)}
+            disabled={controlsLocked}
+            className="sync-mode-selector"
           >
-            <Radio.Button value="incremental">增量</Radio.Button>
-            <Radio.Button value="full">全量</Radio.Button>
-            <Radio.Button value="reset">重置</Radio.Button>
+            {MODE_OPTIONS.map((option) => (
+              <Radio
+                key={option.value}
+                value={option.value}
+                className={`sync-mode-option${mode === option.value ? ' is-selected' : ''}${option.value === 'reset' ? ' is-reset' : ''}`}
+              >
+                <span className="sync-mode-option-icon">{option.icon}</span>
+                <span className="sync-mode-option-copy">
+                  <strong>{option.label}</strong>
+                  <small>{option.description}</small>
+                </span>
+                <span className="sync-mode-option-check">
+                  <CheckOutlined />
+                </span>
+              </Radio>
+            ))}
           </Radio.Group>
-          <Text type="secondary" className="mt-1 block text-xs">
-            {MODE_DESC[mode]}
-          </Text>
-        </div>
+          {mode === 'reset' && (
+            <div className="sync-reset-notice" role="alert">
+              重置模式会清空所选范围的现有数据，请确认后再启动。
+            </div>
+          )}
+        </section>
 
-        {/* 表单选择 */}
-        <div>
-          <div className="mb-2 flex items-center justify-between">
-            <Text strong>选择表单</Text>
+        <section
+          className="sync-config-section"
+          aria-labelledby="sync-forms-title"
+        >
+          <div className="sync-section-heading">
+            <div>
+              <span className="sync-section-eyebrow">02</span>
+              <span id="sync-forms-title">同步范围</span>
+            </div>
             <Checkbox
-              checked={selectedForms.length === allFormNames.length && allFormNames.length > 0}
-              onChange={(e) => setSelectedForms(e.target.checked ? allFormNames : [])}
-              disabled={isRunning}
+              checked={allSelected}
+              indeterminate={partiallySelected}
+              onChange={(event) =>
+                setSelectedForms(event.target.checked ? allFormNames : [])
+              }
+              disabled={controlsLocked}
             >
-              全选 ({allFormNames.length})
+              全选
             </Checkbox>
           </div>
 
-          <div className="grid grid-cols-2 gap-3">
-            {categorizedForms.map((cat) => (
-              <div key={cat.label} className="glass-card" style={{ padding: '10px 12px' }}>
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
-                  <Text strong style={{ fontSize: 12 }}>{cat.label}</Text>
-                  <Tag style={{ fontSize: 10, padding: '0 6px' }}>
-                    {cat.items.filter(i => selectedForms.includes(i.name)).length}/{cat.items.length}
-                  </Tag>
-                </div>
-                <CheckboxGroup
-                  value={selectedForms.filter(n => cat.items.some(i => i.name === n))}
-                  onChange={(vals) => {
-                    const catNames = cat.items.map(i => i.name);
-                    const kept = selectedForms.filter(n => !catNames.includes(n));
-                    setSelectedForms([...kept, ...(vals as string[])]);
-                  }}
-                  disabled={isRunning}
-                  className="flex flex-col gap-0.5"
-                >
-                  {cat.items.map((item) => (
+          <div className="sync-form-categories">
+            {categorizedForms.map((category) => {
+              const categoryNames = category.items.map((item) => item.name);
+              const enabledNames = category.items
+                .filter((item) => item.enabled)
+                .map((item) => item.name);
+              const selectedCount = categoryNames.filter((name) =>
+                selectedForms.includes(name),
+              ).length;
+              const categorySelected =
+                enabledNames.length > 0 &&
+                enabledNames.every((name) => selectedForms.includes(name));
+              return (
+                <div key={category.label} className="sync-form-category">
+                  <div className="sync-form-category-header">
                     <Checkbox
-                      key={item.name}
-                      value={item.name}
-                      disabled={!item.enabled || isRunning}
-                      style={{ fontSize: 12, padding: '1px 0' }}
+                      checked={categorySelected}
+                      indeterminate={selectedCount > 0 && !categorySelected}
+                      disabled={controlsLocked || enabledNames.length === 0}
+                      onChange={(event) => {
+                        const kept = selectedForms.filter(
+                          (name) => !categoryNames.includes(name),
+                        );
+                        setSelectedForms(
+                          event.target.checked
+                            ? [...kept, ...enabledNames]
+                            : kept,
+                        );
+                      }}
                     >
-                      {item.name}
+                      {category.label}
                     </Checkbox>
-                  ))}
-                </CheckboxGroup>
-              </div>
-            ))}
+                    <Tag bordered={false}>
+                      {selectedCount}/{category.items.length}
+                    </Tag>
+                  </div>
+                  <CheckboxGroup
+                    value={selectedForms.filter((name) =>
+                      categoryNames.includes(name),
+                    )}
+                    onChange={(values) => {
+                      const kept = selectedForms.filter(
+                        (name) => !categoryNames.includes(name),
+                      );
+                      setSelectedForms([...kept, ...(values as string[])]);
+                    }}
+                    disabled={controlsLocked}
+                    className="sync-form-options"
+                  >
+                    {category.items.map((item) => (
+                      <Checkbox
+                        key={item.name}
+                        value={item.name}
+                        disabled={!item.enabled || controlsLocked}
+                      >
+                        <span>{item.name}</span>
+                        {!item.enabled && <small>已停用</small>}
+                      </Checkbox>
+                    ))}
+                  </CheckboxGroup>
+                </div>
+              );
+            })}
           </div>
+          <div className="sync-selection-summary" aria-live="polite">
+            <span>
+              {selectedForms.length > 0
+                ? `已选择 ${selectedForms.length} 个表单`
+                : '未指定表单'}
+            </span>
+            <span>
+              {selectedForms.length > 0
+                ? `共 ${allFormNames.length} 个可选`
+                : '将同步全部已启用表单'}
+            </span>
+          </div>
+        </section>
 
-          {selectedForms.length === 0 && (
-            <Text type="secondary" className="mt-2 block text-xs">
-              未选择表单时将同步所有已启用的表单
-            </Text>
-          )}
-        </div>
-
-        {/* 操作按钮 */}
-        <div className="flex gap-3">
+        <div className="sync-actions">
           <Button
             type="primary"
             icon={<PlayCircleOutlined />}
             size="large"
-            disabled={isRunning}
+            disabled={controlsLocked}
+            loading={starting}
             onClick={handleStart}
-            className="flex-1"
           >
-            {isRunning ? '同步中...' : '启动同步'}
+            {isRunning ? '同步执行中' : '启动同步'}
           </Button>
           <Button
             danger
             icon={<StopOutlined />}
             size="large"
-            disabled={!isRunning}
+            disabled={!isRunning || stopping}
+            loading={stopping}
             onClick={onStop}
           >
             停止

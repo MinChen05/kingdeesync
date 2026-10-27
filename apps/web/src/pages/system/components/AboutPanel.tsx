@@ -1,107 +1,85 @@
-import { GithubOutlined, RocketOutlined } from '@ant-design/icons';
-import { Tag, Typography } from 'antd';
+import {
+  CloudSyncOutlined,
+  GithubOutlined,
+  SafetyCertificateOutlined,
+} from '@ant-design/icons';
+import { Button, Tag } from 'antd';
 import React from 'react';
 import Panel from '@/components/Panel';
 
 const REPO_URL = 'https://github.com/MinChen05/kingdeesync';
 
-const { Text, Title } = Typography;
-
 interface AboutPanelProps {
   version: string;
 }
 
-/**
- * 关于面板：应用名称、版本、技术栈。
- * 居中品牌卡片设计。
- */
 const AboutPanel: React.FC<AboutPanelProps> = ({ version }) => {
   const techStack = [
-    { name: 'Go', color: '#0acf83' },
-    { name: 'Gin', color: '#38bdf8' },
-    { name: 'React', color: '#61dafb' },
-    { name: 'Ant Design Pro', color: '#1677ff' },
-    { name: 'SQL Server', color: '#f59e0b' },
-    { name: 'SQLite', color: '#003b57' },
+    'Go',
+    'Gin',
+    'React',
+    'Ant Design Pro',
+    'SQL Server',
+    'SQLite',
   ];
 
   return (
-    <Panel title="关于">
-      {/* 品牌区 */}
-      <div
-        className="glass-card"
-        style={{
-          padding: '32px',
-          textAlign: 'center',
-          marginBottom: 24,
-          background: 'linear-gradient(135deg, rgba(56,189,248,0.08), rgba(129,140,248,0.08))',
-        }}
-      >
-        <div style={{ fontSize: 36, marginBottom: 8 }}>
-          <RocketOutlined style={{ color: 'var(--tk-primary)' }} />
-        </div>
-        <Title level={3} style={{ color: 'var(--tk-text-light)', marginBottom: 4 }}>
-          金蝶数据同步工具
-        </Title>
-        <Text type="secondary" style={{ fontSize: 14 }}>
-          Kingdee Data Sync Tool
-        </Text>
-        <div style={{ marginTop: 12 }}>
-          <Tag
-            color="processing"
-            style={{
-              fontSize: 13,
-              padding: '4px 16px',
-              borderRadius: 20,
-              border: '1px solid var(--tk-primary)',
-              color: 'var(--tk-primary)',
-            }}
-          >
-            v{version || '0.1.0'}
-          </Tag>
-        </div>
-      </div>
-
-      {/* 技术栈 */}
-      <div style={{ marginBottom: 24 }}>
-        <Text strong style={{ fontSize: 13, color: 'var(--tk-text)', display: 'block', marginBottom: 12 }}>
-          技术栈
-        </Text>
-        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
-          {techStack.map((t) => (
-            <Tag
-              key={t.name}
-              style={{
-                fontSize: 12,
-                padding: '2px 12px',
-                borderRadius: 6,
-                border: `1px solid ${t.color}40`,
-                color: t.color,
-                backgroundColor: `${t.color}10`,
-              }}
-            >
-              {t.name}
-            </Tag>
-          ))}
-        </div>
-      </div>
-
-      {/* 项目信息 */}
-      <div className="glass-card" style={{ padding: '16px 20px' }}>
-        <div className="list-row" style={{ display: 'flex', justifyContent: 'space-between', padding: '8px 0' }}>
-          <span style={{ fontSize: 12, color: 'var(--tk-dim)' }}>开源协议</span>
-          <span style={{ fontSize: 12, color: 'var(--tk-text)' }}>MIT</span>
-        </div>
-        <div className="list-row" style={{ display: 'flex', justifyContent: 'space-between', padding: '8px 0' }}>
-          <span style={{ fontSize: 12, color: 'var(--tk-dim)' }}>仓库</span>
-          <a
-            href={REPO_URL}
-            target="_blank"
-            rel="noopener noreferrer"
-            style={{ fontSize: 12, color: 'var(--tk-primary)', display: 'flex', alignItems: 'center', gap: 4, textDecoration: 'none' }}
-          >
-            <GithubOutlined /> MinChen05/kingdeesync
-          </a>
+    <Panel
+      title="产品信息"
+      extra={
+        <Button
+          type="text"
+          icon={<GithubOutlined />}
+          href={REPO_URL}
+          target="_blank"
+          rel="noopener noreferrer"
+        >
+          项目仓库
+        </Button>
+      }
+    >
+      <div className="system-about-layout">
+        <section className="system-about-brand">
+          <div className="system-about-logo">
+            <CloudSyncOutlined />
+          </div>
+          <div className="system-about-name">
+            <span className="system-about-eyebrow">
+              DATA OPERATIONS WORKSPACE
+            </span>
+            <h2>金蝶数据同步工具</h2>
+            <p>稳定、清晰地管理业务数据同步链路</p>
+          </div>
+          <Tag className="system-version-tag">v{version || '0.1.0'}</Tag>
+        </section>
+        <div className="system-about-details">
+          <section className="system-about-section">
+            <div className="system-about-section-heading">
+              <h3>技术栈</h3>
+              <span>支撑数据服务与操作界面的核心技术</span>
+            </div>
+            <div className="system-tech-list">
+              {techStack.map((tech) => (
+                <Tag key={tech}>{tech}</Tag>
+              ))}
+            </div>
+          </section>
+          <section className="system-about-section system-project-info">
+            <div className="system-project-row">
+              <span className="system-project-label">
+                <SafetyCertificateOutlined /> 开源协议
+              </span>
+              <strong>MIT License</strong>
+            </div>
+            <div className="system-project-row">
+              <span className="system-project-label">
+                <GithubOutlined /> 源代码
+              </span>
+              <a href={REPO_URL} target="_blank" rel="noopener noreferrer">
+                MinChen05/kingdeesync
+              </a>
+            </div>
+          </section>
         </div>
       </div>
     </Panel>

@@ -1,7 +1,9 @@
 import { Skeleton } from 'antd';
 
 const Loading: React.FC = () => (
-  <Skeleton style={{ padding: '24px 40px', height: '60vh' }} active />
+  <div className="route-loading" role="status" aria-label="页面加载中">
+    <Skeleton active paragraph={{ rows: 8 }} />
+  </div>
 );
 
 export default Loading;

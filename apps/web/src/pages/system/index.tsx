@@ -1,5 +1,5 @@
 import {
-  CheckCircleOutlined,
+  InfoCircleOutlined,
   SettingOutlined,
   ToolOutlined,
 } from '@ant-design/icons';
@@ -10,13 +10,8 @@ import AboutPanel from './components/AboutPanel';
 import ConfigPanel from './components/ConfigPanel';
 import MaintenancePanel from './components/MaintenancePanel';
 import { useSystemPage } from './hooks';
+import './index.less';
 
-/**
- * 系统管理页：配置 + 维护 + 关于。
- *
- * 本文件只做布局组装，不含展示细节；与其他页面架构一致
- * （index 组装 + components/ 面板 + hooks 数据 + types 类型）。（原因：全站页面结构统一）
- */
 const SystemPage: React.FC = () => {
   const [activeTab, setActiveTab] = useState('config');
   const {
@@ -34,21 +29,23 @@ const SystemPage: React.FC = () => {
   const items = [
     { key: 'config', label: '系统配置', icon: <SettingOutlined /> },
     { key: 'maintenance', label: '维护操作', icon: <ToolOutlined /> },
-    { key: 'about', label: '关于', icon: <CheckCircleOutlined /> },
+    { key: 'about', label: '关于系统', icon: <InfoCircleOutlined /> },
   ];
 
   return (
-    <div className="space-y-6">
-      <PageHeader title="系统管理" description="系统配置、维护操作与版本信息" />
-
+    <div className="page-stack system-page">
+      <PageHeader
+        title="系统管理"
+        description="查看运行参数与服务状态，执行数据维护和版本检查"
+      />
       <Tabs
+        className="system-tabs"
         activeKey={activeTab}
         onChange={setActiveTab}
         items={items}
         size="large"
       />
-
-      <div>
+      <div className="system-tab-content" key={activeTab}>
         {activeTab === 'config' && (
           <ConfigPanel
             config={config}

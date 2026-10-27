@@ -7,6 +7,7 @@ import HistoryTable from './components/HistoryTable';
 import RecentErrors from './components/RecentErrors';
 import SystemDiagnostics from './components/SystemDiagnostics';
 import { useMonitorPage } from './hooks';
+import './index.less';
 
 /**
  * 监控分析聚合页（排障决策中心）。
@@ -32,18 +33,20 @@ const MonitorPage: React.FC = () => {
   } = useMonitorPage();
 
   return (
-    <div className="space-y-6">
+    <div className="page-stack monitor-page">
       <PageHeader
         title="监控分析"
-        description="同步历史、统计摘要、异常追踪与系统诊断"
+        description="从运行趋势到异常明细，快速定位并处理同步问题"
       />
 
       <CoreMetrics stats={stats} loading={statsLoading} />
       <HistoryTable />
-      <RecentErrors runs={recentErrors} loading={recentErrorsLoading} />
-      <ErrorLogPanel />
+      <div className="monitor-analysis-grid">
+        <RecentErrors runs={recentErrors} loading={recentErrorsLoading} />
+        <ErrorLogPanel />
+      </div>
 
-      <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+      <div className="monitor-secondary-grid">
         <ErrorForms forms={topErrors} loading={topErrorsLoading} />
         <SystemDiagnostics
           info={diagInfo}

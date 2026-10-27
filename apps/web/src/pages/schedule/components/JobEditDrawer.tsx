@@ -1,12 +1,21 @@
+import {
+  CalendarOutlined,
+  CheckOutlined,
+  ClockCircleOutlined,
+  DatabaseOutlined,
+  InfoCircleOutlined,
+  ThunderboltOutlined,
+} from '@ant-design/icons';
 import { useQuery } from '@tanstack/react-query';
 import {
+  App,
   Button,
   Checkbox,
   Drawer,
   Form,
   Input,
-  message,
   Radio,
+  Spin,
   Switch,
 } from 'antd';
 import React, { useEffect, useMemo, useState } from 'react';
@@ -20,16 +29,13 @@ interface JobEditDrawerProps {
   visible: boolean;
   job: ScheduleJob | null;
   allJobs: ScheduleJob[];
-  onSubmit: (data: ScheduleJobSubmit) => void;
+  onSubmit: (data: ScheduleJobSubmit) => void | Promise<void>;
   onCancel: () => void;
   submitting: boolean;
 }
 
 const { Group: CheckboxGroup } = Checkbox;
 
-/**
- * 任务编辑抽屉：创建/编辑定时任务
- */
 const JobEditDrawer: React.FC<JobEditDrawerProps> = ({
   visible,
   job,
@@ -38,9 +44,11 @@ const JobEditDrawer: React.FC<JobEditDrawerProps> = ({
   onCancel,
   submitting,
 }) => {
+  const { message } = App.useApp();
   const [form] = Form.useForm();
   const [cronText, setCronText] = useState('');
   const [selectedForms, setSelectedForms] = useState<string[]>([]);
+  const syncType = Form.useWatch('sync_type', form);
 
   const formsReq = useQuery({
     queryKey: ['v1', 'forms'],
@@ -48,7 +56,6 @@ const JobEditDrawer: React.FC<JobEditDrawerProps> = ({
     enabled: visible,
   });
 
-  // 按业务分类组织表单
   const categorizedForms = useMemo(() => {
     const allForms = formsReq.data ?? [];
     const result: {
@@ -57,20 +64,23 @@ const JobEditDrawer: React.FC<JobEditDrawerProps> = ({
     }[] = [];
     const allKnown = new Set<string>();
 
-    for (const cat of Object.values(FORM_CATEGORIES)) {
-      const items = cat.forms.map((name) => {
-        const f = allForms.find((ff) => ff.form_name === name);
-        if (f) allKnown.add(name);
-        return { name, enabled: f?.enabled ?? true };
+    for (const category of Object.values(FORM_CATEGORIES)) {
+      const items = category.forms.map((name) => {
+        const formItem = allForms.find((item) => item.form_name === name);
+        if (formItem) allKnown.add(name);
+        return { name, enabled: formItem?.enabled ?? true };
       });
       if (items.length > 0) {
-        result.push({ label: cat.label, items });
+        result.push({ label: category.label, items });
       }
     }
 
     const others = allForms
-      .filter((f) => !allKnown.has(f.form_name))
-      .map((f) => ({ name: f.form_name, enabled: f.enabled }));
+      .filter((formItem) => !allKnown.has(formItem.form_name))
+      .map((formItem) => ({
+        name: formItem.form_name,
+        enabled: formItem.enabled,
+      }));
     if (others.length > 0) {
       result.push({ label: '其他', items: others });
     }
@@ -78,13 +88,17 @@ const JobEditDrawer: React.FC<JobEditDrawerProps> = ({
     return result;
   }, [formsReq.data]);
 
-  const allFormNames = useMemo(() => {
-    return (formsReq.data ?? [])
-      .map((f) => f.form_name)
-      .sort((a, b) => a.localeCompare(b, 'zh-Hans'));
-  }, [formsReq.data]);
+  const allFormNames = useMemo(
+    () =>
+      (formsReq.data ?? [])
+        .map((formItem) => formItem.form_name)
+        .sort((a, b) => a.localeCompare(b, 'zh-Hans')),
+    [formsReq.data],
+  );
+  const allSelected =
+    allFormNames.length > 0 &&
+    allFormNames.every((name) => selectedForms.includes(name));
 
-  // 填充表单
   useEffect(() => {
     if (visible) {
       if (job) {
@@ -111,226 +125,300 @@ const JobEditDrawer: React.FC<JobEditDrawerProps> = ({
     }
   }, [visible, job, form]);
 
-  // 分类卡片内 checkbox 变更时同步到 form
   const handleCategoryChange = (
-    catNames: string[],
-    vals: React.ReactNode[],
+    categoryNames: string[],
+    values: React.ReactNode[],
   ) => {
-    const kept = selectedForms.filter((n) => !catNames.includes(n));
-    const newSelected = [...kept, ...(vals as string[])];
-    setSelectedForms(newSelected);
-    form.setFieldsValue({ forms: newSelected });
+    const kept = selectedForms.filter((name) => !categoryNames.includes(name));
+    const nextSelected = [...kept, ...(values as string[])];
+    setSelectedForms(nextSelected);
+    form.setFieldsValue({ forms: nextSelected });
   };
 
-  // 全选
   const handleSelectAll = (checked: boolean) => {
-    const newSelected = checked ? allFormNames : [];
-    setSelectedForms(newSelected);
-    form.setFieldsValue({ forms: newSelected });
+    const nextSelected = checked ? allFormNames : [];
+    setSelectedForms(nextSelected);
+    form.setFieldsValue({ forms: nextSelected });
   };
 
-  // 提交
   const handleSubmit = async () => {
     try {
       const values = await form.validateFields();
       const cronExpr = chineseToCron(values.cron_text || cronText);
       if (!cronExpr) {
-        message.warning('请输入有效的执行频率，如"每 5 分钟"或"每天 08:00"');
+        message.warning('请输入有效的执行频率，如“每 5 分钟”或“每天 08:00”');
         return;
       }
 
       const currentName = job?.name;
       const duplicate = allJobs.find(
-        (j) => j.name === values.name && j.name !== currentName,
+        (item) => item.name === values.name && item.name !== currentName,
       );
       if (duplicate) {
         message.error('任务名称已存在');
         return;
       }
 
-      onSubmit({
+      await onSubmit({
         name: values.name,
         cron_expr: cronExpr,
         sync_type: values.sync_type as 'incremental' | 'full',
         forms: values.forms || [],
         enabled: values.enabled,
       });
-    } catch (_err) {
-      // form validation failed
-    }
+    } catch {}
   };
 
   return (
     <Drawer
-      title={job ? '编辑任务' : '新建任务'}
-      width={520}
+      title={
+        <div className="schedule-drawer-title">
+          <strong>{job ? '编辑定时任务' : '新建定时任务'}</strong>
+          <span>
+            {job
+              ? '调整执行计划与同步范围'
+              : '配置一个可重复执行的自动同步计划'}
+          </span>
+        </div>
+      }
+      width={640}
+      rootClassName="schedule-drawer-root"
+      className="schedule-drawer"
       open={visible}
       onClose={onCancel}
-      extra={
-        <>
-          <Button onClick={onCancel}>取消</Button>
-          <Button type="primary" loading={submitting} onClick={handleSubmit}>
-            {job ? '保存' : '创建'}
-          </Button>
-        </>
+      maskClosable={!submitting}
+      closable={!submitting}
+      styles={{ body: { padding: 0 } }}
+      footer={
+        <div className="schedule-drawer-footer">
+          <span>
+            {selectedForms.length > 0
+              ? `已选择 ${selectedForms.length} 个表单`
+              : '将同步全部已启用表单'}
+          </span>
+          <div>
+            <Button onClick={onCancel} disabled={submitting}>
+              取消
+            </Button>
+            <Button type="primary" loading={submitting} onClick={handleSubmit}>
+              {job ? '保存修改' : '创建任务'}
+            </Button>
+          </div>
+        </div>
       }
     >
       <Form
         form={form}
         layout="vertical"
         autoComplete="off"
-        style={{ gap: 24 }}
+        className="schedule-job-form"
       >
-        {/* 任务名称 */}
-        <Form.Item
-          name="name"
-          label="任务名称"
-          rules={[{ required: true, message: '请输入任务名称' }]}
-        >
-          <Input placeholder="例如：每日全量同步" />
-        </Form.Item>
-
-        {/* 同步类型 */}
-        <Form.Item
-          label="同步类型"
-          name="sync_type"
-          rules={[{ required: true, message: '请选择同步类型' }]}
-        >
-          <Radio.Group>
-            <Radio.Button value="incremental">增量同步</Radio.Button>
-            <Radio.Button value="full">全量同步</Radio.Button>
-          </Radio.Group>
-        </Form.Item>
-
-        {/* 执行频率 */}
-        <Form.Item label="执行频率">
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-            {/* 预设频率卡片 */}
-            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
-              {cronPresets.map((p) => (
-                <button
-                  key={p.cron}
-                  type="button"
-                  onClick={() => {
-                    setCronText(p.text);
-                    form.setFieldsValue({ cron_text: p.text });
-                  }}
-                  style={{
-                    padding: '4px 10px',
-                    borderRadius: 6,
-                    border:
-                      cronText === p.text
-                        ? '1px solid #38bdf8'
-                        : '1px solid rgba(148,163,184,0.15)',
-                    backgroundColor:
-                      cronText === p.text
-                        ? 'rgba(56,189,248,0.12)'
-                        : 'rgba(148,163,184,0.06)',
-                    color: cronText === p.text ? '#38bdf8' : '#94a3b8',
-                    fontSize: 12,
-                    cursor: 'pointer',
-                    transition: 'all 0.15s ease',
-                  }}
-                >
-                  {p.text}
-                </button>
-              ))}
+        <section className="schedule-form-section">
+          <div className="schedule-form-section-heading">
+            <span>01</span>
+            <div>
+              <strong>基本信息</strong>
+              <small>为任务设置易识别的名称与同步方式</small>
             </div>
-            <Form.Item
-              name="cron_text"
-              noStyle
-              rules={[{ required: true, message: '请输入执行频率' }]}
-            >
-              <Input
-                placeholder={'或输入中文频率，如"每 30 分钟"'}
-                onChange={(e) => setCronText(e.target.value)}
-              />
-            </Form.Item>
           </div>
-        </Form.Item>
-
-        {/* 关联表单 */}
-        <Form.Item label="关联表单" name="forms">
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-            {/* 全选 */}
-            <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
-              <Checkbox
-                checked={
-                  selectedForms.length === allFormNames.length &&
-                  allFormNames.length > 0
-                }
-                onChange={(e) => handleSelectAll(e.target.checked)}
-                style={{ fontSize: 12, color: 'var(--tk-dim)' }}
+          <Form.Item
+            name="name"
+            label="任务名称"
+            rules={[{ required: true, message: '请输入任务名称' }]}
+          >
+            <Input placeholder="例如：每日业务数据全量同步" size="large" />
+          </Form.Item>
+          <Form.Item
+            label="同步类型"
+            name="sync_type"
+            rules={[{ required: true, message: '请选择同步类型' }]}
+            className="schedule-sync-type-field"
+          >
+            <Radio.Group className="schedule-sync-type-selector">
+              <Radio
+                value="incremental"
+                className={syncType === 'incremental' ? 'is-selected' : ''}
               >
-                全选 ({allFormNames.length})
-              </Checkbox>
-            </div>
-            {/* 分类表单卡片 */}
-            <div className="grid grid-cols-2 gap-2">
-              {categorizedForms.map((cat) => {
-                const catNames = cat.items.map((i) => i.name);
-                return (
-                  <div
-                    key={cat.label}
-                    className="glass-card"
-                    style={{ padding: '8px 10px' }}
-                  >
-                    <div
-                      style={{
-                        display: 'flex',
-                        justifyContent: 'space-between',
-                        marginBottom: 4,
-                      }}
-                    >
-                      <span
-                        style={{
-                          fontSize: 12,
-                          fontWeight: 600,
-                          color: '#cbd5e1',
-                        }}
-                      >
-                        {cat.label}
-                      </span>
-                      <span style={{ fontSize: 11, color: 'var(--tk-dim)' }}>
-                        {
-                          catNames.filter((n) => selectedForms.includes(n))
-                            .length
-                        }
-                        /{catNames.length}
-                      </span>
-                    </div>
-                    <CheckboxGroup
-                      value={selectedForms.filter((n) => catNames.includes(n))}
-                      onChange={(vals) => handleCategoryChange(catNames, vals)}
-                      className="flex flex-col gap-0.5"
-                    >
-                      {cat.items.map((item) => (
-                        <Checkbox
-                          key={item.name}
-                          value={item.name}
-                          disabled={!item.enabled}
-                          style={{ fontSize: 12, padding: '0 0' }}
-                        >
-                          {item.name}
-                        </Checkbox>
-                      ))}
-                    </CheckboxGroup>
-                  </div>
-                );
-              })}
-            </div>
-            {selectedForms.length === 0 && (
-              <div style={{ fontSize: 12, color: 'var(--tk-dim)' }}>
-                未选择表单时将同步所有已启用的表单
-              </div>
-            )}
-          </div>
-        </Form.Item>
+                <ThunderboltOutlined />
+                <span>
+                  <strong>增量同步</strong>
+                  <small>仅处理上次后的数据变更</small>
+                </span>
+                <CheckOutlined className="schedule-type-check" />
+              </Radio>
+              <Radio
+                value="full"
+                className={syncType === 'full' ? 'is-selected' : ''}
+              >
+                <DatabaseOutlined />
+                <span>
+                  <strong>全量同步</strong>
+                  <small>完整拉取并合并现有数据</small>
+                </span>
+                <CheckOutlined className="schedule-type-check" />
+              </Radio>
+            </Radio.Group>
+          </Form.Item>
+        </section>
 
-        {/* 启用状态 */}
-        <Form.Item name="enabled" label="启用状态" valuePropName="checked">
-          <Switch checkedChildren="启用" unCheckedChildren="禁用" />
-        </Form.Item>
+        <section className="schedule-form-section">
+          <div className="schedule-form-section-heading">
+            <span>02</span>
+            <div>
+              <strong>执行频率</strong>
+              <small>选择常用计划，或输入可识别的中文频率</small>
+            </div>
+          </div>
+          <div className="schedule-cron-presets">
+            {cronPresets.map((preset) => (
+              <button
+                key={preset.cron}
+                type="button"
+                className={cronText === preset.text ? 'is-selected' : ''}
+                aria-pressed={cronText === preset.text}
+                onClick={() => {
+                  setCronText(preset.text);
+                  form.setFieldsValue({ cron_text: preset.text });
+                }}
+              >
+                <ClockCircleOutlined />
+                {preset.text}
+              </button>
+            ))}
+          </div>
+          <Form.Item
+            name="cron_text"
+            label="自定义频率"
+            rules={[{ required: true, message: '请输入执行频率' }]}
+            extra={
+              cronText ? (
+                <span className="schedule-cron-preview">
+                  <CalendarOutlined /> 当前计划：{cronText}
+                </span>
+              ) : (
+                '支持“每 N 分钟”“每天 HH:MM”“每周X HH:MM”'
+              )
+            }
+          >
+            <Input
+              placeholder="例如：每 30 分钟"
+              size="large"
+              onChange={(event) => setCronText(event.target.value)}
+            />
+          </Form.Item>
+        </section>
+
+        <section className="schedule-form-section">
+          <div className="schedule-form-section-heading">
+            <span>03</span>
+            <div>
+              <strong>同步范围</strong>
+              <small>按业务分类选择需要自动同步的表单</small>
+            </div>
+          </div>
+          <Form.Item name="forms" className="schedule-forms-field">
+            <div className="schedule-drawer-forms">
+              <div className="schedule-drawer-forms-toolbar">
+                <span>
+                  已选 <strong>{selectedForms.length}</strong> /{' '}
+                  {allFormNames.length}
+                </span>
+                <Checkbox
+                  checked={allSelected}
+                  indeterminate={selectedForms.length > 0 && !allSelected}
+                  onChange={(event) => handleSelectAll(event.target.checked)}
+                >
+                  全选表单
+                </Checkbox>
+              </div>
+              <Spin spinning={formsReq.isPending}>
+                <div className="schedule-drawer-category-grid">
+                  {categorizedForms.map((category) => {
+                    const categoryNames = category.items.map(
+                      (item) => item.name,
+                    );
+                    const enabledNames = category.items
+                      .filter((item) => item.enabled)
+                      .map((item) => item.name);
+                    const selectedCount = categoryNames.filter((name) =>
+                      selectedForms.includes(name),
+                    ).length;
+                    const categorySelected =
+                      enabledNames.length > 0 &&
+                      enabledNames.every((name) =>
+                        selectedForms.includes(name),
+                      );
+                    return (
+                      <div
+                        key={category.label}
+                        className="schedule-drawer-category"
+                      >
+                        <div className="schedule-drawer-category-heading">
+                          <Checkbox
+                            checked={categorySelected}
+                            indeterminate={
+                              selectedCount > 0 && !categorySelected
+                            }
+                            disabled={enabledNames.length === 0}
+                            onChange={(event) => {
+                              const kept = selectedForms.filter(
+                                (name) => !categoryNames.includes(name),
+                              );
+                              const nextSelected = event.target.checked
+                                ? [...kept, ...enabledNames]
+                                : kept;
+                              setSelectedForms(nextSelected);
+                              form.setFieldsValue({ forms: nextSelected });
+                            }}
+                          >
+                            {category.label}
+                          </Checkbox>
+                          <span>
+                            {selectedCount}/{categoryNames.length}
+                          </span>
+                        </div>
+                        <CheckboxGroup
+                          value={selectedForms.filter((name) =>
+                            categoryNames.includes(name),
+                          )}
+                          onChange={(values) =>
+                            handleCategoryChange(categoryNames, values)
+                          }
+                          className="schedule-drawer-category-options"
+                        >
+                          {category.items.map((item) => (
+                            <Checkbox
+                              key={item.name}
+                              value={item.name}
+                              disabled={!item.enabled}
+                            >
+                              {item.name}
+                            </Checkbox>
+                          ))}
+                        </CheckboxGroup>
+                      </div>
+                    );
+                  })}
+                </div>
+              </Spin>
+              {selectedForms.length === 0 && (
+                <div className="schedule-forms-notice">
+                  <InfoCircleOutlined /> 未选择表单时，将同步全部已启用表单
+                </div>
+              )}
+            </div>
+          </Form.Item>
+        </section>
+
+        <section className="schedule-form-section schedule-form-status-section">
+          <div>
+            <strong>启用此任务</strong>
+            <span>停用状态下仅保留配置，不会自动触发</span>
+          </div>
+          <Form.Item name="enabled" valuePropName="checked" noStyle>
+            <Switch checkedChildren="启用" unCheckedChildren="停用" />
+          </Form.Item>
+        </section>
       </Form>
     </Drawer>
   );

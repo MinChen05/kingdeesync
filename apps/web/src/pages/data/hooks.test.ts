@@ -1,7 +1,7 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { renderHook, waitFor } from '@testing-library/react';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
 import React from 'react';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import * as v1 from '@/services/v1';
 import { useDataPage } from './hooks';
 
@@ -23,7 +23,9 @@ describe('useDataPage', () => {
   let queryClient: QueryClient;
 
   beforeEach(() => {
-    queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    queryClient = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    });
     vi.clearAllMocks();
   });
 
@@ -39,7 +41,9 @@ describe('useDataPage', () => {
       log_service: { status: 'ok' },
     });
 
-    const { result } = renderHook(() => useDataPage(), { wrapper: wrap(queryClient) });
+    const { result } = renderHook(() => useDataPage(), {
+      wrapper: wrap(queryClient),
+    });
 
     await waitFor(() => expect(result.current.formsLoading).toBe(false));
 

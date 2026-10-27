@@ -1,0 +1,990 @@
+.sync-page {
+  --sync-radius: 10px;
+
+  .sync-workspace {
+    display: grid;
+    grid-template-columns: minmax(340px, 5fr) minmax(0, 7fr);
+    gap: 20px;
+    align-items: start;
+  }
+
+  .sync-runtime {
+    display: flex;
+    min-width: 0;
+    flex-direction: column;
+    gap: 20px;
+  }
+
+  .sync-history-link {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    color: var(--tk-primary);
+    font-size: 12px;
+    transition: gap 160ms ease;
+  }
+
+  .sync-history-link:hover {
+    gap: 9px;
+  }
+
+  .sync-last-empty {
+    display: flex;
+    min-height: 58px;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    color: var(--tk-dim);
+    font-size: 13px;
+  }
+
+  .sync-last-empty .anticon {
+    color: var(--tk-muted);
+    font-size: 18px;
+  }
+
+  .sync-last-run {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 24px;
+  }
+
+  .sync-last-run-main {
+    display: flex;
+    min-width: 0;
+    align-items: center;
+    gap: 12px;
+  }
+
+  .sync-last-run-icon {
+    display: inline-flex;
+    width: 38px;
+    height: 38px;
+    flex: 0 0 auto;
+    align-items: center;
+    justify-content: center;
+    border-radius: 10px;
+    font-size: 18px;
+  }
+
+  .sync-last-run-icon.is-success {
+    color: var(--tk-success);
+    background: var(--tk-success-soft);
+  }
+
+  .sync-last-run-icon.is-error {
+    color: var(--tk-error);
+    background: var(--tk-error-soft);
+  }
+
+  .sync-last-run-icon.is-warning {
+    color: var(--tk-warning);
+    background: var(--tk-warning-soft);
+  }
+
+  .sync-last-run-copy {
+    display: flex;
+    min-width: 0;
+    flex-direction: column;
+    gap: 5px;
+  }
+
+  .sync-last-run-tags {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+
+  .sync-last-run-id {
+    overflow: hidden;
+    max-width: 240px;
+    color: var(--tk-dim);
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-size: 11px;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .sync-last-run-time {
+    margin-left: 8px;
+    color: var(--tk-dim);
+    font-size: 12px;
+    white-space: nowrap;
+  }
+
+  .sync-last-run-metrics {
+    display: grid;
+    flex: 0 0 auto;
+    grid-template-columns: repeat(3, minmax(92px, auto));
+    gap: 8px;
+  }
+
+  .sync-last-run-metrics > div {
+    display: grid;
+    grid-template-columns: auto auto;
+    align-items: baseline;
+    justify-content: center;
+    column-gap: 4px;
+    padding: 8px 16px;
+    border-left: 1px solid var(--tk-border);
+  }
+
+  .sync-last-run-metrics span {
+    grid-column: 1 / -1;
+    margin-bottom: 3px;
+    color: var(--tk-dim);
+    font-size: 11px;
+  }
+
+  .sync-last-run-metrics strong {
+    color: var(--tk-text);
+    font-size: 18px;
+    font-weight: 650;
+    line-height: 1.25;
+  }
+
+  .sync-last-run-metrics small {
+    color: var(--tk-muted);
+    font-size: 11px;
+  }
+
+  .sync-config-state {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    color: var(--tk-dim);
+    font-size: 11px;
+    font-weight: 400;
+  }
+
+  .sync-config-state-dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: var(--tk-muted);
+  }
+
+  .sync-config-state.is-active {
+    color: var(--tk-primary);
+  }
+
+  .sync-config-state.is-active .sync-config-state-dot {
+    background: var(--tk-primary);
+    animation: sync-state-pulse 1.8s ease-in-out infinite;
+  }
+
+  .sync-config-content {
+    display: flex;
+    flex-direction: column;
+    gap: 24px;
+  }
+
+  .sync-config-section {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
+
+  .sync-section-heading {
+    display: flex;
+    min-height: 24px;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    color: var(--tk-text);
+    font-size: 13px;
+    font-weight: 600;
+  }
+
+  .sync-section-heading > div {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .sync-section-heading > span {
+    color: var(--tk-dim);
+    font-size: 11px;
+    font-weight: 400;
+  }
+
+  .sync-section-eyebrow {
+    color: var(--tk-primary);
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-size: 10px;
+    font-weight: 600;
+    letter-spacing: 0.06em;
+  }
+
+  .sync-mode-selector {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 8px;
+  }
+
+  .sync-mode-option.ant-radio-wrapper {
+    position: relative;
+    min-width: 0;
+    min-height: 112px;
+    margin: 0;
+    padding: 14px 10px 12px;
+    align-items: flex-start;
+    border: 1px solid var(--tk-border);
+    border-radius: var(--sync-radius);
+    background: var(--tk-surface);
+    transition: border-color 160ms ease, background-color 160ms ease, transform 160ms ease;
+  }
+
+  .sync-mode-option.ant-radio-wrapper:hover {
+    border-color: var(--tk-primary);
+    transform: translateY(-1px);
+  }
+
+  .sync-mode-option.ant-radio-wrapper.is-selected {
+    border-color: var(--tk-primary);
+    background: var(--tk-primary-soft);
+  }
+
+  .sync-mode-option.ant-radio-wrapper.is-reset.is-selected {
+    border-color: var(--tk-warning);
+    background: var(--tk-warning-soft);
+  }
+
+  .sync-mode-option .ant-radio {
+    align-self: flex-start;
+    margin-top: 2px;
+  }
+
+  .sync-mode-option .ant-radio-label {
+    display: flex;
+    min-width: 0;
+    flex: 1;
+    flex-direction: column;
+    gap: 9px;
+    padding-inline-start: 8px;
+  }
+
+  .sync-mode-option-icon {
+    color: var(--tk-muted);
+    font-size: 18px;
+    line-height: 1;
+    transition: color 160ms ease;
+  }
+
+  .sync-mode-option.is-selected .sync-mode-option-icon {
+    color: var(--tk-primary);
+  }
+
+  .sync-mode-option.is-reset.is-selected .sync-mode-option-icon {
+    color: var(--tk-warning);
+  }
+
+  .sync-mode-option-copy {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+
+  .sync-mode-option-copy strong {
+    color: var(--tk-text);
+    font-size: 12px;
+    font-weight: 600;
+  }
+
+  .sync-mode-option-copy small {
+    color: var(--tk-dim);
+    font-size: 10px;
+    line-height: 1.5;
+  }
+
+  .sync-mode-option-check {
+    position: absolute;
+    top: 13px;
+    right: 10px;
+    color: var(--tk-primary);
+    font-size: 10px;
+    opacity: 0;
+    transform: scale(0.7);
+    transition: opacity 160ms ease, transform 160ms ease;
+  }
+
+  .sync-mode-option.is-selected .sync-mode-option-check {
+    opacity: 1;
+    transform: scale(1);
+  }
+
+  .sync-mode-option.is-reset .sync-mode-option-check {
+    color: var(--tk-warning);
+  }
+
+  .sync-reset-notice {
+    padding: 9px 12px;
+    border-left: 3px solid var(--tk-warning);
+    border-radius: 4px 8px 8px 4px;
+    color: var(--tk-warning);
+    background: var(--tk-warning-soft);
+    font-size: 11px;
+    line-height: 1.6;
+  }
+
+  .sync-form-categories {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 10px;
+  }
+
+  .sync-form-category {
+    min-width: 0;
+    padding: 11px 12px;
+    border: 1px solid var(--tk-border);
+    border-radius: var(--sync-radius);
+    background: var(--tk-bg);
+  }
+
+  .sync-form-category-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    margin: -2px 0 8px;
+    padding-bottom: 8px;
+    border-bottom: 1px solid var(--tk-border);
+  }
+
+  .sync-form-category-header .ant-checkbox-wrapper {
+    color: var(--tk-text);
+    font-size: 12px;
+    font-weight: 600;
+  }
+
+  .sync-form-category-header .ant-tag {
+    margin: 0;
+    color: var(--tk-dim);
+    background: var(--tk-surface);
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-size: 10px;
+  }
+
+  .sync-form-options {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+  }
+
+  .sync-form-options .ant-checkbox-wrapper {
+    display: flex;
+    min-width: 0;
+    min-height: 28px;
+    margin: 0;
+    padding: 3px 4px;
+    align-items: center;
+    border-radius: 5px;
+    color: var(--tk-muted);
+    font-size: 11px;
+    transition: color 140ms ease, background-color 140ms ease;
+  }
+
+  .sync-form-options .ant-checkbox-wrapper:hover {
+    color: var(--tk-text);
+    background: var(--tk-primary-soft);
+  }
+
+  .sync-form-options .ant-checkbox-wrapper-checked {
+    color: var(--tk-text);
+  }
+
+  .sync-form-options .ant-checkbox-label {
+    display: flex;
+    min-width: 0;
+    flex: 1;
+    align-items: center;
+    justify-content: space-between;
+    gap: 6px;
+  }
+
+  .sync-form-options .ant-checkbox-label > span {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .sync-form-options .ant-checkbox-label small {
+    flex: 0 0 auto;
+    color: var(--tk-dim);
+    font-size: 9px;
+  }
+
+  .sync-selection-summary {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 10px 12px;
+    border-radius: 8px;
+    color: var(--tk-muted);
+    background: var(--tk-primary-soft);
+    font-size: 11px;
+  }
+
+  .sync-selection-summary > span:first-child {
+    color: var(--tk-primary);
+    font-weight: 600;
+  }
+
+  .sync-actions {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 10px;
+    padding-top: 18px;
+    border-top: 1px solid var(--tk-border);
+  }
+
+  .sync-actions .ant-btn {
+    min-width: 104px;
+    border-radius: 8px;
+    font-weight: 600;
+  }
+
+  .sync-run-id {
+    display: block;
+    overflow: hidden;
+    max-width: 160px;
+    color: var(--tk-dim);
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-size: 10px;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .sync-progress-extra {
+    color: var(--tk-dim);
+    font-size: 11px;
+    font-weight: 400;
+  }
+
+  .sync-progress-content {
+    display: flex;
+    flex-direction: column;
+    gap: 18px;
+  }
+
+  .sync-progress-overview {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+
+  .sync-progress-icon {
+    display: inline-flex;
+    width: 42px;
+    height: 42px;
+    flex: 0 0 auto;
+    align-items: center;
+    justify-content: center;
+    border-radius: 12px;
+    color: var(--tk-primary);
+    background: var(--tk-primary-soft);
+    font-size: 20px;
+  }
+
+  .sync-progress-content.is-success .sync-progress-icon {
+    color: var(--tk-success);
+    background: var(--tk-success-soft);
+  }
+
+  .sync-progress-content.is-error .sync-progress-icon {
+    color: var(--tk-error);
+    background: var(--tk-error-soft);
+  }
+
+  .sync-progress-content.is-warning .sync-progress-icon {
+    color: var(--tk-warning);
+    background: var(--tk-warning-soft);
+  }
+
+  .sync-progress-content.is-idle .sync-progress-icon {
+    color: var(--tk-muted);
+    background: var(--tk-bg);
+  }
+
+  .sync-progress-copy {
+    display: flex;
+    min-width: 0;
+    flex: 1;
+    flex-direction: column;
+    gap: 7px;
+  }
+
+  .sync-progress-status {
+    display: flex;
+    min-width: 0;
+    align-items: center;
+    gap: 9px;
+  }
+
+  .sync-progress-status > span:last-child {
+    overflow: hidden;
+    color: var(--tk-text);
+    font-size: 13px;
+    font-weight: 550;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .sync-progress-meta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 5px 14px;
+    color: var(--tk-dim);
+    font-size: 11px;
+  }
+
+  .sync-progress-meta strong {
+    color: var(--tk-muted);
+    font-weight: 500;
+  }
+
+  .is-error {
+    color: var(--tk-error) !important;
+  }
+
+  .sync-progress-number {
+    display: flex;
+    flex: 0 0 auto;
+    align-items: baseline;
+    color: var(--tk-text);
+  }
+
+  .sync-progress-number strong {
+    font-size: 30px;
+    font-weight: 650;
+    letter-spacing: -0.04em;
+    line-height: 1;
+  }
+
+  .sync-progress-number span {
+    margin-left: 3px;
+    color: var(--tk-dim);
+    font-size: 12px;
+  }
+
+  .sync-progress-bar {
+    margin: -7px 0 0;
+    line-height: 1;
+  }
+
+  .sync-progress-bar .ant-progress-inner {
+    background: var(--tk-primary-soft);
+  }
+
+  .sync-form-progress {
+    padding-top: 15px;
+    border-top: 1px solid var(--tk-border);
+  }
+
+  .sync-form-progress-heading {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 10px;
+    color: var(--tk-text);
+    font-size: 12px;
+    font-weight: 600;
+  }
+
+  .sync-form-progress-heading > span:last-child {
+    color: var(--tk-dim);
+    font-size: 10px;
+    font-weight: 400;
+  }
+
+  .sync-form-progress-list {
+    display: grid;
+    max-height: 260px;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px;
+    overflow-y: auto;
+    scrollbar-width: thin;
+  }
+
+  .sync-form-stat {
+    min-width: 0;
+    padding: 10px 11px;
+    border: 1px solid var(--tk-border);
+    border-radius: 8px;
+    background: var(--tk-surface);
+  }
+
+  .sync-form-stat-name {
+    display: flex;
+    min-width: 0;
+    align-items: center;
+    gap: 7px;
+  }
+
+  .sync-form-stat-dot {
+    width: 6px;
+    height: 6px;
+    flex: 0 0 auto;
+    border-radius: 50%;
+    background: var(--tk-muted);
+  }
+
+  .sync-form-stat.is-success .sync-form-stat-dot {
+    background: var(--tk-success);
+  }
+
+  .sync-form-stat.is-error .sync-form-stat-dot {
+    background: var(--tk-error);
+  }
+
+  .sync-form-stat-name strong {
+    overflow: hidden;
+    flex: 1;
+    color: var(--tk-text);
+    font-size: 11px;
+    font-weight: 600;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .sync-form-stat-name > span:last-child {
+    color: var(--tk-dim);
+    font-size: 10px;
+  }
+
+  .sync-form-stat-metrics {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px 12px;
+    margin-top: 8px;
+    color: var(--tk-dim);
+    font-size: 10px;
+  }
+
+  .sync-form-stat-metrics strong {
+    color: var(--tk-muted);
+    font-weight: 600;
+  }
+
+  .sync-form-progress-empty {
+    padding: 20px;
+    border: 1px dashed var(--tk-border);
+    border-radius: 8px;
+    color: var(--tk-dim);
+    background: var(--tk-bg);
+    font-size: 11px;
+    text-align: center;
+  }
+
+  .sync-log-shell {
+    position: relative;
+    overflow: hidden;
+    border: 1px solid var(--tk-border);
+    border-radius: var(--sync-radius);
+    background: var(--tk-bg);
+  }
+
+  .sync-log-toolbar {
+    display: flex;
+    min-height: 36px;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 0 13px;
+    border-bottom: 1px solid var(--tk-border);
+    color: var(--tk-dim);
+    background: var(--tk-surface);
+    font-size: 10px;
+  }
+
+  .sync-log-toolbar > span:first-child {
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+  }
+
+  .sync-log-live-dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: var(--tk-muted);
+  }
+
+  .sync-log-live-dot.is-active {
+    background: var(--tk-primary);
+  }
+
+  .sync-log-actions {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+
+  .sync-log-actions > span {
+    color: var(--tk-dim);
+    font-size: 10px;
+    font-weight: 400;
+  }
+
+  .sync-log-list {
+    height: 316px;
+    overflow: auto;
+    padding: 7px 0;
+    scrollbar-color: var(--tk-border) transparent;
+    scrollbar-width: thin;
+  }
+
+  .sync-log-entry {
+    display: grid;
+    grid-template-columns: 142px 48px minmax(72px, auto) minmax(0, 1fr);
+    gap: 10px;
+    align-items: baseline;
+    padding: 7px 13px;
+    border-left: 2px solid transparent;
+    color: var(--tk-muted);
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-size: 10px;
+    line-height: 1.55;
+    transition: background-color 140ms ease, border-color 140ms ease;
+  }
+
+  .sync-log-entry:hover {
+    border-left-color: var(--tk-primary);
+    background: var(--tk-primary-soft);
+  }
+
+  .sync-log-entry.is-error {
+    border-left-color: var(--tk-error);
+    background: var(--tk-error-soft);
+  }
+
+  .sync-log-entry.is-warning {
+    border-left-color: var(--tk-warning);
+  }
+
+  .sync-log-entry time {
+    color: var(--tk-dim);
+    white-space: nowrap;
+  }
+
+  .sync-log-level {
+    color: var(--tk-muted);
+    font-size: 9px;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+  }
+
+  .sync-log-entry.is-info .sync-log-level {
+    color: var(--tk-primary);
+  }
+
+  .sync-log-entry.is-error .sync-log-level {
+    color: var(--tk-error);
+  }
+
+  .sync-log-entry.is-warning .sync-log-level {
+    color: var(--tk-warning);
+  }
+
+  .sync-log-form {
+    overflow: hidden;
+    color: var(--tk-text-light);
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .sync-log-message {
+    min-width: 0;
+    color: var(--tk-muted);
+    overflow-wrap: anywhere;
+  }
+
+  .sync-log-empty {
+    display: flex;
+    height: 100%;
+    align-items: center;
+    justify-content: center;
+    flex-direction: column;
+    gap: 7px;
+    color: var(--tk-dim);
+    text-align: center;
+  }
+
+  .sync-log-empty .anticon {
+    margin-bottom: 4px;
+    color: var(--tk-muted);
+    font-size: 24px;
+  }
+
+  .sync-log-empty strong {
+    color: var(--tk-text-light);
+    font-size: 12px;
+    font-weight: 500;
+  }
+
+  .sync-log-empty span {
+    font-size: 10px;
+  }
+
+  .sync-log-latest {
+    position: absolute;
+    right: 14px;
+    bottom: 14px;
+    border-color: var(--tk-border);
+    border-radius: 16px;
+    color: var(--tk-primary);
+    background: var(--tk-surface);
+    box-shadow: 0 4px 14px rgb(15 35 55 / 10%);
+  }
+}
+
+@keyframes sync-state-pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.4;
+  }
+}
+
+@media (max-width: 1199px) {
+  .sync-page {
+    .sync-workspace {
+      grid-template-columns: minmax(320px, 5fr) minmax(0, 6fr);
+    }
+
+    .sync-last-run {
+      align-items: flex-start;
+      flex-direction: column;
+      gap: 16px;
+    }
+
+    .sync-last-run-metrics {
+      width: 100%;
+      grid-template-columns: repeat(3, 1fr);
+    }
+
+    .sync-last-run-metrics > div:first-child {
+      border-left: 0;
+    }
+  }
+}
+
+@media (max-width: 991px) {
+  .sync-page {
+    .sync-workspace {
+      grid-template-columns: 1fr;
+    }
+
+    .sync-runtime {
+      display: grid;
+      grid-template-columns: 1fr;
+    }
+
+    .sync-mode-selector {
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+    }
+  }
+}
+
+@media (max-width: 575px) {
+  .sync-page {
+    .sync-last-run-main {
+      width: 100%;
+      align-items: flex-start;
+      flex-wrap: wrap;
+    }
+
+    .sync-last-run-time {
+      width: 100%;
+      margin-left: 50px;
+    }
+
+    .sync-last-run-metrics > div {
+      padding: 8px 10px;
+    }
+
+    .sync-last-run-metrics strong {
+      font-size: 16px;
+    }
+
+    .sync-mode-selector,
+    .sync-form-categories,
+    .sync-form-progress-list {
+      grid-template-columns: 1fr;
+    }
+
+    .sync-mode-option.ant-radio-wrapper {
+      min-height: 74px;
+      align-items: center;
+    }
+
+    .sync-mode-option .ant-radio-label {
+      display: grid;
+      grid-template-columns: 24px minmax(0, 1fr);
+      align-items: center;
+    }
+
+    .sync-mode-option-check {
+      top: 50%;
+      transform: translateY(-50%) scale(0.7);
+    }
+
+    .sync-mode-option.is-selected .sync-mode-option-check {
+      transform: translateY(-50%) scale(1);
+    }
+
+    .sync-selection-summary {
+      align-items: flex-start;
+      flex-direction: column;
+      gap: 3px;
+    }
+
+    .sync-progress-overview {
+      align-items: flex-start;
+    }
+
+    .sync-progress-number strong {
+      font-size: 25px;
+    }
+
+    .sync-progress-status {
+      align-items: flex-start;
+      flex-direction: column;
+      gap: 5px;
+    }
+
+    .sync-progress-status > span:last-child {
+      max-width: 100%;
+      white-space: normal;
+    }
+
+    .sync-log-entry {
+      grid-template-areas:
+        'time level'
+        'form message';
+      grid-template-columns: minmax(0, 1fr) auto;
+      gap: 4px 8px;
+    }
+
+    .sync-log-entry time {
+      grid-area: time;
+    }
+
+    .sync-log-level {
+      grid-area: level;
+    }
+
+    .sync-log-form {
+      grid-area: form;
+    }
+
+    .sync-log-message {
+      grid-area: message;
+    }
+  }
+}

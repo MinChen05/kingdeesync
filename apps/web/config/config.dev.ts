@@ -2,7 +2,7 @@
 
 import { join } from 'node:path';
 import { defineConfig } from '@umijs/max';
-import defaultSettings from './defaultSettings';
+import defaultSettings, { themeConfig } from './defaultSettings';
 import proxy from './proxy';
 
 import routes from './routes';
@@ -115,9 +115,9 @@ export default defineConfig({
    * @name layout 插件
    * @doc https://umijs.org/docs/max/layout-menu
    */
-  title: 'Ant Design Pro',
+  title: '金蝶数据同步',
   layout: {
-    locale: true,
+    locale: false,
     ...defaultSettings,
   },
   /**
@@ -134,11 +134,9 @@ export default defineConfig({
    * @doc https://umijs.org/docs/max/i18n
    */
   locale: {
-    // default zh-CN
     default: 'zh-CN',
-    antd: true,
-    // default true, when it is true, will use `navigator.language` overwrite default
-    baseNavigator: true,
+    antd: false,
+    baseNavigator: false,
   },
   /**
    * @name antd 插件
@@ -149,11 +147,7 @@ export default defineConfig({
     appConfig: {},
     configProvider: {
       variant: 'filled',
-      theme: {
-        token: {
-          fontFamily: 'AlibabaSans, sans-serif',
-        },
-      },
+      theme: themeConfig,
     },
   },
   /**
@@ -174,14 +168,6 @@ export default defineConfig({
    * @doc https://umijs.org/docs/max/access
    */
   access: {},
-  /**
-   * @name Google Analytics
-   * @description 使用 GA4 (gtag.js) 进行站点分析
-   * @doc https://umijs.org/docs/max/analytics
-   */
-  analytics: {
-    ga_v2: 'G-59NF1VHHPF',
-  },
   /**
    * @name <head> 中额外的 script
    * @description 配置 <head> 中额外的 script

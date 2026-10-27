@@ -25,8 +25,11 @@ const useLogColumns = (): ColumnsType<V1RunEvent> => [
     key: 'level',
     width: 90,
     render: (v: string) => {
-      const meta =
-        LEVEL_META[v] || { color: 'var(--tk-dim)', text: v, dot: 'unknown' };
+      const meta = LEVEL_META[v] || {
+        color: 'var(--tk-dim)',
+        text: v,
+        dot: 'unknown',
+      };
       return (
         <span
           style={{
@@ -109,7 +112,10 @@ const LogFilterBar: React.FC<LogFilterBarProps> = ({
   onClearFocusForm,
 }) => {
   return (
-    <div className="mb-3 flex flex-wrap items-center gap-3">
+    <fieldset
+      className="filter-toolbar monitor-filter-toolbar monitor-log-filters"
+      aria-label="错误日志筛选"
+    >
       {focusForm && (
         <Tag
           closable
@@ -124,8 +130,8 @@ const LogFilterBar: React.FC<LogFilterBarProps> = ({
       <Select
         value={level}
         onChange={onLevelChange}
-        size="small"
-        style={{ width: 110 }}
+        aria-label="按日志级别筛选"
+        className="monitor-log-filters__select"
         options={[
           { value: '', label: '全部级别' },
           { value: 'ERROR', label: '仅错误' },
@@ -135,8 +141,8 @@ const LogFilterBar: React.FC<LogFilterBarProps> = ({
       <Select
         value={days}
         onChange={onDaysChange}
-        size="small"
-        style={{ width: 110 }}
+        aria-label="按日志时间范围筛选"
+        className="monitor-log-filters__select"
         options={[
           { value: 1, label: '近 1 天' },
           { value: 3, label: '近 3 天' },
@@ -144,12 +150,16 @@ const LogFilterBar: React.FC<LogFilterBarProps> = ({
           { value: 30, label: '近 30 天' },
         ]}
       />
-      <Text type="secondary" style={{ fontSize: 12, marginLeft: 'auto' }}>
+      <Text
+        type="secondary"
+        className="monitor-filter-toolbar__summary"
+        aria-live="polite"
+      >
         共 {logCount} 条
       </Text>
-    </div>
+    </fieldset>
   );
 };
 
-export { useLogColumns, LogFilterBar };
 export type { LogFilterBarProps };
+export { LogFilterBar, useLogColumns };

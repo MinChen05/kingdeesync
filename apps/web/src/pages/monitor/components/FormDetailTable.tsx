@@ -44,7 +44,9 @@ const FormDetailTable: React.FC<FormDetailTableProps> = ({ forms }) => {
       key: 'total_records',
       width: 90,
       render: (v: number) => (
-        <Text style={{ fontVariantNumeric: 'tabular-nums' }}>{(v || 0).toLocaleString()}</Text>
+        <Text style={{ fontVariantNumeric: 'tabular-nums' }}>
+          {(v || 0).toLocaleString()}
+        </Text>
       ),
     },
     {
@@ -62,7 +64,7 @@ const FormDetailTable: React.FC<FormDetailTableProps> = ({ forms }) => {
               size="small"
               showInfo={false}
               strokeColor={STATUS_BAR_COLOR[r.status] || 'var(--tk-primary)'}
-              trailColor="rgba(148, 163, 184, 0.15)"
+              trailColor="var(--tk-border)"
               style={{ flex: 1, minWidth: 40, margin: 0 }}
             />
             <Text style={{ fontSize: 12, fontVariantNumeric: 'tabular-nums' }}>
@@ -94,31 +96,21 @@ const FormDetailTable: React.FC<FormDetailTableProps> = ({ forms }) => {
       key: 'duration_seconds',
       width: 90,
       render: (v: number) => (
-        <Text style={{ fontVariantNumeric: 'tabular-nums' }}>{formatDuration(v)}</Text>
+        <Text style={{ fontVariantNumeric: 'tabular-nums' }}>
+          {formatDuration(v)}
+        </Text>
       ),
     },
   ];
 
   return (
-    <div>
-      <div className="mb-2 flex items-center justify-between">
-        <Text strong style={{ color: 'var(--tk-text)' }}>
-          表单明细
-        </Text>
-        <span
-          style={{
-            fontSize: 11,
-            color: 'var(--tk-muted)',
-            background: 'rgba(148, 163, 184, 0.1)',
-            border: '1px solid rgba(148, 163, 184, 0.15)',
-            borderRadius: 999,
-            padding: '1px 10px',
-          }}
-        >
-          {forms.length} 个
-        </span>
+    <section className="monitor-form-details" aria-label="运行表单明细">
+      <div className="monitor-section-heading">
+        <Text strong>表单明细</Text>
+        <span className="monitor-count-badge">{forms.length} 个</span>
       </div>
       <Table<RunFormDetail>
+        className="monitor-table monitor-form-table"
         columns={columns}
         dataSource={forms}
         rowKey="form_name"
@@ -134,7 +126,7 @@ const FormDetailTable: React.FC<FormDetailTableProps> = ({ forms }) => {
                 fontSize: 12,
                 color: 'var(--tk-error)',
                 whiteSpace: 'pre-wrap',
-                background: 'rgba(248, 113, 113, 0.06)',
+                background: 'var(--tk-error-soft)',
                 borderRadius: 8,
                 padding: '8px 12px',
               }}
@@ -144,7 +136,7 @@ const FormDetailTable: React.FC<FormDetailTableProps> = ({ forms }) => {
           ),
         }}
       />
-    </div>
+    </section>
   );
 };
 

@@ -1,17 +1,17 @@
 import { StopOutlined } from '@ant-design/icons';
-import { useNavigate } from '@umijs/max';
 import { useMutation, useQuery } from '@tanstack/react-query';
+import { useNavigate } from '@umijs/max';
 import { App, FloatButton, Space, Tooltip } from 'antd';
 import React, { useEffect, useState } from 'react';
-import { getOverview } from '@/services/v1';
 import type { V1Run } from '@/services/v1';
+import { getOverview } from '@/services/v1';
+import type { SyncStatus } from './SyncStatusContent';
 import {
   SyncStatusContent,
   syncButtonBg,
   syncButtonBorder,
   syncIconForStatus,
 } from './SyncStatusContent';
-import type { SyncStatus } from './SyncStatusContent';
 
 const TERMINAL_STATUSES: SyncStatus[] = [
   'success',
@@ -63,11 +63,7 @@ const GlobalSyncIndicator: React.FC = () => {
   useEffect(() => {
     if (activeRun?.run_id && !boundRunId) {
       setBoundRunId(activeRun.run_id);
-    } else if (
-      boundRunId &&
-      status !== 'running' &&
-      status !== 'stopping'
-    ) {
+    } else if (boundRunId && status !== 'running' && status !== 'stopping') {
       setBoundRunId('');
     }
   }, [activeRun?.run_id, boundRunId, status]);
@@ -94,7 +90,7 @@ const GlobalSyncIndicator: React.FC = () => {
 
   const stopMutation = useMutation({
     mutationFn: async (runId: string) => {
-      await import('@/services/api').then(m => m.stopSync(runId));
+      await import('@/services/api').then((m) => m.stopSync(runId));
     },
     onSuccess: () => message.success('同步已停止'),
     onError: () => message.error('停止同步失败'),
@@ -107,12 +103,14 @@ const GlobalSyncIndicator: React.FC = () => {
 
   return (
     <Space
+      className="global-sync-indicator"
       orientation="vertical"
       size={8}
       style={{ position: 'fixed', right: 24, bottom: 24, zIndex: 1000 }}
     >
       <Tooltip title={tooltipContent} placement="topLeft" mouseEnterDelay={0}>
         <FloatButton
+          aria-label="查看同步状态"
           icon={icon}
           style={{
             backgroundColor: syncButtonBg(status),
@@ -125,9 +123,14 @@ const GlobalSyncIndicator: React.FC = () => {
       {status === 'running' && info.run_id && (
         <Tooltip title="停止同步" placement="left">
           <FloatButton
-            icon={<StopOutlined style={{ fontSize: 14 }} />}
+            aria-label="停止同步"
+            icon={
+              <StopOutlined
+                style={{ fontSize: 14, color: 'var(--tk-error)' }}
+              />
+            }
             style={{
-              backgroundColor: '#7f1d1d',
+              backgroundColor: 'var(--tk-error-soft)',
               borderColor: 'var(--tk-error)',
               width: 36,
               height: 36,

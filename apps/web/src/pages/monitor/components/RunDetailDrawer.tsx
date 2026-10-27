@@ -1,5 +1,6 @@
+import { RedoOutlined } from '@ant-design/icons';
 import { useMutation, useQuery } from '@tanstack/react-query';
-import { App, Drawer, Empty, Typography } from 'antd';
+import { App, Button, Drawer, Empty, Typography } from 'antd';
 import React from 'react';
 import type { V1Run } from '@/services/v1';
 import { getRun, retryFailedForms } from '@/services/v1';
@@ -110,48 +111,40 @@ const RunDetailDrawer: React.FC<RunDetailDrawerProps> = ({
   return (
     <Drawer
       title={
-        <span style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-          {/* 状态发光点 */}
+        <span className="monitor-drawer-title">
           <span
-            style={{
-              width: 8,
-              height: 8,
-              borderRadius: '50%',
-              background: dotColor,
-              boxShadow: `0 0 0 3px ${dotColor}22, 0 0 10px ${dotColor}55`,
-              flexShrink: 0,
-            }}
+            className="monitor-status-dot"
+            style={{ backgroundColor: dotColor }}
+            aria-hidden="true"
           />
-          <span style={{ fontSize: 15, fontWeight: 600 }}>运行详情</span>
-          {detail && (
-            <Text code style={{ fontSize: 12 }}>
-              {detail.run_id}
-            </Text>
-          )}
-          {canRetry && (
-            <span
-              onClick={() => retryReq.mutate(detail.run_id)}
-              style={{
-                marginLeft: 'auto',
-                fontSize: 12,
-                color: 'var(--tk-primary)',
-                cursor: 'pointer',
-                fontWeight: 500,
-              }}
-            >
-              重试失败表单 ({detail.failed_forms})
-            </span>
-          )}
+          <span>运行详情</span>
+          {detail && <Text code>{detail.run_id}</Text>}
         </span>
       }
-      width={760}
+      extra={
+        hasFailedForms && (
+          <Button
+            type="primary"
+            size="small"
+            icon={<RedoOutlined />}
+            disabled={!canRetry}
+            loading={retryReq.isPending}
+            onClick={() => retryReq.mutate(detail.run_id)}
+            aria-label={`重试 ${detail.failed_forms} 个失败表单`}
+          >
+            重试失败表单 ({detail.failed_forms})
+          </Button>
+        )
+      }
+      className="monitor-run-drawer"
+      size="large"
       open={!!runId}
       onClose={onClose}
       loading={loading}
-      styles={{ body: { paddingTop: 16 } }}
+      styles={{ body: { paddingTop: 20 } }}
     >
       {detail ? (
-        <div className="space-y-4">
+        <div className="monitor-drawer-content">
           <RunSummary detail={detail} />
           <FormDetailTable forms={detail.forms || []} />
           <RunTimeline runId={detail.run_id} />

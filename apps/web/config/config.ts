@@ -2,7 +2,7 @@
 
 import { join } from 'node:path';
 import { defineConfig } from '@umijs/max';
-import defaultSettings from './defaultSettings';
+import defaultSettings, { themeConfig } from './defaultSettings';
 import proxy from './proxy';
 
 import routes from './routes';
@@ -145,19 +145,7 @@ export default defineConfig({
     appConfig: {},
     configProvider: {
       variant: 'filled',
-      theme: {
-        token: {
-          fontFamily: 'AlibabaSans, sans-serif',
-          // 深色科技感主色：科技青蓝（深色背景上清晰、有数据感）
-          colorPrimary: '#38bdf8',
-          colorInfo: '#38bdf8',
-          colorSuccess: '#34d399',
-          colorWarning: '#fbbf24',
-          colorError: '#f87171',
-          // 圆角加大，更现代
-          borderRadius: 10,
-        },
-      },
+      theme: themeConfig,
     },
   },
   /**

@@ -6,6 +6,7 @@ const Page404: React.FC = () => {
   const navigate = useNavigate();
   return (
     <Result
+      className="state-result"
       status="404"
       title="404"
       subTitle="找不到该页面"

@@ -1,41 +1,37 @@
-/**
- * Theme Tokens — CSS Custom Properties
- *
- * Central palette for the "Modern Data Operations" dark theme.
- * All inline-style hex colors in components should reference these variables
- * via `var(--tk-*)` instead of hardcoded hex values.
- *
- * Palette:
- *   Primary   – sky-400  (#38bdf8)
- *   Success   – emerald-400 (#34d399)
- *   Error     – red-400   (#f87171)
- *   Warning   – amber-400  (#fbbf24)
- *   Unknown   – slate-600  (#475569)
- *   Text      – slate-200  (#e2e8f0)
- *   Muted     – slate-400  (#94a3b8)
- *   Dim       – slate-500  (#64748b)
- *   Surface   – slate-900  (#0f172a)
- */
-
 :root {
-  /* ---- Accent colors ---- */
-  --tk-primary:   #38bdf8;
-  --tk-success:   #34d399;
-  --tk-error:     #f87171;
-  --tk-warning:   #fbbf24;
-  --tk-unknown:   #475569;
+  --tk-primary: #0f766e;
+  --tk-primary-hover: #0d9488;
+  --tk-primary-soft: #e6f5f1;
+  --tk-success: #15803d;
+  --tk-success-soft: #eaf7ee;
+  --tk-error: #dc2626;
+  --tk-error-soft: #fef0f0;
+  --tk-warning: #d97706;
+  --tk-warning-soft: #fff7e8;
+  --tk-unknown: #94a3b8;
+  --tk-indigo: #4f46e5;
 
-  /* ---- Text hierarchy ---- */
-  --tk-text:      #e2e8f0;
-  --tk-text-light: #f1f5f9;
-  --tk-muted:     #94a3b8;
-  --tk-dim:       #64748b;
-  --tk-bright:    #f8fafc;
+  --tk-text: #334155;
+  --tk-text-light: #132d32;
+  --tk-muted: #64748b;
+  --tk-dim: #8a9aa5;
+  --tk-bright: #0f272c;
 
-  /* ---- Surfaces ---- */
-  --tk-bg:        #070b14;
-  --tk-surface:   #0f172a;
+  --tk-bg: #f3f6f4;
+  --tk-surface: #ffffff;
+  --tk-surface-subtle: #f7f9f8;
+  --tk-border: #e1e8e4;
+  --tk-border-strong: #d4dfd9;
+  --tk-nav: #102c30;
+  --tk-hero-accent: #5eead4;
 
-  /* ---- Gradient accent (indigo) ---- */
-  --tk-indigo:    #818cf8;
+  --tk-radius-sm: 8px;
+  --tk-radius-md: 12px;
+  --tk-radius-lg: 16px;
+  --tk-shadow-sm: 0 1px 2px rgba(15, 39, 44, 0.04);
+  --tk-shadow-md: 0 12px 32px rgba(15, 39, 44, 0.08);
+  --tk-motion-fast: 160ms;
+  --tk-motion-base: 240ms;
+  --tk-motion-slow: 420ms;
+  --tk-motion-ease: cubic-bezier(0.22, 1, 0.36, 1);
 }

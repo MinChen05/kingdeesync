@@ -1,19 +1,23 @@
-import dayjs from 'dayjs';
+import {
+  CheckCircleOutlined,
+  ClockCircleOutlined,
+  CloseCircleOutlined,
+  SyncOutlined,
+} from '@ant-design/icons';
 import { useQuery } from '@tanstack/react-query';
-import { Typography } from 'antd';
+import { Empty } from 'antd';
+import dayjs from 'dayjs';
 import React, { useEffect, useRef, useState } from 'react';
-import { DotIndicator, runStatusToDotLevel } from '@/components/DotIndicator';
+import PageHeader from '@/components/PageHeader';
+import Panel from '@/components/Panel';
+import SyncStatusTag from '@/components/SyncStatusTag';
+import SyncTypeTag from '@/components/SyncTypeTag';
 import type { HealthLevel } from '@/pages/Overview/types';
 import type { V1HealthStatus } from '@/services/v1';
 import { getOverview } from '@/services/v1';
 import { formatDuration, formatNumber } from '@/utils/format';
+import './index.less';
 
-const { Text } = Typography;
-
-/**
- * 管理看板大屏：全屏深色布局，30 秒自动刷新。
- * 复用 Overview 的 v1/overview 聚合数据。
- */
 const DashboardPage: React.FC = () => {
   const [now, setNow] = useState(new Date());
   const { data: overview, isPending } = useQuery({
@@ -22,132 +26,79 @@ const DashboardPage: React.FC = () => {
     refetchInterval: 30_000,
   });
 
-  // Clock ticker
   const timerRef = useRef<ReturnType<typeof setInterval>>();
   useEffect(() => {
     timerRef.current = setInterval(() => setNow(new Date()), 1000);
-    return () => clearInterval(timerRef.current!);
+    return () => {
+      if (timerRef.current) clearInterval(timerRef.current);
+    };
   }, []);
 
-  // 直接可选链取值（原因：`|| {}` 会丢失类型且曾导致 KPI 恒 0——字段名与后端不符）
   const health = overview?.health;
   const today = overview?.today;
   const recentRuns = overview?.recent_runs ?? [];
-
-  if (isPending) {
-    return (
-      <div
-        style={{
-          textAlign: 'center',
-          padding: '80px 0',
-          color: 'var(--tk-dim)',
-        }}
-      >
-        加载中...
-      </div>
-    );
-  }
+  const overall = healthOverall(health);
 
   return (
-    <div
-      style={{
-        background: 'var(--tk-bg)',
-        minHeight: '100vh',
-        padding: '24px 32px',
-        fontFamily: 'system-ui, sans-serif',
-      }}
-    >
-      {/* Header */}
-      <div
-        style={{
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'space-between',
-          marginBottom: 24,
-        }}
-      >
-        <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
-          <h1
-            style={{
-              fontSize: 24,
-              fontWeight: 700,
-              color: '#e2e8f0',
-              margin: 0,
-            }}
-          >
-            金蝶数据同步看板
-          </h1>
-          <DotIndicator level={healthOverall(health)} size={12} />
+    <div className="page-stack dashboard-page">
+      <PageHeader
+        title="金蝶数据同步看板"
+        description="实时掌握今日同步表现、服务状态与最近运行情况"
+        extra={
+          <div className="dashboard-header-meta">
+            <span className={`dashboard-overall dashboard-overall--${overall}`}>
+              <span className="dashboard-status-dot" aria-hidden="true" />
+              {healthLabel(overall)}
+            </span>
+            <time className="dashboard-clock" dateTime={now.toISOString()}>
+              {dayjs(now).format('YYYY-MM-DD HH:mm:ss')}
+            </time>
+          </div>
+        }
+      />
+
+      <Panel title="今日概览" loading={isPending}>
+        <div className="dashboard-kpis">
+          <KpiCard
+            title="今日同步"
+            value={formatNumber(today?.sync_count ?? 0)}
+            unit="次"
+            note="今日发起的同步运行"
+            icon={<SyncOutlined />}
+            tone="primary"
+          />
+          <KpiCard
+            title="成功次数"
+            value={formatNumber(
+              Math.max((today?.sync_count ?? 0) - (today?.fail_count ?? 0), 0),
+            )}
+            unit="次"
+            note="已完成且无失败"
+            icon={<CheckCircleOutlined />}
+            tone="success"
+          />
+          <KpiCard
+            title="失败次数"
+            value={formatNumber(today?.fail_count ?? 0)}
+            unit="次"
+            note={
+              (today?.fail_count ?? 0) > 0 ? '建议查看异常明细' : '今日暂无失败'
+            }
+            icon={<CloseCircleOutlined />}
+            tone={(today?.fail_count ?? 0) > 0 ? 'error' : 'neutral'}
+          />
+          <KpiCard
+            title="平均耗时"
+            value={formatDuration(today?.avg_duration ?? 0)}
+            note="单次同步平均用时"
+            icon={<ClockCircleOutlined />}
+            tone="neutral"
+          />
         </div>
-        <Text
-          style={{
-            fontSize: 14,
-            color: 'var(--tk-muted)',
-            fontFamily: 'monospace',
-          }}
-        >
-          {dayjs(now).format('YYYY-MM-DD HH:mm:ss')}
-        </Text>
-      </div>
+      </Panel>
 
-      {/* KPI Row */}
-      <div
-        style={{
-          display: 'grid',
-          gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))',
-          gap: 16,
-          marginBottom: 24,
-        }}
-      >
-        {/* KPI 字段与后端 V1TodayStats 对齐（原因：此前读 total_runs/success_forms 等
-            不存在字段，四张卡恒 0） */}
-        <KpiCard
-          title="今日同步"
-          value={formatNumber(today?.sync_count ?? 0)}
-          subtitle="次"
-          color="#38bdf8"
-        />
-        <KpiCard
-          title="成功次数"
-          value={formatNumber(
-            Math.max((today?.sync_count ?? 0) - (today?.fail_count ?? 0), 0),
-          )}
-          subtitle="次"
-          color="#34d399"
-        />
-        <KpiCard
-          title="失败次数"
-          value={formatNumber(today?.fail_count ?? 0)}
-          subtitle="次"
-          color="#f87171"
-        />
-        <KpiCard
-          title="平均耗时"
-          value={formatDuration(today?.avg_duration ?? 0)}
-          subtitle=""
-          color="#a78bfa"
-        />
-      </div>
-
-      {/* Service Health */}
-      <div style={{ marginBottom: 24 }}>
-        <h3
-          style={{
-            fontSize: 16,
-            fontWeight: 600,
-            color: '#e2e8f0',
-            marginBottom: 12,
-          }}
-        >
-          服务健康
-        </h3>
-        <div
-          style={{
-            display: 'grid',
-            gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))',
-            gap: 12,
-          }}
-        >
+      <Panel title="服务健康" loading={isPending}>
+        <div className="dashboard-services">
           <ServiceStatus
             name="金蝶 API"
             status={health?.kingdee_api?.status || 'unknown'}
@@ -165,55 +116,28 @@ const DashboardPage: React.FC = () => {
             status={health?.log_service?.status || 'unknown'}
           />
         </div>
-      </div>
+      </Panel>
 
-      {/* Recent Runs */}
-      <div>
-        <h3
-          style={{
-            fontSize: 16,
-            fontWeight: 600,
-            color: '#e2e8f0',
-            marginBottom: 12,
-          }}
-        >
-          最近运行
-        </h3>
-        <div className="glass-card" style={{ padding: 0, overflow: 'hidden' }}>
-          {recentRuns.length === 0 ? (
-            <div
-              style={{
-                padding: '24px',
-                textAlign: 'center',
-                color: 'var(--tk-dim)',
-              }}
-            >
-              暂无运行记录
-            </div>
-          ) : (
-            <table
-              style={{
-                width: '100%',
-                borderCollapse: 'collapse',
-                fontSize: 13,
-              }}
-            >
+      <Panel
+        title="最近运行"
+        loading={isPending}
+        extra={<span className="dashboard-refresh-note">每 30 秒自动刷新</span>}
+      >
+        {recentRuns.length === 0 ? (
+          <Empty
+            image={Empty.PRESENTED_IMAGE_SIMPLE}
+            description="暂无运行记录"
+            className="dashboard-empty"
+          />
+        ) : (
+          <div className="dashboard-table-wrap">
+            <table className="dashboard-table" aria-label="最近同步运行记录">
               <thead>
-                <tr
-                  style={{ borderBottom: '1px solid rgba(148,163,184,0.08)' }}
-                >
-                  {['状态', '类型', '表单', '数据量', '耗时', '时间'].map(
-                    (h) => (
-                      <th
-                        key={h}
-                        style={{
-                          textAlign: 'left',
-                          padding: '10px 16px',
-                          color: 'var(--tk-dim)',
-                          fontWeight: 500,
-                        }}
-                      >
-                        {h}
+                <tr>
+                  {['状态', '类型', '表单', '数据量', '耗时', '开始时间'].map(
+                    (heading) => (
+                      <th key={heading} scope="col">
+                        {heading}
                       </th>
                     ),
                   )}
@@ -221,58 +145,38 @@ const DashboardPage: React.FC = () => {
               </thead>
               <tbody>
                 {recentRuns.slice(0, 8).map((run) => (
-                  <tr
-                    key={run.run_id}
-                    style={{ borderBottom: '1px solid rgba(148,163,184,0.04)' }}
-                  >
-                    <td style={{ padding: '8px 16px' }}>
-                      <DotIndicator
-                        level={runStatusToDotLevel(run.status)}
-                        size={8}
-                      />
+                  <tr key={run.run_id}>
+                    <td>
+                      <SyncStatusTag status={run.status} />
                     </td>
-                    <td
-                      style={{ padding: '8px 16px', color: 'var(--tk-text)' }}
-                    >
-                      {run.sync_type === 'incremental' ? '增量' : '全量'}
+                    <td>
+                      <SyncTypeTag type={run.sync_type} />
                     </td>
-                    <td
-                      style={{ padding: '8px 16px', color: 'var(--tk-text)' }}
-                    >
+                    <td className="dashboard-table__number">
                       {run.form_count}
                     </td>
-                    <td
-                      style={{ padding: '8px 16px', color: 'var(--tk-muted)' }}
-                    >
+                    <td className="dashboard-table__number">
                       {formatNumber(run.total_records)}
                     </td>
-                    <td
-                      style={{ padding: '8px 16px', color: 'var(--tk-muted)' }}
-                    >
-                      {formatDuration(run.duration_seconds)}
-                    </td>
-                    <td style={{ padding: '8px 16px', color: 'var(--tk-dim)' }}>
-                      {run.started_at
-                        ? new Date(run.started_at).toLocaleTimeString('zh-CN')
-                        : '-'}
+                    <td>{formatDuration(run.duration_seconds)}</td>
+                    <td>
+                      <time dateTime={run.started_at || undefined}>
+                        {run.started_at
+                          ? new Date(run.started_at).toLocaleTimeString('zh-CN')
+                          : '-'}
+                      </time>
                     </td>
                   </tr>
                 ))}
               </tbody>
             </table>
-          )}
-        </div>
-      </div>
+          </div>
+        )}
+      </Panel>
     </div>
   );
 };
 
-// ── Sub-components ──
-
-/**
- * 头部健康灯：聚合四项服务状态——全部 ok 才绿，数据缺失灰，任一非 ok 红。
- * （原因：此前读不存在的 health.overall 字段，灯恒红）
- */
 function healthOverall(health: V1HealthStatus | undefined): HealthLevel {
   if (!health) return 'unknown';
   const items = [
@@ -286,65 +190,59 @@ function healthOverall(health: V1HealthStatus | undefined): HealthLevel {
   return 'error';
 }
 
+function healthLabel(level: HealthLevel): string {
+  if (level === 'ok') return '全部服务正常';
+  if (level === 'error') return '存在异常服务';
+  return '服务状态未知';
+}
+
 const KpiCard: React.FC<{
   title: string;
   value: string;
-  subtitle: string;
-  color: string;
-}> = ({ title, value, subtitle, color }) => (
-  <div
-    className="glass-card"
-    style={{
-      padding: '20px 24px',
-      background: `linear-gradient(135deg, ${color}08, transparent)`,
-      borderLeft: `3px solid ${color}`,
-    }}
-  >
-    <Text style={{ fontSize: 12, color: 'var(--tk-dim)' }}>{title}</Text>
-    <div
-      style={{ fontSize: 32, fontWeight: 700, color: '#e2e8f0', marginTop: 4 }}
-    >
-      {value}
-      <Text
-        style={{
-          fontSize: 14,
-          fontWeight: 400,
-          color: 'var(--tk-muted)',
-          marginLeft: 4,
-        }}
-      >
-        {subtitle}
-      </Text>
+  unit?: string;
+  note: string;
+  icon: React.ReactNode;
+  tone: 'primary' | 'success' | 'error' | 'neutral';
+}> = ({ title, value, unit, note, icon, tone }) => (
+  <article className={`dashboard-kpi dashboard-kpi--${tone}`}>
+    <div className="dashboard-kpi__heading">
+      <span>{title}</span>
+      <span className="dashboard-kpi__icon" aria-hidden="true">
+        {icon}
+      </span>
     </div>
-  </div>
+    <div className="dashboard-kpi__value">
+      {value}
+      {unit && <span className="dashboard-kpi__unit">{unit}</span>}
+    </div>
+    <div className="dashboard-kpi__note">{note}</div>
+  </article>
 );
 
 const ServiceStatus: React.FC<{ name: string; status: string }> = ({
   name,
   status,
 }) => {
-  const isOk = status === 'ok';
+  const level: HealthLevel =
+    status === 'ok' ? 'ok' : status === 'unknown' ? 'unknown' : 'error';
   return (
-    <div
-      className="glass-card"
-      style={{
-        padding: '12px 16px',
-        display: 'flex',
-        alignItems: 'center',
-        gap: 10,
-      }}
-    >
-      <DotIndicator level={isOk ? 'ok' : 'error'} size={10} />
-      <Text style={{ fontSize: 13, color: 'var(--tk-text)' }}>{name}</Text>
-      <Text
-        style={{
-          marginLeft: 'auto',
-          fontSize: 12,
-          color: isOk ? 'var(--tk-success)' : 'var(--tk-error)',
-        }}
-      >
-        {isOk ? '正常' : '异常'}
-      </Text>
+    <div className={`dashboard-service dashboard-service--${level}`}>
+      <span className="dashboard-service__indicator" aria-hidden="true">
+        <span className="dashboard-status-dot" />
+      </span>
+      <div className="dashboard-service__content">
+        <span className="dashboard-service__name">{name}</span>
+        <span className="dashboard-service__description">
+          {level === 'ok'
+            ? '连接与响应正常'
+            : level === 'error'
+              ? '请检查服务状态'
+              : '暂未获取状态'}
+        </span>
+      </div>
+      <span className="dashboard-service__status">
+        {level === 'ok' ? '正常' : level === 'error' ? '异常' : '未知'}
+      </span>
     </div>
   );
 };

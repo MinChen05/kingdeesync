@@ -1,7 +1,14 @@
-import { ReloadOutlined } from '@ant-design/icons';
+import {
+  CheckCircleFilled,
+  CloseCircleFilled,
+  CloudServerOutlined,
+  DatabaseOutlined,
+  QuestionCircleFilled,
+  ReloadOutlined,
+  SyncOutlined,
+} from '@ant-design/icons';
 import { App, Button, Tag } from 'antd';
 import React from 'react';
-import { DotIndicator } from '@/components/DotIndicator';
 import Panel from '@/components/Panel';
 import type { V1Diagnostics } from '@/services/v1';
 import type { ConfigData } from '../types';
@@ -15,113 +22,68 @@ interface ConfigPanelProps {
   testing?: boolean;
 }
 
-/* ── Config row helper ── */
-
 const ConfigRow: React.FC<{ label: string; value: React.ReactNode }> = ({
   label,
   value,
 }) => (
-  <div
-    className="list-row"
-    style={{
-      display: 'flex',
-      justifyContent: 'space-between',
-      alignItems: 'center',
-      padding: '8px 12px',
-    }}
-  >
-    <span style={{ fontSize: 12, color: 'var(--tk-dim)' }}>{label}</span>
-    <span
-      style={{
-        fontSize: 12,
-        color: 'var(--tk-text)',
-        fontWeight: 500,
-        fontFamily: 'monospace',
-      }}
-    >
-      {value}
-    </span>
+  <div className="system-config-row">
+    <span className="system-config-label">{label}</span>
+    <span className="system-config-value">{value}</span>
   </div>
 );
-
-/* ── Config group card ── */
 
 const ConfigGroup: React.FC<{
   title: string;
+  description: string;
   icon: React.ReactNode;
   children: React.ReactNode;
-}> = ({ title, icon, children }) => (
-  <div className="glass-card" style={{ padding: 0, overflow: 'hidden' }}>
-    <div
-      style={{
-        padding: '10px 14px',
-        borderBottom: '1px solid rgba(148,163,184,0.08)',
-        display: 'flex',
-        alignItems: 'center',
-        gap: 8,
-      }}
-    >
-      <span style={{ fontSize: 14 }}>{icon}</span>
-      <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--tk-text)' }}>
-        {title}
-      </span>
+}> = ({ title, description, icon, children }) => (
+  <section className="system-config-group">
+    <div className="system-config-group-header">
+      <span className="system-config-group-icon">{icon}</span>
+      <div>
+        <h3>{title}</h3>
+        <p>{description}</p>
+      </div>
     </div>
-    <div style={{ padding: '4px 0' }}>{children}</div>
-  </div>
+    <div className="system-config-list">{children}</div>
+  </section>
 );
-
-/* ── Health status grid ── */
 
 const HealthLevel: React.FC<{
   name: string;
+  description: string;
   status?: string;
-  extra?: string;
-}> = ({ name, status, extra }) => {
-  const unknown = !status;
+  response?: number;
+}> = ({ name, description, status, response }) => {
+  const unknown = !status || status === 'unknown';
   const ok = status === 'ok' || status === 'healthy';
   const level = unknown ? 'unknown' : ok ? 'ok' : 'error';
 
   return (
-    <div
-      className="list-row"
-      style={{
-        display: 'flex',
-        flexDirection: 'column',
-        gap: 8,
-        padding: '10px 12px',
-      }}
-    >
-      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-        <DotIndicator level={level} />
-        <span
-          style={{ fontWeight: 600, color: 'var(--tk-text)', fontSize: 13 }}
-        >
-          {name}
-        </span>
-        <span
-          style={{
-            marginLeft: 'auto',
-            fontSize: 12,
-            color: unknown
-              ? 'var(--tk-dim)'
-              : ok
-                ? 'var(--tk-success)'
-                : 'var(--tk-error)',
-          }}
-        >
-          {unknown ? '未知' : ok ? '正常' : '异常'}
-        </span>
+    <div className={`system-health-card is-${level}`}>
+      <span className="system-health-icon">
+        {unknown ? (
+          <QuestionCircleFilled />
+        ) : ok ? (
+          <CheckCircleFilled />
+        ) : (
+          <CloseCircleFilled />
+        )}
+      </span>
+      <div className="system-health-content">
+        <div className="system-health-heading">
+          <strong>{name}</strong>
+          <span>{unknown ? '状态未知' : ok ? '运行正常' : '连接异常'}</span>
+        </div>
+        <div className="system-health-meta">
+          <span>{description}</span>
+          {response !== undefined && <span>响应 {response} ms</span>}
+        </div>
       </div>
-      {extra && (
-        <span style={{ fontSize: 12, color: 'var(--tk-dim)' }}>
-          <span style={{ color: '#cbd5e1' }}>{extra}</span>
-        </span>
-      )}
     </div>
   );
 };
-
-/* ── Main Panel ── */
 
 const ConfigPanel: React.FC<ConfigPanelProps> = ({
   config,
@@ -137,8 +99,8 @@ const ConfigPanel: React.FC<ConfigPanelProps> = ({
     try {
       await onTestConnections?.();
       message.success('连接测试完成');
-    } catch (err) {
-      message.error(err instanceof Error ? err.message : '测试失败');
+    } catch (error) {
+      message.error(error instanceof Error ? error.message : '测试失败');
     }
   };
 
@@ -147,14 +109,19 @@ const ConfigPanel: React.FC<ConfigPanelProps> = ({
   const sync = config.sync;
 
   return (
-    <div className="space-y-6">
-      {/* 配置总览 */}
-      <Panel title="配置总览" loading={loading}>
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
-          {/* 金蝶配置 */}
+    <div className="system-config-stack">
+      <Panel
+        title="运行参数"
+        loading={loading}
+        extra={
+          <span className="system-panel-caption">当前生效配置 · 只读</span>
+        }
+      >
+        <div className="system-config-grid">
           <ConfigGroup
             title="金蝶 API"
-            icon={<span style={{ color: 'var(--tk-primary)' }}>☁️</span>}
+            description="数据查询与访问控制"
+            icon={<CloudServerOutlined />}
           >
             <ConfigRow label="API 地址" value={kd?.query_url || '-'} />
             <ConfigRow label="账号" value={kd?.username || '-'} />
@@ -168,15 +135,16 @@ const ConfigPanel: React.FC<ConfigPanelProps> = ({
               value={kd?.keep_session_alive ? '是' : '否'}
             />
           </ConfigGroup>
-
-          {/* 数据库配置 */}
           <ConfigGroup
-            title="数据库"
-            icon={<span style={{ color: 'var(--tk-success)' }}>🗄️</span>}
+            title="业务数据库"
+            description="同步结果存储连接"
+            icon={<DatabaseOutlined />}
           >
             <ConfigRow
               label="类型"
-              value={<Tag color="blue">{db?.type || '-'}</Tag>}
+              value={
+                <Tag className="system-neutral-tag">{db?.type || '-'}</Tag>
+              }
             />
             <ConfigRow
               label="地址"
@@ -185,15 +153,18 @@ const ConfigPanel: React.FC<ConfigPanelProps> = ({
             <ConfigRow label="数据库" value={db?.database || '-'} />
             <ConfigRow label="用户" value={db?.user || '-'} />
           </ConfigGroup>
-
-          {/* 同步配置 */}
           <ConfigGroup
-            title="同步设置"
-            icon={<span style={{ color: 'var(--tk-indigo)' }}>🔄</span>}
+            title="同步策略"
+            description="调度频率与执行边界"
+            icon={<SyncOutlined />}
           >
             <ConfigRow
               label="同步模式"
-              value={<Tag color="green">{sync?.sync_type || '-'}</Tag>}
+              value={
+                <Tag className="system-primary-tag">
+                  {sync?.sync_type || '-'}
+                </Tag>
+              }
             />
             <ConfigRow
               label="同步间隔"
@@ -209,7 +180,7 @@ const ConfigPanel: React.FC<ConfigPanelProps> = ({
               label="时间窗口"
               value={
                 sync?.time_window_days != null
-                  ? `${sync.time_window_days}天`
+                  ? `${sync.time_window_days} 天`
                   : '-'
               }
             />
@@ -217,58 +188,61 @@ const ConfigPanel: React.FC<ConfigPanelProps> = ({
               label="同步时段"
               value={
                 sync?.time_window_start && sync?.time_window_end
-                  ? `${sync.time_window_start} ~ ${sync.time_window_end}`
+                  ? `${sync.time_window_start} — ${sync.time_window_end}`
                   : '不限制'
               }
             />
             <ConfigRow
               label="自动同步"
               value={
-                <Tag color={sync?.auto_sync ? 'green' : 'default'}>
-                  {sync?.auto_sync ? '开启' : '关闭'}
+                <Tag
+                  className={
+                    sync?.auto_sync
+                      ? 'system-success-tag'
+                      : 'system-neutral-tag'
+                  }
+                >
+                  {sync?.auto_sync ? '已开启' : '已关闭'}
                 </Tag>
               }
             />
           </ConfigGroup>
         </div>
       </Panel>
-
-      {/* 连接状态 */}
       <Panel
-        title="连接状态"
+        title="服务健康"
+        loading={diagLoading}
         extra={
           <Button
-            size="small"
-            loading={testing || diagLoading}
+            loading={testing}
             icon={<ReloadOutlined />}
             onClick={handleTest}
           >
-            测试连接
+            测试全部连接
           </Button>
         }
       >
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+        <div className="system-health-grid">
           <HealthLevel
             name="金蝶 API"
+            description="业务数据查询服务"
             status={diagnostics?.kingdee_api?.status}
-            extra={
-              diagnostics?.kingdee_api?.response_ms != null
-                ? `${diagnostics.kingdee_api.response_ms}ms`
-                : undefined
-            }
+            response={diagnostics?.kingdee_api?.response_ms}
           />
           <HealthLevel
-            name="数据库"
+            name="业务数据库"
+            description="同步数据存储服务"
             status={diagnostics?.database?.status}
-            extra={
-              diagnostics?.database?.response_ms != null
-                ? `${diagnostics.database.response_ms}ms`
-                : undefined
-            }
+            response={diagnostics?.database?.response_ms}
           />
-          <HealthLevel name="调度器" status={diagnostics?.scheduler?.status} />
+          <HealthLevel
+            name="任务调度器"
+            description="自动同步调度服务"
+            status={diagnostics?.scheduler?.status}
+          />
           <HealthLevel
             name="日志服务"
+            description="运行日志采集服务"
             status={diagnostics?.log_service?.status}
           />
         </div>

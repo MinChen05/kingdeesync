@@ -1,7 +1,7 @@
 import {
   CheckCircleFilled,
   DatabaseOutlined,
-  RocketOutlined,
+  PlayCircleOutlined,
   SyncOutlined,
   WarningFilled,
 } from '@ant-design/icons';
@@ -14,7 +14,6 @@ import type { SyncStatusInfo, TodayStats } from '../hooks';
 interface HeroStatusProps {
   today: TodayStats;
   status: SyncStatusInfo;
-  /** 启动同步成功后触发数据刷新 */
   onSynced: () => void;
 }
 
@@ -22,32 +21,25 @@ type HeroState = 'syncing' | 'healthy' | 'warning';
 
 const STATE_META: Record<
   HeroState,
-  { color: string; label: string; desc: string; icon: React.ReactNode }
+  { label: string; desc: string; icon: React.ReactNode }
 > = {
   syncing: {
-    color: 'var(--tk-primary)',
-    label: '同步进行中',
-    desc: '正在从金蝶云星空拉取数据并写入 SQL Server',
+    label: '正在同步数据',
+    desc: '数据正从金蝶云星空写入 SQL Server，请稍候',
     icon: <SyncOutlined spin />,
   },
   healthy: {
-    color: 'var(--tk-success)',
-    label: '系统运行正常',
-    desc: '各服务连接正常，数据同步就绪',
+    label: '同步服务运行正常',
+    desc: '数据链路连接稳定，所有同步服务均已就绪',
     icon: <CheckCircleFilled />,
   },
   warning: {
-    color: 'var(--tk-warning)',
-    label: '存在同步异常',
-    desc: '今日出现失败任务，建议检查异常表单',
+    label: '发现需要关注的异常',
+    desc: '今日存在失败运行，建议前往监控分析查看详情',
     icon: <WarningFilled />,
   },
 };
 
-/**
- * Hero 状态区：概览页第一视觉层级。
- * 用脉冲指示灯 + 状态文案让用户一眼判断系统好坏，右侧承载主操作（立即同步）或实时进度。
- */
 const HeroStatus: React.FC<HeroStatusProps> = ({ today, status, onSynced }) => {
   const { message } = App.useApp();
   const [starting, setStarting] = useState(false);
@@ -74,110 +66,56 @@ const HeroStatus: React.FC<HeroStatusProps> = ({ today, status, onSynced }) => {
   };
 
   return (
-    <div
-      style={{
-        position: 'relative',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'space-between',
-        gap: 24,
-        flexWrap: 'wrap',
-        padding: '26px 28px',
-        borderRadius: 14,
-        border: '1px solid rgba(148,163,184,0.14)',
-        background: `linear-gradient(120deg, ${meta.color}14 0%, rgba(148,163,184,0.05) 45%, rgba(148,163,184,0.03) 100%)`,
-        boxShadow:
-          'inset 0 1px 0 rgba(255,255,255,0.04), 0 4px 20px rgba(2,6,23,0.35)',
-        overflow: 'hidden',
-      }}
-    >
-      {/* 状态光晕 */}
-      <div
-        style={{
-          position: 'absolute',
-          left: -40,
-          top: -70,
-          width: 240,
-          height: 240,
-          borderRadius: '50%',
-          background: `radial-gradient(circle, ${meta.color}22 0%, transparent 70%)`,
-          pointerEvents: 'none',
-        }}
-      />
-
-      {/* 左侧：脉冲指示 + 状态文案 */}
-      <div
-        style={{
-          display: 'flex',
-          alignItems: 'center',
-          gap: 18,
-          position: 'relative',
-        }}
-      >
-        <span
-          className="status-pulse"
-          style={{ backgroundColor: meta.color, color: meta.color }}
-        />
-        <div>
-          <div
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: 10,
-              fontSize: 22,
-              fontWeight: 700,
-              color: '#f1f5f9',
-            }}
-          >
-            <span style={{ color: meta.color, fontSize: 20 }}>{meta.icon}</span>
-            {meta.label}
-          </div>
-          <div style={{ marginTop: 4, color: 'var(--tk-muted)', fontSize: 13 }}>
-            {meta.desc} · 上次同步 {today.last_sync_time || '-'}
-          </div>
+    <section className={`overview-hero overview-hero--${state}`}>
+      <div className="overview-hero-copy">
+        <div className="overview-hero-kicker">
+          <span className="status-pulse" />
+          同步服务实时状态
+        </div>
+        <div className="overview-hero-title">
+          <span>{meta.icon}</span>
+          {meta.label}
+        </div>
+        <p className="overview-hero-description">{meta.desc}</p>
+        <div className="overview-hero-meta">
+          <span>上次同步</span>
+          <strong>{today.last_sync_time || '暂无记录'}</strong>
         </div>
       </div>
 
-      {/* 右侧：实时进度 或 主操作 */}
-      {state === 'syncing' ? (
-        <div style={{ minWidth: 300, flex: '0 1 360px', position: 'relative' }}>
-          <div
-            style={{
-              display: 'flex',
-              justifyContent: 'space-between',
-              marginBottom: 6,
-              fontSize: 13,
-            }}
-          >
-            <span style={{ color: 'var(--tk-text)' }}>
-              <DatabaseOutlined style={{ color: meta.color, marginRight: 6 }} />
-              {status.current_form || '初始化中...'}
-            </span>
-            <span style={{ color: 'var(--tk-muted)' }}>
-              {status.progress || 0}% ·{' '}
-              {formatDuration(status.elapsed_seconds || 0)}
-            </span>
+      <div className="overview-hero-action">
+        {state === 'syncing' ? (
+          <div>
+            <div className="hero-progress-label">
+              <span>
+                <DatabaseOutlined style={{ marginRight: 7 }} />
+                {status.current_form || '正在初始化同步运行'}
+              </span>
+              <strong>
+                {status.progress || 0}% ·{' '}
+                {formatDuration(status.elapsed_seconds || 0)}
+              </strong>
+            </div>
+            <Progress
+              percent={status.progress || 0}
+              showInfo={false}
+              strokeColor="var(--tk-hero-accent)"
+              trailColor="rgba(255,255,255,0.14)"
+            />
           </div>
-          <Progress
-            percent={status.progress || 0}
-            showInfo={false}
-            strokeColor={meta.color}
-            trailColor="rgba(148,163,184,0.15)"
-          />
-        </div>
-      ) : (
-        <Button
-          type="primary"
-          size="large"
-          icon={<RocketOutlined />}
-          loading={starting}
-          onClick={handleStart}
-          style={{ position: 'relative' }}
-        >
-          立即同步
-        </Button>
-      )}
-    </div>
+        ) : (
+          <Button
+            size="large"
+            icon={<PlayCircleOutlined />}
+            loading={starting}
+            onClick={handleStart}
+            block
+          >
+            立即增量同步
+          </Button>
+        )}
+      </div>
+    </section>
   );
 };
 

@@ -1,10 +1,11 @@
 import {
-  CheckCircleOutlined,
-  CloseCircleOutlined,
-  ExclamationCircleOutlined,
+  ArrowRightOutlined,
+  CheckCircleFilled,
+  CloseCircleFilled,
+  ExclamationCircleFilled,
+  HistoryOutlined,
 } from '@ant-design/icons';
 import { Link } from '@umijs/max';
-import { Empty } from 'antd';
 import React from 'react';
 import Panel from '@/components/Panel';
 import SyncStatusTag from '@/components/SyncStatusTag';
@@ -17,63 +18,67 @@ interface LastSyncSummaryProps {
   loading?: boolean;
 }
 
-/**
- * 上次同步结果摘要。
- */
 const LastSyncSummary: React.FC<LastSyncSummaryProps> = ({ run, loading }) => {
   if (loading || !run) {
     return (
-      <Panel title="上次同步" loading={loading}>
-        <Empty
-          image={Empty.PRESENTED_IMAGE_SIMPLE}
-          description="暂无同步记录"
-        />
+      <Panel title="最近执行" loading={loading}>
+        <div className="sync-last-empty">
+          <HistoryOutlined />
+          <span>暂无同步记录，首次执行结果将显示在这里</span>
+        </div>
       </Panel>
     );
   }
 
-  const statusIcon = (status: string) => {
-    if (status === 'success')
-      return <CheckCircleOutlined style={{ color: 'var(--tk-success)' }} />;
-    if (status === 'failed')
-      return <CloseCircleOutlined style={{ color: 'var(--tk-error)' }} />;
-    return <ExclamationCircleOutlined style={{ color: 'var(--tk-warning)' }} />;
-  };
+  const isSuccess = run.status === 'success';
+  const isFailed = ['failed', 'failed_abnormal_exit'].includes(run.status);
+  const tone = isSuccess ? 'success' : isFailed ? 'error' : 'warning';
+  const statusIcon = isSuccess ? (
+    <CheckCircleFilled />
+  ) : isFailed ? (
+    <CloseCircleFilled />
+  ) : (
+    <ExclamationCircleFilled />
+  );
 
   return (
     <Panel
-      title="上次同步"
+      title="最近执行"
       extra={
-        <Link
-          to="/monitor"
-          style={{ fontSize: 12, color: 'var(--tk-primary)' }}
-        >
-          查看全部 →
+        <Link to="/monitor" className="sync-history-link">
+          执行历史 <ArrowRightOutlined />
         </Link>
       }
     >
-      <div className="flex items-center justify-between">
-        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-          {statusIcon(run.status)}
-          <SyncStatusTag status={run.status} />
-          <SyncTypeTag type={run.sync_type} />
-          <span style={{ fontSize: 11, color: 'var(--tk-dim)', fontFamily: 'monospace' }}>
-            {run.run_id}
-          </span>
+      <div className="sync-last-run">
+        <div className="sync-last-run-main">
+          <span className={`sync-last-run-icon is-${tone}`}>{statusIcon}</span>
+          <div className="sync-last-run-copy">
+            <div className="sync-last-run-tags">
+              <SyncStatusTag status={run.status} />
+              <SyncTypeTag type={run.sync_type} />
+            </div>
+            <span className="sync-last-run-id" title={run.run_id}>
+              {run.run_id}
+            </span>
+          </div>
+          <time className="sync-last-run-time">{run.started_at || '-'}</time>
         </div>
-        <div style={{ display: 'flex', gap: 20, alignItems: 'center' }}>
-          <span style={{ fontSize: 13 }}>
-            {run.total_records?.toLocaleString() || 0} 条
-          </span>
-          <span style={{ fontSize: 13 }}>
-            {run.success_forms || 0}/{run.form_count || 0} 表单
-          </span>
-          <span style={{ fontSize: 13 }}>
-            {formatDuration(run.duration_seconds)}
-          </span>
-          <span style={{ fontSize: 12, color: 'var(--tk-dim)' }}>
-            {run.started_at || '-'}
-          </span>
+        <div className="sync-last-run-metrics">
+          <div>
+            <span>处理记录</span>
+            <strong>{(run.total_records || 0).toLocaleString()}</strong>
+            <small>条</small>
+          </div>
+          <div>
+            <span>成功表单</span>
+            <strong>{run.success_forms || 0}</strong>
+            <small>/ {run.form_count || 0}</small>
+          </div>
+          <div>
+            <span>执行耗时</span>
+            <strong>{formatDuration(run.duration_seconds)}</strong>
+          </div>
         </div>
       </div>
     </Panel>

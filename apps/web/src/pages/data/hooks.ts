@@ -1,8 +1,8 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { getDiagnostics, listForms } from '@/services/v1';
-import type { V1DiagService, V1Form } from '@/services/v1';
-import type { DiagInfo, FormItem, FormStat } from './types';
 import { request } from '@umijs/max';
+import type { V1Form } from '@/services/v1';
+import { getDiagnostics, listForms } from '@/services/v1';
+import type { DiagInfo, FormItem, FormStat } from './types';
 
 /**
  * data 页面数据 Hook — v1 版。
@@ -32,16 +32,25 @@ export function useDataPage() {
 
   // 表单统计 — 从 V1Form 自带字段构建
   const statsMap = new Map<string, FormStat>(
-    allForms.map(f => [f.form_name, {
-      form_name: f.form_name,
-      failed_records: f.error_count ?? 0,
-      total_runs: 0,
-    }]),
+    allForms.map((f) => [
+      f.form_name,
+      {
+        form_name: f.form_name,
+        failed_records: f.error_count ?? 0,
+        total_runs: 0,
+      },
+    ]),
   );
 
   // 更新表单启用状态
   const updateReq = useMutation({
-    mutationFn: ({ formName, enabled }: { formName: string; enabled: boolean }) =>
+    mutationFn: ({
+      formName,
+      enabled,
+    }: {
+      formName: string;
+      enabled: boolean;
+    }) =>
       request(`/api/v1/forms/${formName}`, {
         method: 'PUT',
         data: { enabled },
@@ -53,7 +62,13 @@ export function useDataPage() {
 
   // 更新表单配置（FormID, FieldKeys, FilterString, FieldMap）
   const updateConfigReq = useMutation({
-    mutationFn: ({ formName, data }: { formName: string; data: Partial<FormItem> }) =>
+    mutationFn: ({
+      formName,
+      data,
+    }: {
+      formName: string;
+      data: Partial<FormItem>;
+    }) =>
       request(`/api/v1/forms/${formName}`, {
         method: 'PUT',
         data,

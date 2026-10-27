@@ -1,6 +1,6 @@
 import { join } from 'node:path';
 import { defineConfig } from '@umijs/max';
-import defaultSettings from './defaultSettings';
+import defaultSettings, { themeConfig } from './defaultSettings';
 import routes from './routes';
 
 const PUBLIC_PATH = '/';
@@ -16,23 +16,22 @@ export default defineConfig({
   esbuildMinifyIIFE: true,
   title: '金蝶数据同步',
   layout: {
-    locale: true,
+    locale: false,
     ...defaultSettings,
   },
   locale: {
     default: 'zh-CN',
-    antd: true,
-    baseNavigator: true,
+    antd: false,
+    baseNavigator: false,
   },
   antd: {
     appConfig: {},
     configProvider: {
       variant: 'filled',
+      theme: themeConfig,
     },
   },
-  headScripts: [
-    { src: join(PUBLIC_PATH, 'scripts/loading.js'), async: true },
-  ],
+  headScripts: [{ src: join(PUBLIC_PATH, 'scripts/loading.js'), async: true }],
   plugins: [],
   exportStatic: {},
   define: {

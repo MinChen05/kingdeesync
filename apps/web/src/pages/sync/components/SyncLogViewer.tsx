@@ -1,6 +1,11 @@
-import { ClearOutlined, CopyOutlined } from '@ant-design/icons';
-import { Button, Empty, Tooltip } from 'antd';
-import React, { useEffect, useRef } from 'react';
+import {
+  ArrowDownOutlined,
+  ClearOutlined,
+  CopyOutlined,
+  FileTextOutlined,
+} from '@ant-design/icons';
+import { App, Button, Tooltip } from 'antd';
+import React, { useEffect, useRef, useState } from 'react';
 import Panel from '@/components/Panel';
 import type { V1RunEvent } from '@/services/v1';
 
@@ -9,78 +14,144 @@ interface SyncLogViewerProps {
   onClear: () => void;
 }
 
-/**
- * 实时日志查看器。
- */
 const SyncLogViewer: React.FC<SyncLogViewerProps> = ({ logs, onClear }) => {
-  const logEndRef = useRef<HTMLDivElement>(null);
+  const { message } = App.useApp();
+  const containerRef = useRef<HTMLDivElement>(null);
+  const [following, setFollowing] = useState(true);
 
   useEffect(() => {
-    logEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [logs]);
+    if (following && containerRef.current) {
+      containerRef.current.scrollTop = containerRef.current.scrollHeight;
+    }
+  }, [logs, following]);
 
-  const handleCopy = () => {
+  const handleCopy = async () => {
     const text = logs
-      .map(l => `${l.created_at} [${l.level}] ${l.form_name} ${l.message}`)
+      .map(
+        (log) =>
+          `${log.created_at} [${log.level}] ${log.form_name} ${log.message}`,
+      )
       .join('\n');
-    navigator.clipboard?.writeText(text).catch(() => {
-      const ta = document.createElement('textarea');
-      ta.value = text;
-      document.body.appendChild(ta);
-      ta.select();
-      document.execCommand('copy');
-      document.body.removeChild(ta);
-    });
+    try {
+      if (navigator.clipboard) {
+        await navigator.clipboard.writeText(text);
+      } else {
+        const textarea = document.createElement('textarea');
+        textarea.value = text;
+        document.body.appendChild(textarea);
+        textarea.select();
+        document.execCommand('copy');
+        document.body.removeChild(textarea);
+      }
+      message.success('日志已复制');
+    } catch {
+      message.error('复制失败，请手动选择日志内容');
+    }
+  };
+
+  const scrollToLatest = () => {
+    setFollowing(true);
+    if (containerRef.current) {
+      containerRef.current.scrollTo({
+        top: containerRef.current.scrollHeight,
+        behavior: 'smooth',
+      });
+    }
   };
 
   return (
     <Panel
-      title="实时日志"
+      title="运行日志"
       extra={
-        logs.length > 0 && (
+        <div className="sync-log-actions">
+          <span>{logs.length} 条</span>
           <Button.Group size="small">
-            <Tooltip title="复制">
-              <Button icon={<CopyOutlined />} onClick={handleCopy} />
+            <Tooltip title="复制全部日志">
+              <Button
+                aria-label="复制全部日志"
+                icon={<CopyOutlined />}
+                disabled={logs.length === 0}
+                onClick={handleCopy}
+              />
             </Tooltip>
-            <Tooltip title="清空">
-              <Button icon={<ClearOutlined />} onClick={onClear} />
+            <Tooltip title="清空当前视图">
+              <Button
+                aria-label="清空当前日志视图"
+                icon={<ClearOutlined />}
+                disabled={logs.length === 0}
+                onClick={() => {
+                  setFollowing(true);
+                  onClear();
+                }}
+              />
             </Tooltip>
           </Button.Group>
-        )
+        </div>
       }
     >
-      <div
-        className="h-64 overflow-y-auto rounded-md p-4 font-mono text-xs"
-        style={{
-          backgroundColor: '#020817',
-          color: 'var(--tk-muted)',
-          border: '1px solid rgba(148,163,184,0.08)',
-        }}
-      >
-        {logs.length === 0 ? (
-          <div className="flex h-full items-center justify-center">
-            <Empty
-              image={Empty.PRESENTED_IMAGE_SIMPLE}
-              description="暂无日志"
+      <div className="sync-log-shell">
+        <div className="sync-log-toolbar">
+          <span>
+            <span
+              className={`sync-log-live-dot${following ? ' is-active' : ''}`}
             />
-          </div>
-        ) : (
-          <div className="space-y-0.5">
-            {logs.map((log) => (
-              <div
-                key={`${log.created_at}-${log.form_name}-${log.message}`}
-                className="break-all leading-5"
-              >
-                <span style={{ color: 'var(--tk-unknown)' }}>
-                  {log.created_at}
-                </span>
-                <span style={{ marginLeft: 8, color: '#cbd5e1' }}>
-                  [{log.level}] {log.form_name} {log.message}
-                </span>
-              </div>
-            ))}
-            <div ref={logEndRef} />
-          </div>
+            {following ? '自动跟随最新日志' : '已暂停自动跟随'}
+          </span>
+          <span>按时间正序</span>
+        </div>
+        <div
+          ref={containerRef}
+          className="sync-log-list"
+          role="log"
+          aria-label="同步运行日志"
+          onScroll={(event) => {
+            const element = event.currentTarget;
+            const distanceToBottom =
+              element.scrollHeight - element.scrollTop - element.clientHeight;
+            setFollowing(distanceToBottom < 24);
+          }}
+        >
+          {logs.length === 0 ? (
+            <div className="sync-log-empty">
+              <FileTextOutlined />
+              <strong>暂无运行日志</strong>
+              <span>任务启动后，执行事件将在这里按时间显示</span>
+            </div>
+          ) : (
+            logs.map((log) => {
+              const level = log.level.toLowerCase();
+              const tone = ['error', 'warn', 'warning'].includes(level)
+                ? level === 'error'
+                  ? 'error'
+                  : 'warning'
+                : level === 'info'
+                  ? 'info'
+                  : 'neutral';
+              return (
+                <div
+                  key={`${log.created_at}-${log.form_name}-${log.message}`}
+                  className={`sync-log-entry is-${tone}`}
+                >
+                  <time>{log.created_at}</time>
+                  <span className="sync-log-level">{log.level}</span>
+                  <span className="sync-log-form">
+                    {log.form_name || '系统'}
+                  </span>
+                  <span className="sync-log-message">{log.message}</span>
+                </div>
+              );
+            })
+          )}
+        </div>
+        {!following && logs.length > 0 && (
+          <Button
+            size="small"
+            icon={<ArrowDownOutlined />}
+            className="sync-log-latest"
+            onClick={scrollToLatest}
+          >
+            回到最新
+          </Button>
         )}
       </div>
     </Panel>

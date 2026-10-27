@@ -1,8 +1,8 @@
 import React from 'react';
-import type { V1HealthItem } from '@/services/v1';
-import type { DataSource, HealthStatus } from '../hooks';
 import { DotIndicator } from '@/components/DotIndicator';
 import Panel from '@/components/Panel';
+import type { V1HealthItem } from '@/services/v1';
+import type { DataSource, HealthStatus } from '../hooks';
 
 interface HealthGridProps {
   health: HealthStatus;
@@ -114,7 +114,11 @@ const HealthGrid: React.FC<HealthGridProps> = ({
                   level={unknown ? 'unknown' : ok ? 'ok' : 'error'}
                 />
                 <span
-                  style={{ fontWeight: 600, color: 'var(--tk-text)', fontSize: 13 }}
+                  style={{
+                    fontWeight: 600,
+                    color: 'var(--tk-text)',
+                    fontSize: 13,
+                  }}
                 >
                   {s.name}
                 </span>
@@ -122,7 +126,11 @@ const HealthGrid: React.FC<HealthGridProps> = ({
                   style={{
                     marginLeft: 'auto',
                     fontSize: 12,
-                    color: unknown ? 'var(--tk-dim)' : ok ? 'var(--tk-success)' : 'var(--tk-error)',
+                    color: unknown
+                      ? 'var(--tk-dim)'
+                      : ok
+                        ? 'var(--tk-success)'
+                        : 'var(--tk-error)',
                   }}
                 >
                   {unknown ? '未知' : ok ? '正常' : '异常'}
@@ -137,7 +145,7 @@ const HealthGrid: React.FC<HealthGridProps> = ({
                     style={{ fontSize: 12, color: 'var(--tk-dim)' }}
                   >
                     {m.label}{' '}
-                    <span style={{ color: '#cbd5e1' }}>{m.value}</span>
+                    <span style={{ color: 'var(--tk-text)' }}>{m.value}</span>
                   </span>
                 ))}
               </div>

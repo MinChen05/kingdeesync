@@ -1,14 +1,26 @@
 import {
+  CalendarOutlined,
+  CheckCircleOutlined,
+  ClockCircleOutlined,
+  CloseOutlined,
   DeleteOutlined,
   EditOutlined,
   PauseCircleOutlined,
   PlayCircleOutlined,
   PlusOutlined,
   SearchOutlined,
-  SelectOutlined,
 } from '@ant-design/icons';
-import { App, Button, Checkbox, Input, Popconfirm } from 'antd';
+import {
+  App,
+  Button,
+  Checkbox,
+  Input,
+  Popconfirm,
+  Segmented,
+  Tooltip,
+} from 'antd';
 import React, { useState } from 'react';
+import Panel from '@/components/Panel';
 import { formatCron } from '../cron';
 import type { ScheduleJob, ScheduleJobSubmit } from '../types';
 import { parseForms } from '../types';
@@ -17,8 +29,6 @@ import JobEditDrawer from './JobEditDrawer';
 interface JobTableProps {
   jobs: ScheduleJob[];
   loading: boolean;
-  // 回调必须返回 Promise：失败时 reject（页面层已弹错误 toast），
-  // 组件只在 resolve 后提示成功（原因：此前不 await 先弹成功，失败也报"已创建/已删除"）
   onCreate: (job: ScheduleJobSubmit) => Promise<unknown>;
   onUpdate: (id: number, job: ScheduleJobSubmit) => Promise<unknown>;
   onDelete: (id: number) => Promise<unknown>;
@@ -29,35 +39,10 @@ interface JobTableProps {
   batchActioning: boolean;
 }
 
+type StatusFilter = 'all' | 'enabled' | 'disabled';
+
 const isDefaultJob = (name: string) => name === 'default_incremental';
 
-/** 小标签 */
-const SmallTag: React.FC<{ color: string; children: React.ReactNode }> = ({
-  color,
-  children,
-}) => (
-  <span
-    style={{
-      display: 'inline-flex',
-      alignItems: 'center',
-      justifyContent: 'center',
-      width: 44,
-      height: 22,
-      borderRadius: 6,
-      fontSize: 11,
-      fontWeight: 500,
-      color,
-      background: `${color}18`,
-      flexShrink: 0,
-    }}
-  >
-    {children}
-  </span>
-);
-
-/**
- * 任务列表：卡片列表 + 搜索 + 编辑/删除
- */
 const JobTable: React.FC<JobTableProps> = ({
   jobs,
   loading,
@@ -72,18 +57,43 @@ const JobTable: React.FC<JobTableProps> = ({
 }) => {
   const { message } = App.useApp();
   const [search, setSearch] = useState('');
+  const [statusFilter, setStatusFilter] = useState<StatusFilter>('all');
   const [drawerVisible, setDrawerVisible] = useState(false);
   const [editingJob, setEditingJob] = useState<ScheduleJob | null>(null);
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
 
   const filteredJobs = jobs.filter((job) => {
+    if (statusFilter === 'enabled' && !job.enabled) return false;
+    if (statusFilter === 'disabled' && job.enabled) return false;
     if (!search) return true;
-    const s = search.toLowerCase();
+    const keyword = search.toLowerCase();
     const forms = parseForms(job.forms).join(' ');
     return (
-      job.name.toLowerCase().includes(s) || forms.toLowerCase().includes(s)
+      job.name.toLowerCase().includes(keyword) ||
+      forms.toLowerCase().includes(keyword) ||
+      formatCron(job.cron_expr).toLowerCase().includes(keyword)
     );
   });
+
+  const visibleSelectedCount = filteredJobs.filter((job) =>
+    selectedIds.has(job.id),
+  ).length;
+  const allVisibleSelected =
+    filteredJobs.length > 0 && visibleSelectedCount === filteredJobs.length;
+
+  const openEditor = (job: ScheduleJob | null) => {
+    setEditingJob(job);
+    setDrawerVisible(true);
+  };
+
+  const toggleSelected = (id: number) => {
+    setSelectedIds((previous) => {
+      const next = new Set(previous);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
 
   const handleSubmit = async (data: ScheduleJobSubmit) => {
     try {
@@ -95,303 +105,337 @@ const JobTable: React.FC<JobTableProps> = ({
         message.success('任务已创建');
       }
       setDrawerVisible(false);
-    } catch {
-      // 页面层已弹错误提示；保持抽屉打开让用户可修正后重试
-    }
+      setEditingJob(null);
+    } catch {}
   };
 
-  // 批量操作统一封装：仅在真实成功后提示并清空选择（原因：失败时报成功会误导运维）
-  const runBatch = async (action: 'enable' | 'disable' | 'delete', successText: string) => {
+  const runBatch = async (
+    action: 'enable' | 'disable' | 'delete',
+    successText: string,
+  ) => {
+    if (selectedIds.size === 0) return;
     try {
       await onBatchAction(action, Array.from(selectedIds));
       message.success(successText);
       setSelectedIds(new Set());
-    } catch {
-      // 页面层已弹错误提示
-    }
+    } catch {}
   };
 
   return (
     <>
-      <div className="glass-card" style={{ padding: '20px 24px' }}>
-        {/* 标题栏 */}
-        <div
-          style={{
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'space-between',
-            marginBottom: 16,
-            flexWrap: 'wrap',
-            gap: 12,
-          }}
-        >
-          <span style={{ fontSize: 15, fontWeight: 600, color: '#e2e8f0' }}>
+      <Panel
+        title={
+          <span className="schedule-list-title">
             定时任务
-            <span
-              style={{
-                fontSize: 13,
-                fontWeight: 400,
-                color: 'var(--tk-dim)',
-                marginLeft: 8,
-              }}
-            >
-              ({jobs.length}个)
+            <span>
+              {filteredJobs.length} / {jobs.length}
             </span>
           </span>
-          <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-            {selectedIds.size > 0 && (
-              <div
-                style={{
-                  display: 'flex',
-                  gap: 4,
-                  alignItems: 'center',
-                  marginRight: 4,
-                }}
-              >
-                <span style={{ fontSize: 12, color: 'var(--tk-dim)' }}>
-                  {selectedIds.size} 个已选
+        }
+        loading={loading}
+        extra={
+          <Button
+            type="primary"
+            icon={<PlusOutlined />}
+            onClick={() => openEditor(null)}
+            loading={creating && !drawerVisible}
+          >
+            新建任务
+          </Button>
+        }
+      >
+        <div className="schedule-jobs-content">
+          <div className="filter-toolbar schedule-filter-toolbar">
+            <Input
+              placeholder="搜索任务、表单或执行频率"
+              prefix={<SearchOutlined />}
+              allowClear
+              value={search}
+              onChange={(event) => setSearch(event.target.value)}
+              className="schedule-search"
+              aria-label="搜索定时任务"
+            />
+            <Segmented
+              value={statusFilter}
+              onChange={(value) => setStatusFilter(value as StatusFilter)}
+              options={[
+                { label: `全部 ${jobs.length}`, value: 'all' },
+                {
+                  label: `已启用 ${jobs.filter((job) => job.enabled).length}`,
+                  value: 'enabled',
+                },
+                {
+                  label: `已停用 ${jobs.filter((job) => !job.enabled).length}`,
+                  value: 'disabled',
+                },
+              ]}
+            />
+            <Checkbox
+              checked={allVisibleSelected}
+              indeterminate={visibleSelectedCount > 0 && !allVisibleSelected}
+              disabled={filteredJobs.length === 0}
+              onChange={(event) => {
+                setSelectedIds((previous) => {
+                  const next = new Set(previous);
+                  for (const job of filteredJobs) {
+                    if (event.target.checked) next.add(job.id);
+                    else next.delete(job.id);
+                  }
+                  return next;
+                });
+              }}
+              className="schedule-select-all"
+            >
+              选择当前结果
+            </Checkbox>
+          </div>
+
+          <div
+            className={`schedule-batch-bar${selectedIds.size > 0 ? ' has-selection' : ''}`}
+            aria-live="polite"
+          >
+            {selectedIds.size > 0 ? (
+              <>
+                <span>
+                  已选择 <strong>{selectedIds.size}</strong> 个任务
                 </span>
-                <Button
-                  size="small"
-                  icon={<PlayCircleOutlined />}
-                  onClick={() => runBatch('enable', '已批量启用')}
-                  loading={batchActioning}
-                >
-                  启用
-                </Button>
-                <Button
-                  size="small"
-                  icon={<PauseCircleOutlined />}
-                  onClick={() => runBatch('disable', '已批量禁用')}
-                  loading={batchActioning}
-                >
-                  禁用
-                </Button>
-                <Popconfirm
-                  title={`确定删除选中的 ${selectedIds.size} 个任务？删除后不可恢复`}
-                  onConfirm={() => runBatch('delete', '已批量删除')}
-                >
+                <div>
                   <Button
                     size="small"
-                    danger
-                    icon={<DeleteOutlined />}
+                    icon={<PlayCircleOutlined />}
+                    onClick={() => runBatch('enable', '已批量启用')}
                     loading={batchActioning}
                   >
-                    删除
+                    启用
                   </Button>
-                </Popconfirm>
-              </div>
-            )}
-            <Input
-              placeholder="搜索名称或表单"
-              prefix={<SearchOutlined style={{ color: 'var(--tk-dim)' }} />}
-              allowClear
-              size="small"
-              style={{ width: 200 }}
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-            />
-            <Button
-              type="primary"
-              size="small"
-              icon={<PlusOutlined />}
-              onClick={() => {
-                setEditingJob(null);
-                setDrawerVisible(true);
-              }}
-              loading={creating}
-            >
-              新建
-            </Button>
-          </div>
-        </div>
-
-        {/* 任务列表 */}
-        {loading ? (
-          <div
-            style={{
-              textAlign: 'center',
-              padding: '40px 0',
-              color: 'var(--tk-dim)',
-              fontSize: 13,
-            }}
-          >
-            加载中...
-          </div>
-        ) : filteredJobs.length === 0 ? (
-          <div
-            style={{
-              textAlign: 'center',
-              padding: '40px 0',
-              color: 'var(--tk-dim)',
-              fontSize: 13,
-            }}
-          >
-            {search ? '未找到匹配的任务' : '暂无定时任务'}
-          </div>
-        ) : (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-            {filteredJobs.map((job) => {
-              const jobForms = parseForms(job.forms);
-              return (
-                <div
-                  key={job.id}
-                  className="list-row"
-                  style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'space-between',
-                    padding: '12px 16px',
-                  }}
-                >
-                  {/* 左侧：checkbox + 指示灯 + 信息 */}
-                  <div
-                    style={{
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: 12,
-                      minWidth: 0,
-                      flex: 1,
-                    }}
+                  <Button
+                    size="small"
+                    icon={<PauseCircleOutlined />}
+                    onClick={() => runBatch('disable', '已批量禁用')}
+                    loading={batchActioning}
                   >
-                    <Checkbox
-                      checked={selectedIds.has(job.id)}
-                      onChange={() => {
-                        setSelectedIds((prev) => {
-                          const next = new Set(prev);
-                          if (next.has(job.id)) next.delete(job.id);
-                          else next.add(job.id);
-                          return next;
-                        });
-                      }}
-                    />
-                    {/* 状态灯 */}
-                    <div
-                      className="shrink-0 rounded-full"
-                      style={{
-                        width: 7,
-                        height: 7,
-                        backgroundColor: job.enabled ? '#22c55e' : '#475569',
-                        boxShadow: job.enabled
-                          ? '0 0 6px rgba(34,197,94,0.5)'
-                          : 'none',
-                      }}
-                    />
-                    {/* 名称 + 详情 */}
-                    <div style={{ minWidth: 0, flex: 1 }}>
-                      <div
-                        style={{
-                          display: 'flex',
-                          alignItems: 'center',
-                          gap: 6,
-                        }}
-                      >
-                        <span
-                          style={{
-                            fontWeight: 500,
-                            color: '#e2e8f0',
-                            fontSize: 14,
-                          }}
-                        >
-                          {job.name}
-                        </span>
-                        {isDefaultJob(job.name) && (
-                          <SmallTag color="#f59e0b">默认</SmallTag>
-                        )}
-                      </div>
-                      <div
-                        style={{
-                          display: 'flex',
-                          alignItems: 'center',
-                          gap: 8,
-                          marginTop: 3,
-                          fontSize: 12,
-                          color: 'var(--tk-dim)',
-                        }}
-                      >
-                        <span className="shrink-0">
-                          {formatCron(job.cron_expr)}
-                        </span>
-                        {jobForms.length > 0 && (
-                          <>
-                            <span style={{ color: 'rgba(148,163,184,0.3)' }}>
-                              |
-                            </span>
-                            <span className="shrink-0">{jobForms.length}</span>
-                            <span>个表单</span>
-                          </>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* 右侧：标签 + 操作 */}
-                  <div
-                    style={{
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: 6,
-                      flexShrink: 0,
-                    }}
+                    停用
+                  </Button>
+                  <Popconfirm
+                    title={`确定删除选中的 ${selectedIds.size} 个任务？`}
+                    description="删除后不可恢复，请确认这些任务不再需要。"
+                    onConfirm={() => runBatch('delete', '已批量删除')}
+                    okText="删除"
+                    cancelText="取消"
                   >
-                    <SmallTag
-                      color={
-                        job.sync_type === 'incremental' ? '#38bdf8' : '#34d399'
-                      }
-                    >
-                      {job.sync_type === 'incremental' ? '增量' : '全量'}
-                    </SmallTag>
-                    <SmallTag color={job.enabled ? '#22c55e' : '#475569'}>
-                      {job.enabled ? '启用' : '禁用'}
-                    </SmallTag>
                     <Button
-                      type="text"
                       size="small"
-                      icon={<EditOutlined style={{ fontSize: 13 }} />}
-                      style={{ color: 'var(--tk-dim)', width: 28, height: 28 }}
-                      onClick={() => {
-                        setEditingJob(job);
-                        setDrawerVisible(true);
-                      }}
+                      danger
+                      icon={<DeleteOutlined />}
+                      loading={batchActioning}
+                    >
+                      删除
+                    </Button>
+                  </Popconfirm>
+                  <Tooltip title="清除选择">
+                    <Button
+                      size="small"
+                      type="text"
+                      aria-label="清除选择"
+                      icon={<CloseOutlined />}
+                      onClick={() => setSelectedIds(new Set())}
                     />
-                    {!isDefaultJob(job.name) && (
-                      <Popconfirm
-                        title="确定删除该定时任务？删除后不可恢复"
-                        onConfirm={async () => {
-                          try {
-                            await onDelete(job.id);
-                            message.success('任务已删除');
-                          } catch {
-                            // 页面层已弹错误提示
-                          }
-                        }}
-                        okText="确定"
-                        cancelText="取消"
-                      >
+                  </Tooltip>
+                </div>
+              </>
+            ) : (
+              <span className="schedule-batch-hint">
+                勾选任务后可批量启用、停用或删除
+              </span>
+            )}
+          </div>
+
+          {filteredJobs.length === 0 ? (
+            <div className="schedule-empty">
+              <CalendarOutlined />
+              <strong>
+                {search || statusFilter !== 'all'
+                  ? '没有匹配的任务'
+                  : '暂无定时任务'}
+              </strong>
+              <span>
+                {search || statusFilter !== 'all'
+                  ? '尝试调整搜索关键词或状态筛选'
+                  : '新建任务后，即可按计划自动执行数据同步'}
+              </span>
+              {!search && statusFilter === 'all' && (
+                <Button
+                  type="primary"
+                  ghost
+                  icon={<PlusOutlined />}
+                  onClick={() => openEditor(null)}
+                >
+                  新建第一个任务
+                </Button>
+              )}
+            </div>
+          ) : (
+            <div className="schedule-job-list">
+              {filteredJobs.map((job) => {
+                const jobForms = parseForms(job.forms);
+                const selected = selectedIds.has(job.id);
+                return (
+                  <div
+                    key={job.id}
+                    className={`schedule-job-card interactive-list${selected ? ' is-selected' : ''}${!job.enabled ? ' is-disabled' : ''}`}
+                  >
+                    <div className="schedule-job-select">
+                      <Checkbox
+                        checked={selected}
+                        onChange={() => toggleSelected(job.id)}
+                        aria-label={`选择任务 ${job.name}`}
+                      />
+                    </div>
+                    <button
+                      type="button"
+                      className="schedule-job-main"
+                      aria-label={`编辑任务 ${job.name}`}
+                      onClick={() => openEditor(job)}
+                    >
+                      <div className="schedule-job-heading">
+                        <div className="schedule-job-name">
+                          <span
+                            className={`schedule-job-state${job.enabled ? ' is-enabled' : ''}`}
+                          />
+                          <strong>{job.name}</strong>
+                          {isDefaultJob(job.name) && (
+                            <span className="schedule-job-badge is-default">
+                              默认
+                            </span>
+                          )}
+                        </div>
+                        <div className="schedule-job-tags">
+                          <span
+                            className={`schedule-job-badge is-${job.sync_type}`}
+                          >
+                            {job.sync_type === 'incremental'
+                              ? '增量同步'
+                              : '全量同步'}
+                          </span>
+                          <span
+                            className={`schedule-job-badge${job.enabled ? ' is-enabled' : ' is-disabled'}`}
+                          >
+                            {job.enabled ? '已启用' : '已停用'}
+                          </span>
+                        </div>
+                      </div>
+                      <div className="schedule-job-details">
+                        <div className="schedule-job-frequency">
+                          <ClockCircleOutlined />
+                          <div>
+                            <span>执行频率</span>
+                            <strong title={job.cron_expr}>
+                              {formatCron(job.cron_expr)}
+                            </strong>
+                          </div>
+                        </div>
+                        <div className="schedule-job-next">
+                          <CalendarOutlined />
+                          <div>
+                            <span>下一次执行</span>
+                            <strong>{job.next_run_at || '暂未安排'}</strong>
+                          </div>
+                        </div>
+                        <div className="schedule-job-forms">
+                          <span>同步范围</span>
+                          <div>
+                            {jobForms.length === 0 ? (
+                              <span className="schedule-form-chip">
+                                全部已启用表单
+                              </span>
+                            ) : (
+                              <>
+                                {jobForms.slice(0, 2).map((form) => (
+                                  <span
+                                    key={form}
+                                    className="schedule-form-chip"
+                                  >
+                                    {form}
+                                  </span>
+                                ))}
+                                {jobForms.length > 2 && (
+                                  <span
+                                    className="schedule-form-more"
+                                    title={jobForms.join('、')}
+                                  >
+                                    +{jobForms.length - 2}
+                                  </span>
+                                )}
+                              </>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                      {(job.last_run_at || job.last_status) && (
+                        <div className="schedule-job-last-run">
+                          <span>上次执行 {job.last_run_at || '-'}</span>
+                          {job.last_status && (
+                            <span className={`is-${job.last_status}`}>
+                              {job.last_status === 'success' ? (
+                                <CheckCircleOutlined />
+                              ) : null}
+                              {job.last_status}
+                            </span>
+                          )}
+                        </div>
+                      )}
+                    </button>
+                    <div className="schedule-job-actions">
+                      <Tooltip title="编辑任务">
                         <Button
                           type="text"
-                          size="small"
-                          danger
-                          icon={<DeleteOutlined style={{ fontSize: 13 }} />}
-                          loading={deleting}
-                          style={{ width: 28, height: 28 }}
+                          aria-label={`编辑 ${job.name}`}
+                          icon={<EditOutlined />}
+                          onClick={() => openEditor(job)}
                         />
-                      </Popconfirm>
-                    )}
+                      </Tooltip>
+                      {!isDefaultJob(job.name) && (
+                        <Popconfirm
+                          title="确定删除该定时任务？"
+                          description="删除后不可恢复。"
+                          onConfirm={async () => {
+                            try {
+                              await onDelete(job.id);
+                              message.success('任务已删除');
+                            } catch {}
+                          }}
+                          okText="删除"
+                          cancelText="取消"
+                        >
+                          <Tooltip title="删除任务">
+                            <Button
+                              type="text"
+                              danger
+                              aria-label={`删除 ${job.name}`}
+                              icon={<DeleteOutlined />}
+                              loading={deleting}
+                            />
+                          </Tooltip>
+                        </Popconfirm>
+                      )}
+                    </div>
                   </div>
-                </div>
-              );
-            })}
-          </div>
-        )}
-      </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      </Panel>
 
       <JobEditDrawer
         visible={drawerVisible}
         job={editingJob}
         allJobs={jobs}
         onSubmit={handleSubmit}
-        onCancel={() => setDrawerVisible(false)}
+        onCancel={() => {
+          setDrawerVisible(false);
+          setEditingJob(null);
+        }}
         submitting={editingJob ? updating : creating}
       />
     </>

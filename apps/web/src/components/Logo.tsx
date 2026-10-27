@@ -1,52 +1,29 @@
 import React from 'react';
 
-/**
- * Logo — 金蝶橙色风格图标
- * 设计：橙色弧形箭头环绕中心，贴近金蝶品牌视觉语言
- * 颜色：#FF6A00 橙色（金蝶品牌色）
- */
 const SyncLogo: React.FC<{ size?: number }> = ({ size = 32 }) => (
   <svg
+    aria-hidden="true"
     width={size}
     height={size}
-    viewBox="0 0 32 32"
+    viewBox="0 0 40 40"
     fill="none"
     xmlns="http://www.w3.org/2000/svg"
   >
-    {/* 上半弧箭头：右上弯向右下 */}
+    <rect width="40" height="40" rx="12" fill="#2DD4BF" />
     <path
-      d="M16 4 A12 12 0 0 1 28 16"
-      stroke="#FF6A00"
-      strokeWidth="3"
-      strokeLinecap="round"
-      fill="none"
-    />
-    <polyline
-      points="24,14 28,16 26,20"
-      stroke="#FF6A00"
-      strokeWidth="3"
+      d="M12 16.5A9 9 0 0 1 27.8 13L30 15.5M30 15.5V10.5M30 15.5H25"
+      stroke="#10363A"
+      strokeWidth="2.6"
       strokeLinecap="round"
       strokeLinejoin="round"
-      fill="none"
     />
-    {/* 下半弧箭头：左下弯向左上 */}
     <path
-      d="M16 28 A12 12 0 0 1 4 16"
-      stroke="#FF6A00"
-      strokeWidth="3"
-      strokeLinecap="round"
-      fill="none"
-    />
-    <polyline
-      points="8,18 4,16 6,12"
-      stroke="#FF6A00"
-      strokeWidth="3"
+      d="M28 23.5A9 9 0 0 1 12.2 27L10 24.5M10 24.5V29.5M10 24.5H15"
+      stroke="#10363A"
+      strokeWidth="2.6"
       strokeLinecap="round"
       strokeLinejoin="round"
-      fill="none"
     />
-    {/* 中心圆点 */}
-    <circle cx="16" cy="16" r="2.5" fill="#FF6A00" />
   </svg>
 );
 

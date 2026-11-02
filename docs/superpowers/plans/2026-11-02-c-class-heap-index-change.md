@@ -54,36 +54,66 @@ DROP INDEX IF EXISTS UQ_sal_returnstock_FENTRYID ON dbo.sal_returnstock;  -- 202
 
 收益：`FENTRYID` 从"靠约定"变成数据库约束；MERGE 匹配歧义（8672）与重复行堆积同时被封死。
 
-### 3.2 `gl_rpt_accountbalance`：**不能建**，是键选错 ❌
+### 3.2 `gl_rpt_accountbalance`：**不能建**，且发现更根本的缺陷
 
-`FBALANCEID` 的取值形如 `2202.02`、`6601.11`、`6401.01.01` —— 这是**会计科目编码**，不是余额记录主键。一行是"某科目某期间"的一条余额，同科目跨期重复出现完全正常（5,145 次即约 30 期 × 多个组织/币种维度）。
+`FBALANCEID` 的取值形如 `2202.02`、`6601.11`、`6401.01.01` —— 这是**会计科目编码**，不是余额记录主键。
+一行是"某科目某期间的余额"，同科目跨期重复出现完全正常。实测印证：
 
-因此该表的真实粒度需要口径确认，先跑探查：
+```
+总行数 38,788；2025 年行数 0；2026 年 1-4 期行数 0；2026 年 5-10 期行数 38,788
+DISTINCT(FACCTYEAR|FACCTPERIOD) = 6；SYNC_TIME 单批 2026-11-02 10:03:30
+```
+
+即当前表内容恰好等于**一次增量轮 6 期窗口**的产物，2025 年历史期间一行不剩。
+
+## 3.3 【新发现，优先级高于索引】快照语义与期间窗口不自洽
+
+该表被登记为快照表单（`isSnapshotForm`）→ **每轮整表替换**；但它拉取的期间随模式不同：
+
+| 模式 | 期间窗口 | 代码位置 |
+|---|---|---|
+| `incremental`（工作日每 2 小时） | 最近 6 期 | `accountBalanceStartPeriod(now, 6)` |
+| `full` / `reset`（周日 02:00） | `2025-01` 至上期（约 22 期） | `startYear, startPeriod := 2025, 1` |
+
+因此**每一次增量轮都会静默删除 6 期之外的全部历史期间**，只有周日全量才短暂恢复；
+表内容取决于"上一次跑的是哪种模式"。下游报表若引用超过 6 期，会随时点不同而查不到数据。
+
+这与 ADR-0001 记录的优化直接相关：当年为把 14 分钟降到 4 分钟，只改了**拉取窗口**，
+没有改**写入语义**（仍是整表替换）——两者组合才产生丢期。
+
+两条修复路线（需业务口径确认，二选一）：
+
+- **路线 A（推荐）：按期间作用域替换**。快照只删除并重写本批覆盖的 `(FACCTYEAR, FACCTPERIOD)`，
+  保留窗口外历史期间。这样增量与全量不再互相抹除，且唯一键自然成为
+  `(FBALANCEID, FDETAILNUMBER, FACCTYEAR, FACCTPERIOD)`，可随之建唯一索引。
+- **路线 B：承认"报表只需最近 N 期"**。则全量窗口也应收敛到同样的 N 期，
+  并显式声明该表不含历史；不能维持现在"两种模式写出两种内容"的状态。
+
+无论选哪条，键与索引的收尾步骤一致：
 
 ```sql
--- 列清单与形态
-SELECT c.name, t.name AS type, c.max_length, c.is_nullable
-FROM sys.columns c JOIN sys.types t ON t.user_type_id = c.user_type_id
-WHERE c.object_id = OBJECT_ID('dbo.gl_rpt_accountbalance') ORDER BY c.column_id;
+-- 该表真实列清单（实测）：FBALANCEID、FBALANCENAME、FDETAILNUMBER、FDETAILNAME、
+-- 各类期初/借贷/本年累计 decimal 度量列、SYNC_TIME、FACCTYEAR、FACCTPERIOD
+-- 注意：FACCTYEAR / FACCTPERIOD 由 appendDerivedWriteFields 自动补写（engine.go window.go:199），
+-- 不在表单 field_keys 里，容易被误认为"表无期间维度"。
 
--- 候选复合键的唯一性试验（按需替换列名）
+-- 唯一键候选实测（聚合查询需要内存授予，须在任务 1 恢复后执行）
 SELECT COUNT(*) AS total,
-       COUNT(DISTINCT CONCAT(FBALANCEID,'|',FPERIOD,'|',FACCOUNTID)) AS distinct_candidate
+       COUNT(DISTINCT CONCAT(FBALANCEID,'|',ISNULL(FDETAILNUMBER,''),'|',FACCTYEAR,'|',FACCTPERIOD)) AS distinct_candidate
 FROM dbo.gl_rpt_accountbalance;
 ```
 
-两条路线（需业务拍板，二选一）：
+收尾动作（口径确定后执行）：
 
-- **路线 A：修正映射**（若存在真实业务唯一键，例如科目+期间+维度组合）
-  1. 把 `primaryKeyMap["gl_rpt_accountbalance"]` 改成实测唯一的列组合；
-  2. 按该组合建唯一索引（同 §3.1 的 ONLINE 做法，先清理历史重复，含 6 行空串键）；
-  3. 从 `pk_contract_test.go` 的 `acceptedKeyDrift` 中删除该登记。
-- **路线 B：承认"无业务唯一键，仅整表快照"**
-  1. 明确该表只走 ADR-0007 的快照替换（当前已是），不参与按匹配的 MERGE；
-  2. 为查询性能建**非唯一**索引（如 `FBALANCEID`、`(FBALANCEID, 期间列)`），不加唯一约束；
-  3. 在 `primaryKeyMap` 注释与 `CONTEXT.md` 中标注"该表业务键仅用于 staging 聚簇顺序，不代表唯一性"，避免再次被误用为 MERGE/孤儿判定依据。
+1. 把 `primaryKeyMap["gl_rpt_accountbalance"]` 改成实测唯一的列组合（当前是错的 `FBALANCEID` 单列）；
+2. 按该组合建唯一索引，走 §3.1 的 ONLINE 做法；建前清理历史重复与 6 行空串键；
+3. 从 `internal/db/pk_contract_test.go` 的 `acceptedKeyDrift` 中删除该登记（契约测试会主动提示偏差已不存在）；
+4. 若选路线 B，则第 2 步改为建**非唯一**索引，并在 `primaryKeyMap` 注释与 `CONTEXT.md` 标注
+   "该表业务键仅用于 staging 聚簇顺序，不代表唯一性"，避免再次被当作 MERGE/孤儿判定依据。
 
-**推荐先做路线 B 的第 2、3 步**（零风险、消除误用），路线 A 等口径明确后再做。
+**推荐**：路线 A。理由是它同时消除"增量抹除历史期间"这个已经发生的数据缺陷
+（实测 2025 年期间行数为 0），而路线 B 只是把当前的丢期行为合法化。
+键的唯一性验证依赖内存授予恢复，见 §4 前置条件。
 
 ## 4. 执行前置条件（不满足则不排期）
 

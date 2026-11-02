@@ -147,6 +147,10 @@ bash deploy/scripts/build-and-run.sh
 2. 将状态库、日志和同步配置从宿主机挂载到容器。
 3. 等待 API 与 Web 健康检查通过，再将新镜像标记为 `latest`。
 
+构建临时目录默认固定为磁盘上的 `/var/tmp`（可用空间不足 4GB 时在任何 `podman` 调用前直接失败），
+不继承调用环境的 `TMPDIR`（原因：会话里的 `TMPDIR` 常指向小容量 tmpfs，会在提交大镜像层时报
+`no space left on device`）。需要改路径时用 `BUILD_TMPDIR=/path bash deploy/scripts/build-and-run.sh`。
+
 部署后访问：
 
 | 服务 | 地址 |

@@ -16,6 +16,29 @@ fi
 
 mkdir -p "$PROJECT_ROOT/.run/logs" "$PROJECT_ROOT/.run/state"
 
+# 构建临时目录固定在磁盘上，不继承调用环境的 TMPDIR
+# （原因：2026-11-02 部署从 CLI 会话发起时继承了 TMPDIR=/run/user/<uid>/…（tmpfs，上限 6.3G），
+#  web 镜像单层就要 1.2G+，buildah 提交层时报 no space left on device（exit 125）；
+#  失败发生在构建阶段，虽未影响线上，但部署被迫中断）
+# 需要自定义目录时用 BUILD_TMPDIR 显式指定，避免再次被会话环境里的小 tmpfs 影响
+BUILD_TMPDIR="${BUILD_TMPDIR:-/var/tmp}"
+BUILD_TMPDIR_MIN_MB="${BUILD_TMPDIR_MIN_MB:-4096}"
+
+mkdir -p "$BUILD_TMPDIR" || { echo "无法创建构建临时目录: $BUILD_TMPDIR" >&2; exit 1; }
+BUILD_TMPDIR="$(cd "$BUILD_TMPDIR" && pwd -P)"
+TMPDIR_FREE_MB="$(df -Pm "$BUILD_TMPDIR" 2>/dev/null | awk 'NR==2 {print $4}')"
+[[ "${TMPDIR_FREE_MB:-}" =~ ^[0-9]+$ ]] || TMPDIR_FREE_MB=0
+
+if (( TMPDIR_FREE_MB < BUILD_TMPDIR_MIN_MB )); then
+  echo "构建临时目录 $BUILD_TMPDIR 仅 ${TMPDIR_FREE_MB}MB 可用，低于所需 ${BUILD_TMPDIR_MIN_MB}MB" >&2
+  echo "请用 BUILD_TMPDIR 指向磁盘上的目录后重试（尚未执行任何 podman 操作，线上服务不受影响）" >&2
+  exit 1
+fi
+
+# buildah 依据 TMPDIR 决定镜像层临时存储位置
+export TMPDIR="$BUILD_TMPDIR"
+echo "构建临时目录: $TMPDIR（可用 ${TMPDIR_FREE_MB}MB）"
+
 POD_NAME="kingdee-sync"
 API_CONTAINER="kingdee-sync-api"
 WEB_CONTAINER="kingdee-sync-web"

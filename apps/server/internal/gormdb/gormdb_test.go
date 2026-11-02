@@ -133,6 +133,59 @@ func TestTerminalRunCannotBeRecoveredAsAbnormal(t *testing.T) {
 	}
 }
 
+func TestMarkSyncRunAbnormalExitRecordsDuration(t *testing.T) {
+	db := setupStateTestDB(t)
+	const runID = "abnormal-duration"
+	if _, err := CreateSyncRun(runID, "test", "incremental"); err != nil {
+		t.Fatal(err)
+	}
+	oldStart := time.Now().Add(-30 * time.Minute)
+	if err := db.Model(&SyncRun{}).Where("run_id = ?", runID).Update("start_time", oldStart).Error; err != nil {
+		t.Fatal(err)
+	}
+
+	if err := MarkSyncRunAbnormalExit(runID, "abnormal exit: scheduled sync timeout exceeded"); err != nil {
+		t.Fatalf("mark abnormal: %v", err)
+	}
+
+	run, err := GetSyncRun(runID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if run.Status != string(contract.StatusFailedAbnormalExit) {
+		t.Fatalf("status = %q, want %q", run.Status, contract.StatusFailedAbnormalExit)
+	}
+	if run.DurationSeconds < 1790 || run.DurationSeconds > 1810 {
+		t.Fatalf("duration_seconds = %v, want 约 1800（告警不能显示 0 秒）", run.DurationSeconds)
+	}
+}
+
+func TestMarkSyncRunAbnormalExitKeepsTerminalRunDuration(t *testing.T) {
+	setupStateTestDB(t)
+	const runID = "abnormal-after-terminal"
+	if _, err := CreateSyncRun(runID, "test", "incremental"); err != nil {
+		t.Fatal(err)
+	}
+	if err := FinishSyncRun(runID, string(contract.StatusSuccess), 42, 10, 10, 0, 1, 1, 0, ""); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := MarkSyncRunAbnormalExit(runID, "abnormal exit: stop timeout exceeded"); err != nil {
+		t.Fatalf("mark abnormal on terminal run: %v", err)
+	}
+
+	run, err := GetSyncRun(runID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if run.Status != string(contract.StatusSuccess) {
+		t.Fatalf("terminal status = %q, want success", run.Status)
+	}
+	if run.DurationSeconds != 42 {
+		t.Fatalf("duration_seconds = %v, want 42（终态耗时不得被覆盖）", run.DurationSeconds)
+	}
+}
+
 func TestFinishSyncRunWithRetryReportsUnavailableStore(t *testing.T) {
 	oldDB := DB
 	DB = nil

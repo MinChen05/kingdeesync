@@ -302,12 +302,20 @@ func MarkSyncRunAbnormalExit(runID, errorMessage string) error {
 	if errorMessage == "" {
 		errorMessage = "abnormal exit: stop timeout exceeded"
 	}
+	now := time.Now()
+	var run SyncRun
+	if err := DB.Select("start_time").Where("run_id = ?", runID).First(&run).Error; err != nil {
+		return fmt.Errorf("load sync run %s start time: %w", runID, err)
+	}
+	// 超时中止不会走 FinishSyncRun，耗时必须在这里补齐，否则告警与详情页都显示 0 秒。
+	// （原因：duration_seconds 是 DingTalk 告警和 returnStatusFromDB 的唯一耗时来源）
 	result := DB.Model(&SyncRun{}).
 		Where("run_id = ? AND status IN ?", runID, []string{string(contract.StatusRunning), string(contract.StatusStopping)}).
 		Updates(map[string]interface{}{
-			"status":        string(contract.StatusFailedAbnormalExit),
-			"end_time":      time.Now(),
-			"error_message": errorMessage,
+			"status":           string(contract.StatusFailedAbnormalExit),
+			"end_time":         now,
+			"error_message":    errorMessage,
+			"duration_seconds": now.Sub(run.StartTime).Seconds(),
 		})
 	if result.Error != nil {
 		return result.Error

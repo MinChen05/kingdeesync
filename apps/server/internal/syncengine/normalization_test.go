@@ -167,3 +167,89 @@ func TestValidateSnapshotDataWithFieldMap(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 }
+
+func TestFindDuplicateBusinessKeysDetectsCompositeDup(t *testing.T) {
+	rows := []map[string]interface{}{
+		{"FID": "1", "FENTRYID": "A"},
+		{"FID": "1", "FENTRYID": "A"},
+		{"FID": "2", "FENTRYID": "B"},
+		{"FID": "3", "FENTRYID": "C"},
+		{"FID": "3", "FENTRYID": "C"},
+	}
+	sample, dups := FindDuplicateBusinessKeys(rows, []string{"FID", "FENTRYID"}, nil, 3)
+	if dups != 2 {
+		t.Fatalf("重复组数 = %d, want 2", dups)
+	}
+	if len(sample) != 2 || sample[0] != "1|A×2" || sample[1] != "3|C×2" {
+		t.Fatalf("样例 = %#v, want 排序后的 [1|A×2 3|C×2]", sample)
+	}
+}
+
+func TestFindDuplicateBusinessKeysNoDup(t *testing.T) {
+	rows := []map[string]interface{}{
+		{"FID": "1", "FENTRYID": "A"},
+		{"FID": "1", "FENTRYID": "B"},
+	}
+	if sample, dups := FindDuplicateBusinessKeys(rows, []string{"FID", "FENTRYID"}, nil, 3); dups != 0 || sample != nil {
+		t.Fatalf("无重复时应返回 (nil, 0)，实得 %#v / %d", sample, dups)
+	}
+}
+
+// 键取不到值时不得判为重复：无唯一索引的目标表历史上可能已在静默写入空键行，
+// 那属于"键缺失"问题，不应被本校验突然变成写入失败（原因：避免引入新回归）。
+func TestFindDuplicateBusinessKeysSkipsWhenKeyMissing(t *testing.T) {
+	rows := []map[string]interface{}{
+		{"FID": nil, "FENTRYID": "A"},
+		{"FID": nil, "FENTRYID": "A"},
+	}
+	if sample, dups := FindDuplicateBusinessKeys(rows, []string{"FID", "FENTRYID"}, nil, 3); dups != 0 || sample != nil {
+		t.Fatalf("键缺失应跳过重复判定，实得 %#v / %d", sample, dups)
+	}
+}
+
+func TestFindDuplicateBusinessKeysUsesFieldMapReverse(t *testing.T) {
+	// 源数据只有金蝶字段名，业务键是 DB 列名
+	rows := []map[string]interface{}{
+		{"FID": "1", "FEntity_FENTRYID": "A"},
+		{"FID": "1", "FEntity_FENTRYID": "A"},
+	}
+	fieldMap := map[string]string{"FEntity_FENTRYID": "FENTRYID"}
+	sample, dups := FindDuplicateBusinessKeys(rows, []string{"FID", "FENTRYID"}, fieldMap, 3)
+	if dups != 1 {
+		t.Fatalf("应通过 fieldMap 反查识别出重复，实得 dups=%d sample=%#v", dups, sample)
+	}
+
+	// 大小写回退：键列以小写声明，而金蝶行数据里是大写列名
+	rows2 := []map[string]interface{}{{"fmaterialid": "9"}, {"FMATERIALID": "9"}}
+	if _, dups2 := FindDuplicateBusinessKeys(rows2, []string{"fmaterialid"}, nil, 3); dups2 != 1 {
+		t.Fatalf("大小写回退失效，dups=%d", dups2)
+	}
+}
+
+func TestFindDuplicateBusinessKeysSampleLimit(t *testing.T) {
+	rows := make([]map[string]interface{}, 0, 8)
+	for i := 0; i < 4; i++ {
+		k := string(rune('a' + i))
+		rows = append(rows, map[string]interface{}{"FID": k}, map[string]interface{}{"FID": k})
+	}
+	sample, dups := FindDuplicateBusinessKeys(rows, []string{"FID"}, nil, 2)
+	if dups != 4 {
+		t.Fatalf("重复组数 = %d, want 4", dups)
+	}
+	if len(sample) != 2 {
+		t.Fatalf("样例数 = %d, want 截断到 2：%#v", len(sample), sample)
+	}
+}
+
+func TestFindDuplicateBusinessKeysGuardsBadInput(t *testing.T) {
+	rows := []map[string]interface{}{{"FID": "1"}, {"FID": "1"}}
+	if _, dups := FindDuplicateBusinessKeys(rows, nil, nil, 3); dups != 0 {
+		t.Fatal("无键列定义时应跳过")
+	}
+	if _, dups := FindDuplicateBusinessKeys(rows, []string{"FID"}, nil, 0); dups != 0 {
+		t.Fatal("limit<=0 时应跳过")
+	}
+	if _, dups := FindDuplicateBusinessKeys(nil, []string{"FID"}, nil, 3); dups != 0 {
+		t.Fatal("空数据时应跳过")
+	}
+}

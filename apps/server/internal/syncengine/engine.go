@@ -2043,6 +2043,14 @@ func (e *SyncEngine) writeRowsWithMode(ctx context.Context, tableName string, ro
 		return UpsertResult{}, fmt.Errorf("no matching columns between Kingdee fields and table %s", tableName)
 	}
 
+	// 业务键重复校验：键在本批源数据里重复时，MERGE 会以"同一目标行匹配多次"整表单失败（8672），
+	// 而在没有唯一索引的目标表上则会静默堆积重复行。提前判定可把错误定位到表单与键值。
+	// （原因：见 issue #3 的 22 表对账，其中 2 张表无 PK/唯一索引）
+	if sample, dups := FindDuplicateBusinessKeys(rows, pkCols, kingdeeToDB, 3); dups > 0 {
+		return UpsertResult{}, fmt.Errorf("table %s business key [%s] duplicated in %d groups (sample: %s); write refused",
+			tableName, strings.Join(pkCols, ","), dups, strings.Join(sample, ", "))
+	}
+
 	mode := "merge"
 	if snapshotReplace {
 		mode = "snapshot-replace"

@@ -133,6 +133,38 @@ func TestTerminalRunCannotBeRecoveredAsAbnormal(t *testing.T) {
 	}
 }
 
+func TestRecoverAbnormalRunsRecordsDuration(t *testing.T) {
+	db := setupStateTestDB(t)
+	const runID = "heartbeat-duration"
+	if _, err := CreateSyncRun(runID, "test", "incremental"); err != nil {
+		t.Fatal(err)
+	}
+	oldStart := time.Now().Add(-45 * time.Minute)
+	if err := db.Model(&SyncRun{}).Where("run_id = ?", runID).
+		Updates(map[string]interface{}{"start_time": oldStart, "last_heartbeat": oldStart}).Error; err != nil {
+		t.Fatal(err)
+	}
+
+	recovered, err := RecoverAbnormalRuns(5 * time.Minute)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if recovered != 1 {
+		t.Fatalf("recovered = %d, want 1", recovered)
+	}
+	run, err := GetSyncRun(runID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if run.Status != string(contract.StatusFailedAbnormalExit) {
+		t.Fatalf("status = %q, want %q", run.Status, contract.StatusFailedAbnormalExit)
+	}
+	// 心跳超时与超时中止共用同一告警模板，耗时缺失会让告警显示 "0.0 秒"
+	if run.DurationSeconds < 2690 || run.DurationSeconds > 2710 {
+		t.Fatalf("duration_seconds = %v, want 约 2700", run.DurationSeconds)
+	}
+}
+
 func TestMarkSyncRunAbnormalExitRecordsDuration(t *testing.T) {
 	db := setupStateTestDB(t)
 	const runID = "abnormal-duration"

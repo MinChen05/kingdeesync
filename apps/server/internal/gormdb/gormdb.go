@@ -476,20 +476,40 @@ func RecoverAbnormalRuns(heartbeatTimeout time.Duration) (int, error) {
 	}
 
 	cutoff := time.Now().Add(-heartbeatTimeout)
-	result := DB.Model(&SyncRun{}).
-		Where("status IN ? AND last_heartbeat < ?", []string{string(contract.StatusRunning), string(contract.StatusStopping)}, cutoff).
-		Updates(map[string]interface{}{
-			"status":        string(contract.StatusFailedAbnormalExit),
-			"end_time":      time.Now(),
-			"error_message": "abnormal exit: heartbeat timeout exceeded",
-		})
-
-	if result.Error != nil {
-		return 0, fmt.Errorf("recover abnormal runs: %w", result.Error)
+	var stale []SyncRun
+	if err := DB.Select("run_id", "start_time").
+		Where("status IN ? AND last_heartbeat < ?",
+			[]string{string(contract.StatusRunning), string(contract.StatusStopping)}, cutoff).
+		Find(&stale).Error; err != nil {
+		return 0, fmt.Errorf("list stale sync runs: %w", err)
+	}
+	if len(stale) == 0 {
+		return 0, nil
 	}
 
-	log.Printf("[RECOVERY] Recovered %d abnormal sync runs", result.RowsAffected)
-	return int(result.RowsAffected), nil
+	now := time.Now()
+	recovered := 0
+	for _, run := range stale {
+		// 与 MarkSyncRunAbnormalExit 同样补写耗时：心跳超时路径产出的也是
+		// failed_abnormal_exit，缺失 duration_seconds 会让告警显示 0 秒。
+		// WHERE 保留状态条件，避免覆盖并发写入的终态。
+		result := DB.Model(&SyncRun{}).
+			Where("run_id = ? AND status IN ?", run.RunID,
+				[]string{string(contract.StatusRunning), string(contract.StatusStopping)}).
+			Updates(map[string]interface{}{
+				"status":           string(contract.StatusFailedAbnormalExit),
+				"end_time":         now,
+				"error_message":    "abnormal exit: heartbeat timeout exceeded",
+				"duration_seconds": now.Sub(run.StartTime).Seconds(),
+			})
+		if result.Error != nil {
+			return recovered, fmt.Errorf("recover abnormal runs: %w", result.Error)
+		}
+		recovered += int(result.RowsAffected)
+	}
+
+	log.Printf("[RECOVERY] Recovered %d abnormal sync runs", recovered)
+	return recovered, nil
 }
 
 // ListAbnormalSyncRuns returns terminal abnormal runs eligible for a recovery

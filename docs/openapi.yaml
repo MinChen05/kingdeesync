@@ -1,200 +1,265 @@
 openapi: 3.0.3
 info:
   title: Kingdee Sync API
-  version: 1.0.0
-  description: Stable synchronization control contract.
+  version: 2.0.0
+  description: |
+    `apps/server` 的 v1 接口契约。
+
+    本版修正说明：本文件此前描述的是 ADR-0004（移除 Python 运行时与影子表）之前的 v0 路径，
+    `/api/sync/start`、`/api/sync/logs`、`/api/history/runs/{runId}/details` 在服务端已不存在，
+    按旧路径调用会得到 404。现全部按代码中实际注册的路由与响应信封重写。
+
+    响应信封（见 `api/routes/v1/response.go`）：
+    - 成功：`{"data": <payload>}`，分页列表另有可选 `"meta": {"total": <int>}`。
+    - 失败：`{"error": {"code": "<机器码>", "message": "<可读说明>"}}`，可选 `details`。
+    - 例外：`/health` 与 `/ready` 为裸对象，不套信封。
+
+    本文档只展开"同步生命周期"相关端点；其余 v1 端点索引（均以 `/api/v1` 为前缀）：
+    `GET /overview`、`GET /forms`、`PUT /forms/{name}`、`GET /datasources`、`GET /logs`、
+    `GET|POST /schedules`、`GET /schedules/status`、`POST /schedules/batch`、
+    `PUT|DELETE /schedules/{id}`、`POST /scheduler/start`、`POST /scheduler/stop`、
+    `GET /system/diagnostics`、`GET|PUT /system/config`、`POST /system/test-connections`、
+    `GET /system/version`、`POST /system/archive`、
+    `GET|POST /webhooks`、`DELETE /webhooks/{id}`、
+    `GET|POST /config/snapshots`、`POST /config/snapshots/{id}/rollback`、
+    `GET|POST /templates`、`DELETE /templates/{id}`。
+servers:
+  - url: http://127.0.0.1:8000
 paths:
   /health:
     get:
       operationId: health
+      summary: 进程存活探针（部署脚本健康检查使用）
       responses:
         '200':
-          description: Process health.
+          description: 进程存活。
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/HealthResponse'
+                type: object
+                required: [status]
+                properties:
+                  status: { type: string, const: ok }
   /ready:
     get:
       operationId: ready
+      summary: 就绪探针（状态库与目标库可达性）
       responses:
         '200':
-          description: Application dependencies are ready.
+          description: 依赖就绪。
           content:
             application/json:
-              schema:
-                $ref: '#/components/schemas/ReadyResponse'
+              schema: { type: object }
         '503':
-          description: Application dependencies are not ready.
+          description: 存在未就绪依赖。
           content:
             application/json:
-              schema:
-                $ref: '#/components/schemas/ReadyResponse'
-  /api/sync/start:
+              schema: { type: object }
+  /api/v1/runs:
     post:
-      operationId: startSync
+      operationId: createRun
+      summary: 启动一次同步运行
+      description: |
+        取代已移除的 `POST /api/sync/start`。`sync_type` 缺省为 `incremental`；
+        `forms` 为空表示使用配置中的全部启用表单。
       requestBody:
         required: false
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/SyncStartRequest'
+              $ref: '#/components/schemas/StartRequest'
       responses:
         '200':
-          description: A new synchronization run was started.
+          description: 已创建并开始运行。
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/StartResponse'
-        '409':
-          description: Another synchronization run is active.
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
+                allOf:
+                  - $ref: '#/components/schemas/DataEnvelope'
+                  - type: object
+                    properties:
+                      data: { $ref: '#/components/schemas/RunSummary' }
         '400':
-          description: The request body is invalid.
+          $ref: '#/components/responses/InvalidRequest'
+        '409':
+          description: 已有运行在执行，或本次运行未能占用引擎。
           content:
             application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
+              schema: { $ref: '#/components/schemas/Problem' }
+              example: { error: { code: ALREADY_RUNNING, message: a sync task is already running } }
         '503':
-          description: The sync engine or state database is unavailable.
+          description: 引擎、状态库不可用，或服务正在关闭。
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Problem' }
+    get:
+      operationId: listRuns
+      summary: 运行历史列表（按 start_time 倒序、分页）
+      parameters:
+        - { name: status, in: query, schema: { type: string } }
+        - { name: sync_type, in: query, schema: { type: string } }
+        - { name: from_date, in: query, schema: { type: string } }
+        - { name: to_date, in: query, schema: { type: string } }
+        - { name: page, in: query, schema: { type: integer, default: 1 } }
+        - { name: page_size, in: query, schema: { type: integer, default: 20 } }
+      responses:
+        '200':
+          description: 运行列表。
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ErrorResponse'
-  /api/sync/status:
+                allOf:
+                  - $ref: '#/components/schemas/DataEnvelope'
+                  - type: object
+                    properties:
+                      data:
+                        type: array
+                        items: { $ref: '#/components/schemas/RunSummary' }
+                      meta: { $ref: '#/components/schemas/PageMeta' }
+  /api/v1/runs/{runId}:
+    get:
+      operationId: getRun
+      summary: 单次运行详情（含表单级与错误明细）
+      description: 取代已移除的 `GET /api/history/runs/{runId}/details`。
+      parameters:
+        - { name: runId, in: path, required: true, schema: { type: string } }
+      responses:
+        '200':
+          description: 运行详情。
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/DataEnvelope'
+                  - type: object
+                    properties:
+                      data: { $ref: '#/components/schemas/RunDetail' }
+        '404':
+          $ref: '#/components/responses/NotFound'
+  /api/v1/runs/{runId}/events:
+    get:
+      operationId: listRunEvents
+      summary: 运行的事件/日志（按 created_at 升序，全量返回，无分页参数）
+      description: 取代已移除的 `GET /api/sync/logs`。旧文档中的 `run_id` 查询参数已改为路径参数。
+      parameters:
+        - { name: runId, in: path, required: true, schema: { type: string } }
+      responses:
+        '200':
+          description: 事件列表。
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/DataEnvelope'
+                  - type: object
+                    properties:
+                      data:
+                        type: array
+                        items: { $ref: '#/components/schemas/RunEvent' }
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          description: 事件加载失败。
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Problem' }
+  /api/v1/runs/{runId}/retry-failed:
+    post:
+      operationId: retryFailedForms
+      summary: 仅重跑该次运行中失败的表单（生成新 run）
+      parameters:
+        - { name: runId, in: path, required: true, schema: { type: string } }
+      responses:
+        '200':
+          description: 新 run 已启动。
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/DataEnvelope'
+                  - type: object
+                    properties:
+                      data: { $ref: '#/components/schemas/RunSummary' }
+        '404':
+          description: run 不存在，或该 run 没有失败表单。
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Problem' }
+              example: { error: { code: NO_FAILED_FORMS, message: no failed forms found in this run } }
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '503':
+          description: 引擎或状态库不可用。
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Problem' }
+  /api/v1/sync/status:
     get:
       operationId: getSyncStatus
+      summary: 查询运行状态
+      description: |
+        不带 `run_id` 时返回当前活动运行；无活动运行返回 404 `NOT_FOUND`。
+        带 `run_id` 时：仍在执行的 run 返回引擎实时快照，已结束（终态）的 run 一律回落状态库，
+        避免内存快照与状态库形成双源耗时。
       parameters:
         - name: run_id
           in: query
           required: false
-          schema:
-            type: string
-          description: Run ID. When omitted, the active run is queried.
+          schema: { type: string }
       responses:
         '200':
-          description: Current or completed synchronization state.
+          description: 状态快照。
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/StatusResponse'
+                allOf:
+                  - $ref: '#/components/schemas/DataEnvelope'
+                  - type: object
+                    properties:
+                      data: { $ref: '#/components/schemas/StatusData' }
         '404':
-          description: The run does not exist.
+          description: 无活动运行，或指定 run 不存在。
           content:
             application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
-  /api/sync/stop:
+              schema: { $ref: '#/components/schemas/Problem' }
+              example: { error: { code: NOT_FOUND, message: no active sync run } }
+  /api/v1/sync/stop:
     post:
       operationId: stopSync
+      summary: 请求停止正在运行的同步
       parameters:
         - name: run_id
           in: query
           required: true
-          schema:
-            type: string
+          schema: { type: string }
       responses:
         '200':
-          description: Cancellation was requested.
+          description: 取消请求已受理。
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/StopResponse'
+                allOf:
+                  - $ref: '#/components/schemas/DataEnvelope'
+                  - type: object
+                    properties:
+                      data: { $ref: '#/components/schemas/StopData' }
         '400':
-          description: run_id is missing.
+          description: 缺少 run_id。
           content:
             application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
-        '404':
-          description: The run does not exist.
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
+              schema: { $ref: '#/components/schemas/Problem' }
+              example: { error: { code: INVALID_PARAMS, message: run_id is required } }
         '409':
-          description: The run is already finished or cannot be stopped.
+          description: 该 run 不在可停止状态（含 run 不存在或已终态）。
           content:
             application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
-  /api/sync/logs:
-    get:
-      operationId: getSyncLogs
-      parameters:
-        - name: run_id
-          in: query
-          required: true
-          schema:
-            type: string
-          description: Required run ID; logs are never mixed across runs.
-      responses:
-        '200':
-          description: Logs belonging to the requested run.
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/LogsResponse'
-        '400':
-          description: run_id is missing.
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
-        '404':
-          description: The run does not exist.
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
-        '503':
-          description: Logs could not be loaded.
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
-  /api/history/runs/{runId}/details:
-    get:
-      operationId: getRunDetails
-      parameters:
-        - name: runId
-          in: path
-          required: true
-          schema:
-            type: string
-          description: Persistent synchronization run ID.
-      responses:
-        '200':
-          description: Detailed synchronization run data.
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/HistoryDetailsResponse'
-        '404':
-          description: The database is unavailable or the run does not exist.
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/HistoryErrorResponse'
+              schema: { $ref: '#/components/schemas/Problem' }
+              example: { error: { code: NOT_ACTIVE, message: sync run cannot be stopped } }
 components:
   schemas:
-    HealthResponse:
-      type: object
-      required: [status]
-      properties:
-        status: {type: string, const: ok}
-    ReadyResponse:
-      type: object
-      required: [status]
-      properties:
-        status:
-          type: string
-          enum: [ready, not_ready]
     SyncStatus:
       type: string
+      description: 公共状态机；`failed_abnormal_exit` 只能由超时/恢复流程产生。
       enum:
         - running
         - stopping
@@ -203,190 +268,134 @@ components:
         - failed
         - stopped
         - failed_abnormal_exit
-    SyncStartRequest:
+    StartRequest:
       type: object
       properties:
         forms:
           type: array
-          items:
-            type: string
+          items: { type: string }
+          description: 表单名列表；留空表示使用配置中全部启用表单。
         sync_type:
           type: string
+          enum: [incremental, full]
           default: incremental
         dry_run:
           type: boolean
           default: false
-    SyncStartData:
+    DataEnvelope:
       type: object
-      required: [run_id, dry_run]
+      required: [data]
       properties:
-        run_id:
-          type: string
-        dry_run:
-          type: boolean
-    FormStatus:
+        data: {}
+    PageMeta:
       type: object
-      required: [form_name, fetched, inserted, errors, duration_sec, status]
       properties:
-        form_name: {type: string}
-        fetched: {type: integer}
-        inserted: {type: integer}
-        errors: {type: integer}
-        duration_sec: {type: number, format: double}
+        total: { type: integer, format: int64 }
+    Problem:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: object
+          required: [code, message]
+          properties:
+            code: { type: string }
+            message: { type: string }
+            details:
+              type: object
+              additionalProperties: { type: string }
+    RunSummary:
+      type: object
+      required: [run_id, status, sync_type, started_at]
+      properties:
+        run_id: { type: string }
         status: { $ref: '#/components/schemas/SyncStatus' }
-        error_summary: {type: string}
+        sync_type: { type: string }
+        started_at: { type: string }
+        finished_at: { type: string }
+        duration_seconds: { type: number, format: double }
+        total_records: { type: integer, format: int64 }
+        success_records: { type: integer, format: int64 }
+        failed_records: { type: integer, format: int64 }
+        form_count: { type: integer }
+        success_forms: { type: integer }
+        failed_forms: { type: integer }
+        error_message: { type: string }
+    FormDetail:
+      type: object
+      properties:
+        form_name: { type: string }
+        status: { type: string, description: 表单级状态，取值含 success/failed/stopped/skipped }
+        total_records: { type: integer, format: int64 }
+        inserted: { type: integer, format: int64 }
+        updated: { type: integer, format: int64 }
+        deleted: { type: integer, format: int64 }
+        failed: { type: integer, format: int64 }
+        skipped: { type: integer, format: int64 }
+        start_time: { type: string, nullable: true }
+        end_time: { type: string, nullable: true }
+        duration_seconds: { type: number, format: double }
+        error_message: { type: string, nullable: true }
+    RunErrorItem:
+      type: object
+      properties:
+        form_name: { type: string }
+        level: { type: string, enum: [error, warning, info] }
+        message: { type: string }
+        created_at: { type: string }
+    RunDetail:
+      allOf:
+        - $ref: '#/components/schemas/RunSummary'
+        - type: object
+          properties:
+            forms:
+              type: array
+              items: { $ref: '#/components/schemas/FormDetail' }
+            errors:
+              type: array
+              items: { $ref: '#/components/schemas/RunErrorItem' }
+    RunEvent:
+      type: object
+      properties:
+        created_at: { type: string }
+        form_name: { type: string }
+        level: { type: string, enum: [error, warning, info] }
+        message: { type: string }
     StatusData:
       type: object
-      required: [run_id, status, progress, current_form, message, error_summary, elapsed_seconds, started_at, form_stats]
+      required: [run_id, status, progress, elapsed_seconds, started_at]
       properties:
-        run_id: {type: string}
+        run_id: { type: string }
         status: { $ref: '#/components/schemas/SyncStatus' }
-        progress: {type: integer, minimum: 0, maximum: 100}
-        current_form: {type: string}
-        message: {type: string}
-        error_summary: {type: string}
-        elapsed_seconds: {type: number, format: double}
-        started_at: {type: string, format: date-time}
+        progress: { type: integer, minimum: 0, maximum: 100 }
+        current_form: { type: string }
+        message: { type: string }
+        elapsed_seconds: { type: number, format: double }
+        started_at: { type: string, format: date-time }
         form_stats:
           type: array
-          items: { $ref: '#/components/schemas/FormStatus' }
-    StartResponse:
-      type: object
-      required: [ok, data, error, code]
-      properties:
-        ok: {type: boolean, const: true}
-        data: { $ref: '#/components/schemas/SyncStartData' }
-        error: {type: string}
-        code: {type: string, const: ''}
-    StatusResponse:
-      type: object
-      required: [ok, data, error, code]
-      properties:
-        ok: {type: boolean, const: true}
-        data: { $ref: '#/components/schemas/StatusData' }
-        error: {type: string}
-        code: {type: string, const: ''}
-    StopResponse:
-      type: object
-      required: [ok, data, error, code]
-      properties:
-        ok: {type: boolean, const: true}
-        data: { $ref: '#/components/schemas/SyncStopData' }
-        error: {type: string}
-        code: {type: string, const: ''}
-    SyncStopData:
+          description: 仅活动运行的实时快照携带；终态运行请读 `GET /api/v1/runs/{runId}`。
+          items: { $ref: '#/components/schemas/FormDetail' }
+    StopData:
       type: object
       required: [run_id, status]
       properties:
-        run_id: {type: string}
+        run_id: { type: string }
         status: { $ref: '#/components/schemas/SyncStatus' }
-    SyncLogEntry:
-      type: object
-      required: [created_at, form_name, level, message, detail]
-      properties:
-        created_at: {type: string, format: date-time}
-        form_name: {type: string}
-        level: {type: string}
-        message: {type: string}
-        detail: {type: string}
-    LogsData:
-      type: object
-      required: [run_id, logs]
-      properties:
-        run_id: {type: string}
-        logs:
-          type: array
-          items: { $ref: '#/components/schemas/SyncLogEntry' }
-    LogsResponse:
-      type: object
-      required: [ok, data, error, code]
-      properties:
-        ok: {type: boolean, const: true}
-        data: { $ref: '#/components/schemas/LogsData' }
-        error: {type: string}
-        code: {type: string, const: ''}
-    HistoryDetailsResponse:
-      type: object
-      required: [ok, data]
-      properties:
-        ok: {type: boolean, const: true}
-        data: { $ref: '#/components/schemas/HistoryDetailsData' }
-    HistoryDetailsData:
-      type: object
-      required: [id, run_id, task_name, sync_type, status, start_time, forms, errors]
-      properties:
-        id: {type: integer, format: int64}
-        run_id: {type: string}
-        task_name: {type: string}
-        sync_type: {type: string}
-        status: { $ref: '#/components/schemas/SyncStatus' }
-        start_time: {type: string}
-        end_time: {type: string}
-        duration_seconds: {type: number, format: double}
-        total_records: {type: integer, format: int64}
-        success_records: {type: integer, format: int64}
-        failed_records: {type: integer, format: int64}
-        form_count: {type: integer}
-        success_forms: {type: integer}
-        failed_forms: {type: integer}
-        error_message: {type: string}
-        forms:
-          type: array
-          items: { $ref: '#/components/schemas/HistoryFormDetails' }
-        errors:
-          type: array
-          items: { $ref: '#/components/schemas/HistoryErrorDetails' }
-    HistoryFormDetails:
-      type: object
-      properties:
-        id: {type: integer, format: int64}
-        run_id: {type: string}
-        form_name: {type: string}
-        status: { $ref: '#/components/schemas/SyncStatus' }
-        total_records: {type: integer, format: int64}
-        inserted: {type: integer, format: int64}
-        updated: {type: integer, format: int64}
-        deleted: {type: integer, format: int64}
-        failed: {type: integer, format: int64}
-        skipped: {type: integer, format: int64}
-        start_time: {type: string, format: date-time, nullable: true}
-        end_time: {type: string, format: date-time, nullable: true}
-        duration_seconds: {type: number, format: double}
-        error_message: {type: string}
-        created_at: {type: string, format: date-time}
-        updated_at: {type: string, format: date-time}
-    HistoryErrorDetails:
-      type: object
-      properties:
-        id: {type: integer, format: int64}
-        run_id: {type: string}
-        form_name: {type: string}
-        level: {type: string}
-        message: {type: string}
-        detail: {type: string}
-        created_at: {type: string, format: date-time}
-    HistoryErrorResponse:
-      type: object
-      required: [ok, error]
-      properties:
-        ok: {type: boolean, const: false}
-        error: {type: string}
-    ErrorResponse:
-      type: object
-      required: [ok, data, error, code]
-      properties:
-        ok: {type: boolean, const: false}
-        data: {nullable: true}
-        error: {type: string}
-        code: { $ref: '#/components/schemas/SyncErrorCode' }
-    SyncErrorCode:
-      type: string
-      enum:
-        - SYNC_ALREADY_RUNNING
-        - SYNC_RUN_ID_REQUIRED
-        - SYNC_NOT_FOUND
-        - SYNC_NOT_ACTIVE
-        - SYNC_INVALID_REQUEST
-        - SYNC_DATABASE_UNAVAILABLE
-        - SYNC_START_FAILED
-        - SYNC_LOGS_FAILED
+  responses:
+    InvalidRequest:
+      description: 请求体不合法。
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Problem' }
+    NotFound:
+      description: run 不存在。
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Problem' }
+          example: { error: { code: RUN_NOT_FOUND, message: run not found } }
+    Conflict:
+      description: 已有运行在执行。
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Problem' }

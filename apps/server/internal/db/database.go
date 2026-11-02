@@ -89,6 +89,16 @@ func Close() {
 	}
 }
 
+// PrimaryKeyContract 返回业务主键映射的副本，供契约校验与诊断使用。
+// （原因：映射此前只能按表名单点查询，无法整体对账，漂移无人发现）
+func PrimaryKeyContract() map[string]string {
+	out := make(map[string]string, len(primaryKeyMap))
+	for k, v := range primaryKeyMap {
+		out[k] = v
+	}
+	return out
+}
+
 // GetPrimaryKey returns the PK column(s) for a table, mirroring Python logic.
 // Composite keys are returned comma-separated, e.g. "FID,FENTRYID".
 func GetPrimaryKey(tableName string) string {

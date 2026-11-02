@@ -28,8 +28,8 @@ var acceptedKeyDrift = map[string]string{
 	"bd_material": "B: 按 FNUMBER 匹配，库内无该唯一索引，见 issue #3",
 	"customer":    "B: 按 FNUMBER 匹配，库内无该唯一索引，见 issue #3",
 	// C 类：目标表完全没有 PK/唯一索引
-	"gl_rpt_accountbalance": "C: 目标表无 PK/唯一索引，见 issue #3",
-	"sal_returnstock":       "C: 目标表无 PK/唯一索引，见 issue #3",
+	"gl_rpt_accountbalance": "C: 堆表无索引，且实测业务键 FBALANCEID 不唯一（318 组重复，最大值 5145 次）→ 键本身也需修正，见 issue #3",
+	"sal_returnstock":       "C: 堆表无索引，但实测 FENTRYID 106087 行 0 重复 → 可直接建唯一索引，见 issue #3",
 	// D 类：业务粒度决策，转 issue #4
 	"stk_inventory": "D: 目标表 PK(FID)，聚合粒度待决策，见 issue #4",
 }

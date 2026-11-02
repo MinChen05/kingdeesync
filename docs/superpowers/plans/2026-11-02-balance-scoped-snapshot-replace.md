@@ -142,12 +142,13 @@ CREATE UNIQUE NONCLUSTERED INDEX UQ_gl_rpt_accountbalance_key
 
 - [x] `snapshotSpec` + `ReplaceSnapshot` 作用域参数与 `DELETE…JOIN` 实现
 - [x] 护栏：scope 列缺失 / NULL 值拒绝执行（含单测）
-- [x] 门控集成测试：跨期间保留、scope 为空退化为整表、失败回滚、NULL 作用域无副作用、无 `stg_*` 残留
-      （`MSSQL_INTEGRATION=1` 门控；执行前需暂停调度，否则并发同步的 staging 表会让残留断言误报）
+- [x] 门控集成测试已编写：跨期间保留、scope 为空退化为整表、失败回滚、NULL 作用域无副作用、无 `stg_*` 残留
+      （`MSSQL_INTEGRATION=1` 门控；**尚未在真实实例执行**：需暂停调度后跑一次，
+      否则并发同步的 staging 表会让残留断言误报）
 - [ ] **`primaryKeyMap` 改四列**——必须与 §7 的列宽收窄**同一个发布窗口**落地，不得先行：
       `createStagingTable` 会在 pkCols 上建 CLUSTERED 索引，四列 `NVARCHAR(255)` 键宽 ≈ 2040 字节，
       超过 900 上限会让 staging 建表直接失败，进而使整轮写入失败（原因：收窄后 500 字节才安全）
 - [ ] `acceptedKeyDrift` 注记更新 + 契约测试重跑（随上一项一起做）
-- [ ] `CONTEXT.md` 快照定义与 ADR-0007 落地清单更新
+- [x] `CONTEXT.md` 快照定义与 ADR-0007 落地清单更新
 - [ ] §7 数据库变更（列宽收窄 + 唯一索引，走 DBA 窗口，依赖 #5）
 - [ ] §8 全量回填与两轮验证

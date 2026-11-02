@@ -37,14 +37,14 @@
 | 术语 | 定义 | 代码锚点 |
 |---|---|---|
 | **游标表单（Cursor Form）** | 有稳定主键、走游标分页拉取的表单；全量同步后可反查并清理孤儿数据。 | `cursor_pagination.go`、`cursor_orphan.go` |
-| **快照表单（Snapshot Form）** | 无稳定游标、按快照整体重写的表单；快照生命周期 `writing → validated → reconciled / aborted`，TRUNCATE 重写后无孤儿。 | `snapshot.go`（`SnapshotManager`） |
+| **快照表单（Snapshot Form）** | 无稳定游标、按声明的作用域整体重写的表单：替换作用域由 `snapshotSpecFor` 逐表单声明，作用域列为空时才是整表替换（`即时库存`）；`科目余额表` 按 `FACCTYEAR,FACCTPERIOD` 期间作用域替换，避免增量窗口抹掉历史期间。删除与换入同处一个事务，失败即回滚。 | `engine.go`（`snapshotSpecFor`）、`sqlserver_writer.go`（`ReplaceSnapshot`）、ADR-0007 |
 
 ### 写入与对账
 
 | 术语 | 定义 | 代码锚点 |
 |---|---|---|
 | **Staging + MERGE** | 写入模式：批次先落 staging 表，再 MERGE 进目标表。已存在主键数须在 MERGE **前**统计，否则 `inserted` 恒为 0。 | `sqlserver_writer.go` |
-| **孤儿数据（Orphan）** | 目标表中存在、但金蝶源侧快照中已不存在的记录。 | `orphan_reconcile.go` |
+| **孤儿数据（Orphan）** | 目标表中存在、但金蝶源侧快照中已不存在的记录。 | `orphan_reconcile.go`（注：孤儿清理的两套实现均无生产调用点，见 issue #8） |
 | **孤儿清理（Orphan Delete）** | 删除孤儿数据的动作，必须先过安全评估，决策三态：`blocked / auto_approved / approval_required`。输入含源计数、上次源计数、目标计数、重复键、部分写入标志等。 | `orphan_safety.go:EvaluateOrphanDelete` |
 | **完整性门控（Write-Complete Gate）** | 只有写入完整（`inserted + updated` 达标）的运行才允许孤儿清理，防止半量写入误判出大量孤儿。 | `isWriteComplete`（`1631797`） |
 | **安全帽（Safety Cap）** | 孤儿删除量超过比例上限（10%）时阻断，要求人工审批。 | `cursor_orphan.go` |

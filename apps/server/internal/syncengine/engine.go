@@ -1351,7 +1351,7 @@ func (e *SyncEngine) runSync(ctx context.Context, runID string, forms []string, 
 				} else {
 					// Reset mode and snapshot forms (科目余额表/即时库存): truncate before write.
 					// （原因：快照表每次都需要全量覆盖，无论同步模式）
-					isSnapshot := isSnapshotForm(formName)
+					spec, isSnapshot := snapshotSpecFor(formName)
 					// 写入器具备单事务替换能力时不再事务外 TRUNCATE：
 					// 换入失败即整体回滚，目标表保持上一轮快照（原因：见 ADR-0007 的清空事故）
 					snapshotReplace := isSnapshot && e.supportsSnapshotReplace()
@@ -1389,13 +1389,13 @@ func (e *SyncEngine) runSync(ctx context.Context, runID string, forms []string, 
 						// （原因：金蝶即时库存 API 可能返回同一物料+仓库的多行碎片化数据，需聚合）
 						writeRows := result.Rows
 						// （原因：聚合逻辑仅适用于即时库存，科目余额表是报表数据，每行已是完整记录，不应聚合）
-						if formName == "即时库存" {
+						if spec.aggregate {
 							writeRows = aggregateRowsByKey(result.Rows, fieldKeyList, formQuery.FieldMap)
 							if len(writeRows) < len(result.Rows) {
 								log.Printf("[AGGREGATE] %s: %d rows aggregated to %d rows", formName, len(result.Rows), len(writeRows))
 							}
 						}
-						upsertRes, err := e.writeRowsWithMode(ctx, stat.TableName, writeRows, fieldKeyList, formQuery.FieldMap, snapshotReplace)
+						upsertRes, err := e.writeRowsWithMode(ctx, stat.TableName, writeRows, fieldKeyList, formQuery.FieldMap, snapshotReplace, spec.scopeCols)
 						cause, budgetExceeded := formBudgetExceededCause(roundCtx, ctx, fetchCtx, formBudget)
 						if err != nil {
 							msg := err.Error()
@@ -1940,10 +1940,33 @@ func accountBalanceStartPeriod(now time.Time, months int) (int, int) {
 	return t.Year(), int(t.Month())
 }
 
-// isSnapshotForm 判断是否为快照报表表单：这类表单每轮取当前时点全量并 TRUNCATE 重写，
+// snapshotSpec 描述快照表单的替换语义；是这类表单的唯一事实点
+// （原因：此前快照判定、聚合白名单、替换作用域分散在三处，issue #7 证明分散会导致
+// "改了拉取窗口却没改写入语义"这类不一致）。
+type snapshotSpec struct {
+	// scopeCols 非空时只替换该列组合与本批相同的行；为空表示整表替换。
+	scopeCols []string
+	// aggregate 表示写入前需按主键聚合（金蝶返回同一物料+仓库的碎片化多行）。
+	aggregate bool
+}
+
+func snapshotSpecFor(formName string) (snapshotSpec, bool) {
+	switch formName {
+	case "科目余额表":
+		// 增量轮只取最近 6 期，若整表替换会抹掉窗口外的历史期间（issue #7）
+		return snapshotSpec{scopeCols: []string{"FACCTYEAR", "FACCTPERIOD"}}, true
+	case "即时库存":
+		// 每次取当前时点全量快照，无期间维度，保持整表替换
+		return snapshotSpec{aggregate: true}, true
+	}
+	return snapshotSpec{}, false
+}
+
+// isSnapshotForm 判断是否为快照报表表单：这类表单每轮取当前时点全量重写，
 // 不参与增量过滤与游标续传。
 func isSnapshotForm(formName string) bool {
-	return formName == "科目余额表" || formName == "即时库存"
+	_, ok := snapshotSpecFor(formName)
+	return ok
 }
 
 // writeRows maps Kingdee fields to DB columns and delegates to the configured RowWriter.
@@ -1953,7 +1976,7 @@ func (e *SyncEngine) writeRows(tableName string, rows []map[string]interface{}, 
 }
 
 func (e *SyncEngine) writeRowsWithContext(ctx context.Context, tableName string, rows []map[string]interface{}, fieldKeys []string, fieldMap map[string]string) (UpsertResult, error) {
-	return e.writeRowsWithMode(ctx, tableName, rows, fieldKeys, fieldMap, false)
+	return e.writeRowsWithMode(ctx, tableName, rows, fieldKeys, fieldMap, false, nil)
 }
 
 // supportsSnapshotReplace 判断当前写入器是否具备单事务整体替换能力（ADR-0007）。
@@ -1966,7 +1989,9 @@ func (e *SyncEngine) supportsSnapshotReplace() bool {
 	return ok
 }
 
-func (e *SyncEngine) writeRowsWithMode(ctx context.Context, tableName string, rows []map[string]interface{}, fieldKeys []string, fieldMap map[string]string, snapshotReplace bool) (UpsertResult, error) {
+// writeRowsWithMode 按写入模式派发到 RowWriter。
+// snapshotReplace=true 时走单事务替换，snapshotScope 非空则限定替换作用域（见 SnapshotReplacer）。
+func (e *SyncEngine) writeRowsWithMode(ctx context.Context, tableName string, rows []map[string]interface{}, fieldKeys []string, fieldMap map[string]string, snapshotReplace bool, snapshotScope []string) (UpsertResult, error) {
 	if e.writeRowsFunc != nil {
 		return e.writeRowsFunc(ctx, tableName, rows, fieldKeys, fieldMap)
 	}
@@ -2060,6 +2085,9 @@ func (e *SyncEngine) writeRowsWithMode(ctx context.Context, tableName string, ro
 	mode := "merge"
 	if snapshotReplace {
 		mode = "snapshot-replace"
+		if len(snapshotScope) > 0 {
+			mode += "-scoped:" + strings.Join(snapshotScope, ",")
+		}
 	}
 	log.Printf("[SYNC-ENGINE] writeRows: mode=%s, table=%s, rows=%d, cols=%d, pkCols=%v", mode, tableName, len(rows), len(cols), pkCols)
 
@@ -2070,7 +2098,7 @@ func (e *SyncEngine) writeRowsWithMode(ctx context.Context, tableName string, ro
 		if !ok {
 			return UpsertResult{}, fmt.Errorf("writer does not support snapshot replace for table %s", tableName)
 		}
-		return replacer.ReplaceSnapshot(ctx, tableName, rows, cols, pkCols, kingdeeToDB)
+		return replacer.ReplaceSnapshot(ctx, tableName, rows, cols, pkCols, kingdeeToDB, snapshotScope)
 	}
 	return e.writer.Upsert(ctx, tableName, rows, cols, pkCols, kingdeeToDB)
 }

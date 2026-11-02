@@ -194,12 +194,55 @@ func (w *SQLServerWriter) stagingUpsert(ctx context.Context, tableName string, r
 	return UpsertResult{Inserted: inserted, Updated: updateEstimate, Total: stagingRows}, nil
 }
 
-// ReplaceSnapshot 在单个事务内清空并整体重写目标表：staging 装载在事务外完成，
-// TRUNCATE 与 INSERT…SELECT 同处一个事务，任一步失败即回滚，目标表保持上一轮快照。
+// validateSnapshotScope 校验作用域列能否用于限定了作用域的替换：必须是合法标识符、
+// 出现在写列中，且本批每一行都有非空值；返回去重后的作用域组合数（仅用于日志）。
+// 任何不满足都直接拒绝：作用域列缺失或为 NULL 时 DELETE…JOIN 删不到旧行，
+// 会留下重复数据；而"悄悄退化成整表删除"正是 issue #7 里抹掉历史期间的成因。
+func validateSnapshotScope(rows []map[string]interface{}, cols []string, scopeCols []string, fieldMap map[string]string) (int, error) {
+	if len(scopeCols) == 0 {
+		return 0, nil
+	}
+	colSet := make(map[string]bool, len(cols))
+	for _, c := range cols {
+		colSet[strings.ToUpper(c)] = true
+	}
+	for _, sc := range scopeCols {
+		if err := config.ValidateSQLIdentifier(sc); err != nil {
+			return 0, err
+		}
+		if !colSet[strings.ToUpper(sc)] {
+			return 0, fmt.Errorf("snapshot scope column %s is not among write columns; refuse scoped replace", sc)
+		}
+	}
+	dbToSource := buildDBToSource(fieldMap)
+	groups := map[string]bool{}
+	for i, row := range rows {
+		parts := make([]string, 0, len(scopeCols))
+		for _, sc := range scopeCols {
+			v := lookupPKValue(row, sc, dbToSource)
+			if v == nil {
+				return 0, fmt.Errorf("snapshot scope column %s is NULL at row %d; refuse scoped replace", sc, i)
+			}
+			s := strings.TrimSpace(fmt.Sprintf("%v", v))
+			if s == "" {
+				return 0, fmt.Errorf("snapshot scope column %s is empty at row %d; refuse scoped replace", sc, i)
+			}
+			parts = append(parts, s)
+		}
+		groups[strings.Join(parts, "|")] = true
+	}
+	return len(groups), nil
+}
+
+// ReplaceSnapshot 在单个事务内替换目标表内容：staging 装载在事务外完成，
+// 删除与 INSERT…SELECT 同处一个事务，任一步失败即回滚，目标表保持上一轮快照。
+// scopeCols 非空时只删除并重写该组列取值相同的行（按期间作用域替换），
+// 为空时 TRUNCATE 整表。
 // （原因：此前由引擎在事务外 TRUNCATE，写入失败会把"同步没更新"变成"生产表被清空"，
-// 2026-11-02 事故中 stk_inventory 连续 5 轮被清空为 0 行。见 ADR-0007）
+// 2026-11-02 事故中 stk_inventory 连续 5 轮被清空为 0 行。见 ADR-0007 与 issue #7）
 func (w *SQLServerWriter) ReplaceSnapshot(ctx context.Context, tableName string,
-	rows []map[string]interface{}, cols []string, pkCols []string, fieldMap map[string]string) (UpsertResult, error) {
+	rows []map[string]interface{}, cols []string, pkCols []string, fieldMap map[string]string,
+	scopeCols []string) (UpsertResult, error) {
 
 	if len(rows) == 0 {
 		// 空快照绝不换入：宁可不更新，也不能把目标表清空
@@ -212,6 +255,11 @@ func (w *SQLServerWriter) ReplaceSnapshot(ctx context.Context, tableName string,
 		if err := config.ValidateSQLIdentifier(col); err != nil {
 			return UpsertResult{}, err
 		}
+	}
+	// 作用域校验放在任何库交互之前：拒绝执行不应留下任何副作用
+	scopeGroups, err := validateSnapshotScope(rows, cols, scopeCols, fieldMap)
+	if err != nil {
+		return UpsertResult{}, err
 	}
 	if ctx == nil {
 		ctx = context.Background()
@@ -259,8 +307,26 @@ func (w *SQLServerWriter) ReplaceSnapshot(ctx context.Context, tableName string,
 		}
 	}()
 
-	if _, err := tx.ExecContext(ctx, "TRUNCATE TABLE dbo."+tableName); err != nil {
-		return UpsertResult{}, fmt.Errorf("truncate %s: %w", tableName, err)
+	if len(scopeCols) == 0 {
+		if _, err := tx.ExecContext(ctx, "TRUNCATE TABLE dbo."+tableName); err != nil {
+			return UpsertResult{}, fmt.Errorf("truncate %s: %w", tableName, err)
+		}
+	} else {
+		// 作用域删除用与 staging 的 JOIN 表达：SQL Server 不支持行值元组
+		// `WHERE (a,b) IN ((..),(..))`，且枚举取值会带来参数膨胀与转义面。
+		onParts := make([]string, 0, len(scopeCols))
+		for _, sc := range scopeCols {
+			onParts = append(onParts, fmt.Sprintf("t.[%s] = s.[%s]", sc, sc))
+		}
+		deleteSQL := fmt.Sprintf("DELETE t FROM dbo.%s AS t JOIN dbo.%s AS s ON %s",
+			tableName, stagingTable, strings.Join(onParts, " AND "))
+		delRes, delErr := tx.ExecContext(ctx, deleteSQL)
+		if delErr != nil {
+			return UpsertResult{}, fmt.Errorf("delete scoped snapshot rows from %s: %w", tableName, delErr)
+		}
+		deleted, _ := delRes.RowsAffected()
+		log.Printf("[SNAPSHOT-REPLACE] %s: 作用域 %v 内删除 %d 行（本批 %d 个作用域组合）",
+			tableName, scopeCols, deleted, scopeGroups)
 	}
 	insertSQL := fmt.Sprintf("INSERT INTO dbo.%s (%s) SELECT %s FROM dbo.%s", tableName, colList, colList, stagingTable)
 	res, err := tx.ExecContext(ctx, insertSQL)

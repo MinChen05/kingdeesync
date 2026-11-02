@@ -51,6 +51,36 @@ func TestAccountBalanceStartPeriodSixMonthWindow(t *testing.T) {
 	}
 }
 
+func TestSnapshotSpecDefinesReplaceScopePerForm(t *testing.T) {
+	cases := []struct {
+		formName   string
+		isSnapshot bool
+		scopeCols  []string
+		aggregate  bool
+	}{
+		// 增量窗口只覆盖最近 6 期，必须按期间作用域替换（issue #7）
+		{"科目余额表", true, []string{"FACCTYEAR", "FACCTPERIOD"}, false},
+		// 当前时点全量快照，无期间维度，保持整表替换
+		{"即时库存", true, nil, true},
+		{"销售订单", false, nil, false},
+	}
+	for _, tc := range cases {
+		spec, ok := snapshotSpecFor(tc.formName)
+		if ok != tc.isSnapshot {
+			t.Fatalf("%s isSnapshot = %v, want %v", tc.formName, ok, tc.isSnapshot)
+		}
+		if !reflect.DeepEqual(spec.scopeCols, tc.scopeCols) {
+			t.Fatalf("%s scopeCols = %#v, want %#v", tc.formName, spec.scopeCols, tc.scopeCols)
+		}
+		if spec.aggregate != tc.aggregate {
+			t.Fatalf("%s aggregate = %v, want %v", tc.formName, spec.aggregate, tc.aggregate)
+		}
+		if got := isSnapshotForm(tc.formName); got != tc.isSnapshot {
+			t.Fatalf("%s isSnapshotForm = %v, want %v", tc.formName, got, tc.isSnapshot)
+		}
+	}
+}
+
 func TestStandardCursorKeysCoverAllStandardForms(t *testing.T) {
 	for _, form := range []string{"发货通知单", "生产入库单", "销售订单", "销售出库单", "销售退货单", "预测订单", "生产订单主表", "生产订单明细", "客户资料", "生产用料清单主表", "生产用料清单明细表", "物料", "仓库", "物料清单", "物料清单子项", "采购订单", "采购入库单", "委外订单", "应付单", "应收单"} {
 		if got := cursorKeysForForm(form); len(got) == 0 {

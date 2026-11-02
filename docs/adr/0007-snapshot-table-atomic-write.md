@@ -34,11 +34,15 @@ TRUNCATE 破坏了**。快照表单因此成为全系统唯一"失败即丢数�
 
    ```
    BEGIN TRAN
-     TRUNCATE TABLE dbo.<目标表>
+     TRUNCATE TABLE dbo.<目标表>            -- 无替换作用域时
+     -- 或 DELETE t FROM dbo.<目标表> AS t JOIN dbo.<staging> AS s ON t.<作用域列> = s.<作用域列>
      INSERT INTO dbo.<目标表> (列…) SELECT 列… FROM dbo.<staging>
    COMMIT      -- 任一步失败 → ROLLBACK，目标表保持上一轮数据
    ```
 
+   作用域列由 `snapshotSpecFor` 逐表单声明（`即时库存` 无作用域＝整表替换；`科目余额表`
+   按 `FACCTYEAR,FACCTPERIOD` 只替换本批涉及的期间）。事务边界与"整体换入"语义不变，
+   变的只是删除范围（原因：增量轮只取最近若干期，整表删除会抹掉窗口外的历史期间，issue #7）。
    提交前额外核对 `行数(affected) == staging 装载行数`，不一致同样回滚
    （原因：半张表比整轮回滚更糟）。空快照与 0 行装载一律拒绝执行，
    绝不允许"清空而不写回"。
@@ -89,7 +93,12 @@ TRUNCATE 破坏了**。快照表单因此成为全系统唯一"失败即丢数�
 - [x] 单表单预算 `form_run_timeout_minutes`（默认 10）：超预算只失败该表单并写明原因，整轮继续（2C）
 - [x] 目标库排队守卫 `grant_wait_guard_seconds`（默认 60，-1 关闭）：`RESOURCE_SEMAPHORE` 排队超阈值时
       跳过本轮并推送通知；探测失败按放行处理，避免把抖动放大成停摆（2E）
-- [ ] `RecoverAbnormalRuns`（心跳超时路径）同样补写 `duration_seconds`
-- [ ] `RecoverAbnormalRuns`（心跳超时路径）同样补写 `duration_seconds`
-- [ ] 测试：取消路径清理仍执行；终态不被覆盖；集成测试门控下跑通快照表单整轮替换
-- [ ] 更新 `CONTEXT.md` 快照表单定义与 `docs/architecture/current-runtime.md`
+- [x] `RecoverAbnormalRuns`（心跳超时路径）同样补写 `duration_seconds`
+      （原因：该路径与超时中止路径产出同一个 `failed_abnormal_exit` 告警，缺耗时即显示 0 秒）
+- [x] 测试：取消路径清理仍执行；终态不被覆盖；集成测试门控下跑通快照表单整轮替换
+- [x] 快照表单替换作用域化（issue #7 路线 A）：`snapshotSpecFor` 声明作用域列，
+      `ReplaceSnapshot` 用 `DELETE t FROM 目标 JOIN staging` 替换作用域内行，
+      `scopeCols` 为空才 `TRUNCATE` 整表；作用域列缺失或取值 NULL 直接拒绝且不接触数据库
+- [x] 更新 `CONTEXT.md` 快照表单定义（"整表替换"→"按声明的作用域替换"）；
+      `docs/architecture/current-runtime.md` 不含快照写入语义描述，无需改动
+- [ ] 上线验证：`科目余额表` 全量回填后，增量轮不得把窗口外期间归零（见设计文档 §8）

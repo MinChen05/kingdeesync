@@ -48,6 +48,63 @@ func TestCleanupContextAcceptsNilParent(t *testing.T) {
 	}
 }
 
+func TestValidateSnapshotScope(t *testing.T) {
+	cols := []string{"FID", "FBALANCEID", "FACCTYEAR", "FACCTPERIOD"}
+	scope := []string{"FACCTYEAR", "FACCTPERIOD"}
+
+	t.Run("无作用域列时跳过校验", func(t *testing.T) {
+		groups, err := validateSnapshotScope([]map[string]interface{}{{"FID": int64(1)}}, []string{"FID"}, nil, nil)
+		if err != nil || groups != 0 {
+			t.Fatalf("空作用域应直接放行, groups=%d err=%v", groups, err)
+		}
+	})
+
+	t.Run("作用域列不在写列中时拒绝", func(t *testing.T) {
+		rows := []map[string]interface{}{{"FID": int64(1), "FACCTYEAR": "2026", "FACCTPERIOD": "1"}}
+		if _, err := validateSnapshotScope(rows, []string{"FID", "FACCTYEAR"}, scope, nil); err == nil {
+			t.Fatal("缺少 FACCTPERIOD 写列时必须拒绝，否则会静默退化成整表删除")
+		}
+	})
+
+	t.Run("作用域值为 NULL 或空串时拒绝", func(t *testing.T) {
+		nulls := []map[string]interface{}{
+			{"FACCTYEAR": "2026", "FACCTPERIOD": nil},
+		}
+		if _, err := validateSnapshotScope(nulls, cols, scope, nil); err == nil {
+			t.Fatal("NULL 作用域值会让 DELETE…JOIN 删不到旧行，必须拒绝")
+		}
+		blanks := []map[string]interface{}{
+			{"FACCTYEAR": "2026", "FACCTPERIOD": "   "},
+		}
+		if _, err := validateSnapshotScope(blanks, cols, scope, nil); err == nil {
+			t.Fatal("空串作用域值同样必须拒绝")
+		}
+	})
+
+	t.Run("按金蝶源字段名取值", func(t *testing.T) {
+		rows := []map[string]interface{}{
+			{"FYEAR": "2026", "FPERIOD": "1"},
+			{"FYEAR": "2026", "FPERIOD": "2"},
+			{"FYEAR": "2026", "FPERIOD": "1"},
+		}
+		fieldMap := map[string]string{"FYEAR": "FACCTYEAR", "FPERIOD": "FACCTPERIOD"}
+		groups, err := validateSnapshotScope(rows, cols, scope, fieldMap)
+		if err != nil {
+			t.Fatalf("应能通过 fieldMap 反查取值: %v", err)
+		}
+		if groups != 2 {
+			t.Fatalf("作用域组合数 = %d, want 2", groups)
+		}
+	})
+
+	t.Run("非法标识符拒绝", func(t *testing.T) {
+		rows := []map[string]interface{}{{"FACCTYEAR": "2026", "FACCTPERIOD": "1"}}
+		if _, err := validateSnapshotScope(rows, cols, []string{"FACCTYEAR]; DROP TABLE x"}, nil); err == nil {
+			t.Fatal("作用域列名必须过标识符校验（会被拼接进 DELETE…JOIN）")
+		}
+	})
+}
+
 func TestBuildDirectKeyCountQueryUsesFullCompositeKey(t *testing.T) {
 	writer := &SQLServerWriter{}
 	query, args := writer.buildDirectKeyCountQuery("stk_instock", []string{"FID", "FENTRYID"}, []map[string]interface{}{

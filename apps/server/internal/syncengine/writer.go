@@ -35,11 +35,16 @@ type RowWriter interface {
 	Close() error
 }
 
-// SnapshotReplacer 是 RowWriter 的可选能力：在单个事务内清空并整体重写目标表。
+// SnapshotReplacer 是 RowWriter 的可选能力：在单个事务内替换目标表内容。
 // 实现方必须保证任一步失败即回滚，目标表保持上一轮快照。
 // （原因：此前引擎在事务外 TRUNCATE，写入失败就变成"生产表被清空"——
 // 2026-11-02 事故中 stk_inventory 连续 5 轮被清空为 0 行，见 ADR-0007）
+//
+// scopeCols 限定替换作用域：非空时只替换"这些列的组合与本次快照相同"的目标行，
+// 使增量窗口不再抹掉窗口外的历史数据（科目余额表按 FACCTYEAR/FACCTPERIOD，
+// 见 docs/superpowers/plans/2026-11-02-balance-scoped-snapshot-replace.md）；
+// 为空则整表替换（即时库存）。
 type SnapshotReplacer interface {
 	ReplaceSnapshot(ctx context.Context, tableName string, rows []map[string]interface{},
-		cols []string, pkCols []string, fieldMap map[string]string) (UpsertResult, error)
+		cols []string, pkCols []string, fieldMap map[string]string, scopeCols []string) (UpsertResult, error)
 }

@@ -4,12 +4,40 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"path/filepath"
 	"testing"
 	"time"
 
 	"github.com/kingdee-sync/go/internal/config"
 	"github.com/kingdee-sync/go/internal/db"
 )
+
+// findRepoConfigPath 从测试工作目录向上查找 config.local.ini，取最靠近仓库根的那一份。
+// （原因：go test 的 CWD 是包目录，硬编码相对层数会随目录调整失效；
+// 且 apps/server 下存在旧副本，必须优先用仓库根那份生效配置）
+func findRepoConfigPath(t *testing.T) string {
+	t.Helper()
+	dir, err := os.Getwd()
+	if err != nil {
+		t.Fatal(err)
+	}
+	found := ""
+	for i := 0; i < 8; i++ {
+		candidate := filepath.Join(dir, "config.local.ini")
+		if _, err := os.Stat(candidate); err == nil {
+			found = candidate
+		}
+		parent := filepath.Dir(dir)
+		if parent == dir {
+			break
+		}
+		dir = parent
+	}
+	if found == "" {
+		t.Fatal("未找到 config.local.ini")
+	}
+	return found
+}
 
 // TestSQLServerReplaceSnapshotIsAtomic 验证快照整体替换的事务语义：
 // ① 成功换入全量覆盖；② 空快照被拒绝且目标表不变；
@@ -20,20 +48,18 @@ func TestSQLServerReplaceSnapshotIsAtomic(t *testing.T) {
 	if os.Getenv("MSSQL_INTEGRATION") != "1" {
 		t.Skip("set MSSQL_INTEGRATION=1 to run against a dedicated SQL Server test instance")
 	}
-	if _, err := config.Load("../../../config.local.ini"); err != nil {
+	if _, err := config.Load(findRepoConfigPath(t)); err != nil {
 		t.Fatal(err)
 	}
 	writer := NewSQLServerWriter()
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Minute)
 	defer cancel()
 
-	handle, _, err := writer.openSQL(ctx)
-	if err != nil {
+	// openSQL 复用全局连接，故先建立主连接（原因：ReplaceSnapshot 与建表都走全局 db.DB）
+	if err := db.Init(); err != nil {
 		t.Fatal(err)
 	}
-	oldDB := db.DB
-	db.DB = handle
-	defer func() { db.DB = oldDB }()
+	handle := db.DB
 
 	table := fmt.Sprintf("snap_it_%d", time.Now().UnixNano())
 	// CHECK 约束只存在于目标表（staging 仅复制列类型与可空性），
@@ -49,7 +75,7 @@ func TestSQLServerReplaceSnapshotIsAtomic(t *testing.T) {
 		_, _ = handle.Exec("IF OBJECT_ID(N'dbo." + table + "', 'U') IS NOT NULL DROP TABLE dbo." + table)
 	}()
 
-	cols := []string{"FID", "FGRP", "FVAL"}
+	cols := []string{"FID", "FGRP", "FVAL", "SYNC_TIME"} // 引擎侧 appendSyncTimeCol 会追加该列，测试需同构
 	pkCols := []string{"FID", "FGRP"}
 
 	countRows := func() int64 {

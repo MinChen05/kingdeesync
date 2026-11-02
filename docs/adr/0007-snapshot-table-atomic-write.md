@@ -83,7 +83,8 @@ TRUNCATE 破坏了**。快照表单因此成为全系统唯一"失败即丢数�
 ## 落地清单
 
 - [x] `SQLServerWriter` 实现事务内替换（`ReplaceSnapshot`）；引擎快照分支改调该接口，不再事务外 `TRUNCATE`
-      原子性集成测试 `TestSQLServerReplaceSnapshotIsAtomic` 需 `MSSQL_INTEGRATION=1`，默认跳过（原因：避免连生产库），**尚未在真实实例上执行过**
+      原子性集成测试 `TestSQLServerReplaceSnapshotIsAtomic`（需 `MSSQL_INTEGRATION=1`）**已在真实实例通过**：
+      违反约束的换入整体回滚、目标表保持上一轮行数与取值，空快照被拒绝，覆盖后无旧主键残留，失败不留 `stg_*`
 - [x] staging `DROP` 改用 `context.WithoutCancel` + 独立超时，失败记录表名；`Rollback` 补错误可见性（2A）
 - [x] 单表单预算 `form_run_timeout_minutes`（默认 10）：超预算只失败该表单并写明原因，整轮继续（2C）
 - [x] 目标库排队守卫 `grant_wait_guard_seconds`（默认 60，-1 关闭）：`RESOURCE_SEMAPHORE` 排队超阈值时

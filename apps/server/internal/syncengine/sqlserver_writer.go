@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"database/sql"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"log"
 	"math"
@@ -21,6 +22,19 @@ import (
 // Aligned with the Python upsert_engine_sqlserver.py logic.
 type SQLServerWriter struct {
 	cfg config.DatabaseConfig
+}
+
+// cleanupTimeout 限定取消路径资源回收的最长时间（原因：清理不能因为上游已经超时就一直挂着）
+const cleanupTimeout = 10 * time.Second
+
+// cleanupContext 派生一个不随父上下文取消、但保留父上下文取值的清理上下文。
+// （原因：run 超时后 ctx 已 Done，沿用它会让 staging DROP 与事务 ROLLBACK 必然失败，
+// 在生产库留下孤儿 stg_* 表；2026-11-02 事故实测一轮漏一张约 6 万行的表）
+func cleanupContext(parent context.Context) (context.Context, context.CancelFunc) {
+	if parent == nil {
+		parent = context.Background()
+	}
+	return context.WithTimeout(context.WithoutCancel(parent), cleanupTimeout)
 }
 
 func NewSQLServerWriter() *SQLServerWriter {
@@ -82,7 +96,13 @@ func (w *SQLServerWriter) stagingUpsert(ctx context.Context, tableName string, r
 	stagingTable := "stg_" + hex.EncodeToString(hash[:8])
 
 	defer func() {
-		_, _ = sqlDB.ExecContext(ctx, fmt.Sprintf("IF OBJECT_ID(N'dbo.%s', 'U') IS NOT NULL DROP TABLE dbo.%s", stagingTable, stagingTable))
+		cleanupCtx, cancelCleanup := cleanupContext(ctx)
+		defer cancelCleanup()
+
+		if _, err := sqlDB.ExecContext(cleanupCtx,
+			fmt.Sprintf("IF OBJECT_ID(N'dbo.%s', 'U') IS NOT NULL DROP TABLE dbo.%s", stagingTable, stagingTable)); err != nil {
+			log.Printf("[SQLSERVER-STAGING] 清理暂存表 dbo.%s 失败（需人工回收）: %v", stagingTable, err)
+		}
 	}()
 
 	// Build staging table DDL from target table structure.
@@ -132,7 +152,12 @@ func (w *SQLServerWriter) stagingUpsert(ctx context.Context, tableName string, r
 	}
 	defer func() {
 		if err != nil {
-			tx.Rollback()
+			// database/sql 的 Tx 没有 RollbackContext；Rollback 内部使用独立上下文，
+			// 不会因 run 超时取消而失败，这里只补失败可见性。
+			// （原因：真正会漏的是事务外的 staging DROP，见上方 cleanupContext）
+			if rbErr := tx.Rollback(); rbErr != nil && !errors.Is(rbErr, sql.ErrTxDone) {
+				log.Printf("[SQLSERVER-MERGE] 回滚 %s 事务失败: %v", tableName, rbErr)
+			}
 		}
 	}()
 

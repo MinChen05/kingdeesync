@@ -40,7 +40,9 @@ TRUNCATE 破坏了**。快照表单因此成为全系统唯一"失败即丢数�
    ```
 
 3. staging 的 `DROP` 移出业务上下文：用 `context.WithoutCancel(ctx)` + 独立短超时执行，
-   失败时记录表名（不再静默丢弃）。同一处理用于 `ROLLBACK`。
+   失败时记录表名（不再静默丢弃）。事务回滚不属同一问题——`database/sql` 的 `Tx` 没有
+   `RollbackContext`，`Rollback()` 内部使用独立上下文，取消信号不会令其失败，
+   因此只补错误可见性（原因：只有事务外的 staging DDL 才是真实泄漏点，事故遗留 9 张表已证实）。
 4. 落地方式：`RowWriter` 增加**可选能力接口**（如 `SnapshotReplacer`），由
    `SQLServerWriter` 实现；引擎在 `isSnapshotForm` 分支改调该接口并删除裸 `TRUNCATE`
    （`engine.go:1289-1316`）。未实现该接口的写入器保持现行为，避免把 SQL Server 语义
@@ -77,7 +79,7 @@ TRUNCATE 破坏了**。快照表单因此成为全系统唯一"失败即丢数�
 ## 落地清单
 
 - [ ] `SQLServerWriter` 实现事务内替换；`engine.go` 移除裸 `TRUNCATE`
-- [ ] staging `DROP` / `ROLLBACK` 改用 `context.WithoutCancel` + 独立超时，失败记录表名
+- [x] staging `DROP` 改用 `context.WithoutCancel` + 独立超时，失败记录表名；`Rollback` 补错误可见性（2A）
 - [ ] 单表单级超时（新增 `form_run_timeout_minutes`，默认 10）
 - [ ] `RecoverAbnormalRuns`（心跳超时路径）同样补写 `duration_seconds`
 - [ ] 测试：取消路径清理仍执行；终态不被覆盖；集成测试门控下跑通快照表单整轮替换

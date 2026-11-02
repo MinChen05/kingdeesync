@@ -127,9 +127,46 @@ type SyncEngine struct {
 	fetchRows          func(context.Context, string, int) (*kind.QueryResult, error)
 	writeRowsFunc      func(context.Context, string, []map[string]interface{}, []string, map[string]string) (UpsertResult, error)
 	formQuery          func(string) (config.FormQuery, bool)
+	// formRunBudget 单表单预算覆盖值，0 表示按配置与默认值解析（原因：使超时行为可被测试确定性地验证）
+	formRunBudget time.Duration
+}
+
+// resolveFormBudget 返回本引擎生效的单表单预算。
+func (e *SyncEngine) resolveFormBudget() time.Duration {
+	if e.formRunBudget > 0 {
+		return e.formRunBudget
+	}
+	return resolveFormRunTimeout()
 }
 
 const stopTimeout = 60 * time.Second
+
+// formRunTimeout 是单表单预算的兜底值（配置未加载时生效），保留包级变量以便测试注入。
+var formRunTimeout = 10 * time.Minute
+
+// resolveFormRunTimeout 优先取配置，未加载或非法时回退包级默认值。
+func resolveFormRunTimeout() time.Duration {
+	if d := config.GetFormRunTimeout(); d > 0 {
+		return d
+	}
+	return formRunTimeout
+}
+
+// formBudgetExceededCause 判定上下文结束是否由"本表单超预算"引起，而非整轮被停止/取消。
+// 两者都表现为 context 结束，但只有前者应记为该表单的失败原因
+// （原因：2026-11-02 事故中其余 15 张表被记为 "sync stopped"，掩盖了真正卡住的即时库存）。
+func formBudgetExceededCause(roundCtx, formCtx, formFetchCtx context.Context, budget time.Duration) (string, bool) {
+	if roundCtx == nil || roundCtx.Err() != nil {
+		return "", false
+	}
+	if formCtx != nil && errors.Is(formCtx.Err(), context.DeadlineExceeded) {
+		return fmt.Sprintf("表单执行超过 %s 预算上限，已单独中止", budget), true
+	}
+	if formFetchCtx != nil && errors.Is(formFetchCtx.Err(), context.DeadlineExceeded) {
+		return fmt.Sprintf("表单执行超过 %s 预算上限，已单独中止", budget), true
+	}
+	return "", false
+}
 
 // PriorityMap defines form priority groups (aligned with Python side).
 // Group 0: small tables — fast completion, release API bandwidth early.
@@ -1008,6 +1045,17 @@ func (e *SyncEngine) runSync(ctx context.Context, runID string, forms []string, 
 					<-sem // release
 				}()
 
+				// 单表单预算：一张表卡住不得吃光整轮看门狗时间。
+				// （原因：2026-11-02 即时库存独占 1800 秒，同轮其余 15 张表被连带标记 sync stopped）
+				// 遮蔽 ctx 与 fetchCtx，使本表单的拉取与写入自动受同一上限约束；
+				// roundCtx 保留轮级上下文，用于区分"本表单超预算"与"整轮被停止"。
+				roundCtx := ctx
+				formBudget := e.resolveFormBudget()
+				ctx, cancelFormBudget := context.WithTimeout(roundCtx, formBudget)
+				defer cancelFormBudget()
+				fetchCtx, cancelFormFetch := context.WithTimeout(fetchCtx, formBudget)
+				defer cancelFormFetch()
+
 				start := time.Now()
 				stat := FormStat{
 					FormName:  formName,
@@ -1222,7 +1270,12 @@ func (e *SyncEngine) runSync(ctx context.Context, runID string, forms []string, 
 				}
 				if err != nil {
 					log.Printf("Failed to query %s: %v", formName, err)
-					if ctx.Err() != nil || fetchCtx.Err() != nil || e.isFetchStopped() {
+					if cause, exceeded := formBudgetExceededCause(roundCtx, ctx, fetchCtx, formBudget); exceeded {
+						stat.Status = StatusFailed
+						stat.ErrorCount = 1
+						stat.Error = cause
+						e.logMsg(formName, "ERROR", cause)
+					} else if ctx.Err() != nil || fetchCtx.Err() != nil || e.isFetchStopped() {
 						stat.Status = StatusStopped
 						stat.Error = "sync stopped"
 					} else {
@@ -1238,8 +1291,14 @@ func (e *SyncEngine) runSync(ctx context.Context, runID string, forms []string, 
 					return
 				}
 				if ctx.Err() != nil {
-					stat.Status = StatusStopped
-					stat.Error = "sync stopped"
+					if cause, exceeded := formBudgetExceededCause(roundCtx, ctx, fetchCtx, formBudget); exceeded {
+						stat.Status = StatusFailed
+						stat.ErrorCount = 1
+						stat.Error = cause
+					} else {
+						stat.Status = StatusStopped
+						stat.Error = "sync stopped"
+					}
 					stat.DurationSec = time.Since(start).Seconds()
 					mu.Lock()
 					results = append(results, stat)
@@ -1334,18 +1393,30 @@ func (e *SyncEngine) runSync(ctx context.Context, runID string, forms []string, 
 							}
 						}
 						upsertRes, err := e.writeRowsWithContext(ctx, stat.TableName, writeRows, fieldKeyList, formQuery.FieldMap)
+						cause, budgetExceeded := formBudgetExceededCause(roundCtx, ctx, fetchCtx, formBudget)
 						if err != nil {
+							msg := err.Error()
+							if budgetExceeded {
+								msg = cause + ": " + msg
+							}
 							log.Printf("Failed to upsert %s: %v", formName, err)
-							e.logMsg(formName, "ERROR", "写入失败: "+err.Error())
+							e.logMsg(formName, "ERROR", "写入失败: "+msg)
 							stat.Status = StatusFailed
 							stat.ErrorCount = 1
-							stat.Error = err.Error()
+							stat.Error = msg
 						} else if ctx.Err() != nil {
 							// A shutdown deadline may cancel the run context while a
 							// writer returns successfully after its request was submitted.
 							// Do not advance or clear the checkpoint in that case.
-							stat.Status = StatusStopped
-							stat.Error = "sync stopped"
+							if budgetExceeded {
+								stat.Status = StatusFailed
+								stat.ErrorCount = 1
+								stat.Error = cause
+								e.logMsg(formName, "ERROR", cause)
+							} else {
+								stat.Status = StatusStopped
+								stat.Error = "sync stopped"
+							}
 						} else {
 							stat.InsertedCount = upsertRes.Inserted
 							stat.UpdatedCount = upsertRes.Updated

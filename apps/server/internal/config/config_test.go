@@ -128,6 +128,27 @@ func TestGetSyncRunTimeoutByType(t *testing.T) {
 	}
 }
 
+func TestGetFormRunTimeout(t *testing.T) {
+	old := instance
+	t.Cleanup(func() { instance = old })
+
+	// 配置未加载：返回 0，由调用方回退包级默认值
+	instance = nil
+	if got := GetFormRunTimeout(); got != 0 {
+		t.Fatalf("配置未加载时应返回 0，实际 %v", got)
+	}
+
+	instance = &Config{}
+	if got := GetFormRunTimeout(); got != 0 {
+		t.Fatalf("字段缺省时应返回 0，实际 %v", got)
+	}
+
+	instance.Sync.FormRunTimeoutMinutes = 7
+	if got := GetFormRunTimeout(); got != 7*time.Minute {
+		t.Fatalf("单表单预算 = %v, want 7m", got)
+	}
+}
+
 func TestDBProbeConfigDefaults(t *testing.T) {
 	old := instance
 	t.Cleanup(func() { instance = old })

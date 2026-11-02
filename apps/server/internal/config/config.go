@@ -89,6 +89,10 @@ type Config struct {
 		// （原因：周日全量耗时已逼近原 2 小时硬编码上限，增量最坏仅 10 分钟，统一超时无法兼顾）
 		FullRunTimeoutMinutes        int `ini:"full_run_timeout_minutes"`
 		IncrementalRunTimeoutMinutes int `ini:"incremental_run_timeout_minutes"`
+		// 单表单预算：限制一张表最多占用多长时间（分钟）
+		// （原因：2026-11-02 即时库存一张表吃光 30 秒级基线劣化到 1800 秒整轮预算，
+		// 连带 15 张表被标记 sync stopped；表单级上限可把单点故障限制在该表单）
+		FormRunTimeoutMinutes int `ini:"form_run_timeout_minutes"`
 		// 目标数据库定期探活（指针以区分"未配置"与"显式 false"，未配置默认开启）
 		// （原因：周日不调度任何任务，目标库宕机只能等周一增量才暴露）
 		DBProbeEnabled      *bool `ini:"db_probe_enabled"`
@@ -269,6 +273,9 @@ func finalizeConfig(f *ini.File, path string, cfg *Config) {
 	}
 	if cfg.Sync.IncrementalRunTimeoutMinutes == 0 {
 		cfg.Sync.IncrementalRunTimeoutMinutes = 30
+	}
+	if cfg.Sync.FormRunTimeoutMinutes == 0 {
+		cfg.Sync.FormRunTimeoutMinutes = 10
 	}
 	if cfg.Sync.DBProbeEnabled == nil {
 		enabled := true
@@ -466,6 +473,16 @@ func GetSyncRunTimeout(syncType string) time.Duration {
 		return time.Duration(c.Sync.FullRunTimeoutMinutes) * time.Minute
 	}
 	return time.Duration(c.Sync.IncrementalRunTimeoutMinutes) * time.Minute
+}
+
+// GetFormRunTimeout 返回单表单预算（分钟）。配置未加载时返回 0，由调用方回退默认值。
+// （原因：一张表卡住不应吃光整轮看门狗预算，见 ADR-0007 落地清单）
+func GetFormRunTimeout() time.Duration {
+	c := Get()
+	if c == nil {
+		return 0
+	}
+	return time.Duration(c.Sync.FormRunTimeoutMinutes) * time.Minute
 }
 
 // IsDBProbeEnabled 返回目标数据库探活是否开启；配置未加载时默认开启。

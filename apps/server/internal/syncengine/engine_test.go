@@ -467,3 +467,92 @@ func TestStatusSnapshotOnlyServedForActiveRun(t *testing.T) {
 		t.Fatalf("GetStatus 状态 = %q, want %q（刚完成的终态需对 UI 连续可见）", status, StatusFailedAbnormalExit)
 	}
 }
+
+func TestFormBudgetExceededCauseDistinguishesRoundCancellation(t *testing.T) {
+	const budget = 10 * time.Minute
+
+	roundAlive, cancelRound := context.WithCancel(context.Background())
+	defer cancelRound()
+	expiredForm, cancelForm := context.WithTimeout(roundAlive, time.Nanosecond)
+	defer cancelForm()
+	time.Sleep(time.Millisecond)
+
+	cause, exceeded := formBudgetExceededCause(roundAlive, expiredForm, roundAlive, budget)
+	if !exceeded {
+		t.Fatal("整轮未取消而表单上下文超时应判定为超预算")
+	}
+	if !strings.Contains(cause, "预算上限") {
+		t.Fatalf("cause = %q, 应包含『预算上限』字样", cause)
+	}
+
+	// fetchCtx 超时同样判定为超预算（原因：卡点常在拉取阶段而非写入阶段）
+	expiredFetch, cancelFetch := context.WithTimeout(roundAlive, time.Nanosecond)
+	defer cancelFetch()
+	time.Sleep(time.Millisecond)
+	if _, exceeded := formBudgetExceededCause(roundAlive, roundAlive, expiredFetch, budget); !exceeded {
+		t.Fatal("表单拉取上下文超时应判定为超预算")
+	}
+
+	// 整轮被取消时不得判定为超预算，否则其余表单会被误标失败原因
+	cancelRound()
+	if _, exceeded := formBudgetExceededCause(roundAlive, roundAlive, roundAlive, budget); exceeded {
+		t.Fatal("整轮已取消时不得判定为单表单超预算")
+	}
+}
+
+// 单表单预算只应牺牲该表单：其余表单必须继续执行（2026-11-02 一张表吃光整轮预算）。
+func TestFormBudgetExceededFailsOnlyThatForm(t *testing.T) {
+	setupRecoveryTest(t)
+	const runID = "form-budget"
+	if _, err := gormdb.CreateSyncRun(runID, "test", "full"); err != nil {
+		t.Fatal(err)
+	}
+
+	engine := &SyncEngine{
+		writer:        &recoveryTestWriter{},
+		formRunBudget: 80 * time.Millisecond,
+		formQuery: func(formName string) (config.FormQuery, bool) {
+			return config.FormQuery{FormID: formName, FieldKeys: "FID"}, true
+		},
+		fetchRows: func(_ context.Context, formName string, _ int) (*kind.QueryResult, error) {
+			return &kind.QueryResult{Rows: []map[string]interface{}{{"FID": formName}}}, nil
+		},
+		writeRowsFunc: func(ctx context.Context, tableName string, rows []map[string]interface{}, _ []string, _ map[string]string) (UpsertResult, error) {
+			if tableName == "bd_stock" {
+				<-ctx.Done()
+				return UpsertResult{}, fmt.Errorf("execute MERGE for %s: %w", tableName, ctx.Err())
+			}
+			return UpsertResult{Inserted: len(rows), Total: len(rows)}, nil
+		},
+	}
+	if err := engine.PrepareRun(runID, false); err != nil {
+		t.Fatal(err)
+	}
+
+	result, err := engine.SyncDataWithRunID(context.Background(), runID, []string{"物料", "仓库"}, "full", false)
+	if err != nil {
+		t.Fatalf("SyncDataWithRunID() error = %v", err)
+	}
+
+	stats := map[string]FormStat{}
+	for _, s := range result.FormStats {
+		stats[s.FormName] = s
+	}
+	material, ok := stats["物料"]
+	if !ok {
+		t.Fatalf("缺少物料统计: %#v", result.FormStats)
+	}
+	if material.Status != StatusSuccess {
+		t.Fatalf("物料 status = %q (%q), want success（超预算不得波及同组其他表单）", material.Status, material.Error)
+	}
+	stock, ok := stats["仓库"]
+	if !ok {
+		t.Fatalf("缺少仓库统计: %#v", result.FormStats)
+	}
+	if stock.Status != StatusFailed {
+		t.Fatalf("仓库 status = %q, want failed", stock.Status)
+	}
+	if !strings.Contains(stock.Error, "预算上限") {
+		t.Fatalf("仓库 error = %q, 应写明单表单超预算而非 sync stopped", stock.Error)
+	}
+}

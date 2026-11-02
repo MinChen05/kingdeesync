@@ -93,8 +93,12 @@ type Config struct {
 		// （原因：2026-11-02 即时库存一张表吃光 30 秒级基线劣化到 1800 秒整轮预算，
 		// 连带 15 张表被标记 sync stopped；表单级上限可把单点故障限制在该表单）
 		FormRunTimeoutMinutes int `ini:"form_run_timeout_minutes"`
+		// 目标库内存授予排队阈值（秒）：超过该值则跳过本轮同步。填 -1 关闭守卫。
+		// （原因：授予队列 FIFO，外部作业霸占队首时本轮注定超时，空跑还会清空快照表）
+		GrantWaitGuardSeconds int `ini:"grant_wait_guard_seconds"`
 		// 目标数据库定期探活（指针以区分"未配置"与"显式 false"，未配置默认开启）
 		// （原因：周日不调度任何任务，目标库宕机只能等周一增量才暴露）
+
 		DBProbeEnabled      *bool `ini:"db_probe_enabled"`
 		DBProbeIntervalSecs int   `ini:"db_probe_interval_secs"`
 	} `ini:"SYNC"`
@@ -276,6 +280,9 @@ func finalizeConfig(f *ini.File, path string, cfg *Config) {
 	}
 	if cfg.Sync.FormRunTimeoutMinutes == 0 {
 		cfg.Sync.FormRunTimeoutMinutes = 10
+	}
+	if cfg.Sync.GrantWaitGuardSeconds == 0 {
+		cfg.Sync.GrantWaitGuardSeconds = 60
 	}
 	if cfg.Sync.DBProbeEnabled == nil {
 		enabled := true
@@ -483,6 +490,16 @@ func GetFormRunTimeout() time.Duration {
 		return 0
 	}
 	return time.Duration(c.Sync.FormRunTimeoutMinutes) * time.Minute
+}
+
+// GetGrantWaitGuard 返回目标库排队守卫阈值；配置未加载时返回 0，由调用方回退默认值。
+// 显式配置 -1 表示关闭守卫（返回负值），因此调用方须区分 0 与负值。
+func GetGrantWaitGuard() time.Duration {
+	c := Get()
+	if c == nil {
+		return 0
+	}
+	return time.Duration(c.Sync.GrantWaitGuardSeconds) * time.Second
 }
 
 // IsDBProbeEnabled 返回目标数据库探活是否开启；配置未加载时默认开启。

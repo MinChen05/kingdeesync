@@ -85,7 +85,10 @@ TRUNCATE 破坏了**。快照表单因此成为全系统唯一"失败即丢数�
 - [x] `SQLServerWriter` 实现事务内替换（`ReplaceSnapshot`）；引擎快照分支改调该接口，不再事务外 `TRUNCATE`
       原子性集成测试 `TestSQLServerReplaceSnapshotIsAtomic` 需 `MSSQL_INTEGRATION=1`，默认跳过（原因：避免连生产库），**尚未在真实实例上执行过**
 - [x] staging `DROP` 改用 `context.WithoutCancel` + 独立超时，失败记录表名；`Rollback` 补错误可见性（2A）
-- [ ] 单表单级超时（新增 `form_run_timeout_minutes`，默认 10）
+- [x] 单表单预算 `form_run_timeout_minutes`（默认 10）：超预算只失败该表单并写明原因，整轮继续（2C）
+- [x] 目标库排队守卫 `grant_wait_guard_seconds`（默认 60，-1 关闭）：`RESOURCE_SEMAPHORE` 排队超阈值时
+      跳过本轮并推送通知；探测失败按放行处理，避免把抖动放大成停摆（2E）
+- [ ] `RecoverAbnormalRuns`（心跳超时路径）同样补写 `duration_seconds`
 - [ ] `RecoverAbnormalRuns`（心跳超时路径）同样补写 `duration_seconds`
 - [ ] 测试：取消路径清理仍执行；终态不被覆盖；集成测试门控下跑通快照表单整轮替换
 - [ ] 更新 `CONTEXT.md` 快照表单定义与 `docs/architecture/current-runtime.md`

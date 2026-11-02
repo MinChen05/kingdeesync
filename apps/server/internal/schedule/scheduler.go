@@ -198,6 +198,14 @@ func runJob(job *gormdb.ScheduleJob, engine *syncengine.SyncEngine) {
 		return
 	}
 
+	// 目标库排队守卫：被外部作业拖住内存授予时，本轮注定超时，直接跳过并通知
+	// （原因：2026-11-02 事故中每轮空耗 1800 秒、清空快照表并堆积暂存表，见 ADR-0007）
+	if skip, reason := shouldSkipForGrantQueue(); skip {
+		log.Printf("[Schedule] Skipping job %s: %s", job.Name, reason)
+		notifyGrantQueueSkip(job.Name, reason)
+		return
+	}
+
 	log.Printf("[Schedule] Running job: %s (type=%s)", job.Name, job.SyncType)
 
 	db := gormdb.DB

@@ -143,6 +143,11 @@ func main() {
 		}()
 	})
 
+	// 排队守卫跳过本轮时也要通知（原因：跳过不产生 run 记录，静默等于监控盲区）
+	schedule.SetGrantQueueSkipNotifier(func(jobName, reason string) {
+		dingTalkNotifier.SendAlert("同步已跳过", fmt.Sprintf("任务 %s\n%s", jobName, reason))
+	})
+
 	// Start Kingdee session keepalive
 	keepAliveClient := kind.SharedClient()
 	keepAliveClient.StartSessionKeepAlive()

@@ -149,6 +149,29 @@ func TestGetFormRunTimeout(t *testing.T) {
 	}
 }
 
+func TestGetGrantWaitGuard(t *testing.T) {
+	old := instance
+	t.Cleanup(func() { instance = old })
+
+	// 配置未加载：返回 0，由调用方回退默认阈值
+	instance = nil
+	if got := GetGrantWaitGuard(); got != 0 {
+		t.Fatalf("配置未加载时应返回 0，实际 %v", got)
+	}
+
+	instance = &Config{}
+	instance.Sync.GrantWaitGuardSeconds = 120
+	if got := GetGrantWaitGuard(); got != 2*time.Minute {
+		t.Fatalf("守卫阈值 = %v, want 2m", got)
+	}
+
+	// 显式 -1 表示关闭守卫，必须原样透传（不能与"未配置"混为一谈）
+	instance.Sync.GrantWaitGuardSeconds = -1
+	if got := GetGrantWaitGuard(); got >= 0 {
+		t.Fatalf("显式关闭应返回负值，实际 %v", got)
+	}
+}
+
 func TestDBProbeConfigDefaults(t *testing.T) {
 	old := instance
 	t.Cleanup(func() { instance = old })

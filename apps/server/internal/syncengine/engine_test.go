@@ -428,3 +428,42 @@ func TestSyncEngineStartsIdle(t *testing.T) {
 		t.Fatalf("initial status = %q, %q, %d, %q, %v, %v", status, message, progress, form, elapsed, stats)
 	}
 }
+
+// 引擎只有一个 current 槽位且不会在 run 结束后清空，历史 run 若继续命中内存快照，
+// 会与状态库形成双源不一致（2026-11-02 实测 elapsed 1800.027 vs 库中 1800.018）。
+func TestStatusSnapshotOnlyServedForActiveRun(t *testing.T) {
+	engine := &SyncEngine{}
+	result, err := engine.beginRun("run-snapshot", false)
+	if err != nil {
+		t.Fatalf("begin run: %v", err)
+	}
+
+	if _, ok := engine.GetStatusSnapshot("run-snapshot"); !ok {
+		t.Fatal("活跃 run 应继续提供内存快照")
+	}
+	if _, ok := engine.CurrentResult("run-snapshot"); !ok {
+		t.Fatal("活跃 run 应继续提供内存结果")
+	}
+
+	engine.mu.Lock()
+	engine.active = false
+	result.Status = StatusFailedAbnormalExit
+	result.EndTime = time.Now()
+	result.DurationSec = 1800.018
+	engine.mu.Unlock()
+
+	if _, ok := engine.GetStatusSnapshot("run-snapshot"); ok {
+		t.Fatal("终态 run 不得再命中内存快照，应回落到状态库")
+	}
+	if _, ok := engine.CurrentResult("run-snapshot"); ok {
+		t.Fatal("终态 run 不得再返回内存结果")
+	}
+
+	status, _, _, _, elapsed, _ := engine.GetStatus()
+	if elapsed != 1800.018 {
+		t.Fatalf("GetStatus 耗时 = %v, want 1800.018（刚完成的状态需对 UI 连续可见）", elapsed)
+	}
+	if status != StatusFailedAbnormalExit {
+		t.Fatalf("GetStatus 状态 = %q, want %q（刚完成的终态需对 UI 连续可见）", status, StatusFailedAbnormalExit)
+	}
+}

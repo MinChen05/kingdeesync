@@ -240,10 +240,13 @@ func (e *SyncEngine) GetStatus() (SyncStatus, string, int, string, float64, []Fo
 }
 
 // CurrentResult returns a snapshot for runID while it is owned by the engine.
+// 仅对活跃 run 提供：终态 run 的真值以状态库为准。
+// （原因：引擎只有一个 current 槽位，run 结束后仍保留到下一轮覆盖，
+// 若继续对外提供会与状态库形成双源不一致——实测 elapsed 1800.027 与库中 1800.018）
 func (e *SyncEngine) CurrentResult(runID string) (*SyncResult, bool) {
 	e.mu.RLock()
 	defer e.mu.RUnlock()
-	if e.current == nil || e.current.RunID != runID {
+	if !e.active || e.current == nil || e.current.RunID != runID {
 		return nil, false
 	}
 	copyResult := *e.current
@@ -252,10 +255,11 @@ func (e *SyncEngine) CurrentResult(runID string) (*SyncResult, bool) {
 }
 
 // GetStatusSnapshot returns all live status fields from the requested run under one lock.
+// 与 CurrentResult 同规则：非活跃 run 不提供内存快照，交由状态库回答（ADR 见 CurrentResult）。
 func (e *SyncEngine) GetStatusSnapshot(runID string) (StatusSnapshot, bool) {
 	e.mu.RLock()
 	defer e.mu.RUnlock()
-	if e.current == nil || e.current.RunID != runID {
+	if !e.active || e.current == nil || e.current.RunID != runID {
 		return StatusSnapshot{}, false
 	}
 

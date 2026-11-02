@@ -1352,7 +1352,10 @@ func (e *SyncEngine) runSync(ctx context.Context, runID string, forms []string, 
 					// Reset mode and snapshot forms (科目余额表/即时库存): truncate before write.
 					// （原因：快照表每次都需要全量覆盖，无论同步模式）
 					isSnapshot := isSnapshotForm(formName)
-					if (syncType == "reset" || isSnapshot) && len(result.Rows) > 0 {
+					// 写入器具备单事务替换能力时不再事务外 TRUNCATE：
+					// 换入失败即整体回滚，目标表保持上一轮快照（原因：见 ADR-0007 的清空事故）
+					snapshotReplace := isSnapshot && e.supportsSnapshotReplace()
+					if !snapshotReplace && (syncType == "reset" || isSnapshot) && len(result.Rows) > 0 {
 						TableName := stat.TableName
 						if isSnapshot {
 							log.Printf("[TRUNCATE] snapshot form: truncating %s before write", TableName)
@@ -1392,7 +1395,7 @@ func (e *SyncEngine) runSync(ctx context.Context, runID string, forms []string, 
 								log.Printf("[AGGREGATE] %s: %d rows aggregated to %d rows", formName, len(result.Rows), len(writeRows))
 							}
 						}
-						upsertRes, err := e.writeRowsWithContext(ctx, stat.TableName, writeRows, fieldKeyList, formQuery.FieldMap)
+						upsertRes, err := e.writeRowsWithMode(ctx, stat.TableName, writeRows, fieldKeyList, formQuery.FieldMap, snapshotReplace)
 						cause, budgetExceeded := formBudgetExceededCause(roundCtx, ctx, fetchCtx, formBudget)
 						if err != nil {
 							msg := err.Error()
@@ -1950,6 +1953,20 @@ func (e *SyncEngine) writeRows(tableName string, rows []map[string]interface{}, 
 }
 
 func (e *SyncEngine) writeRowsWithContext(ctx context.Context, tableName string, rows []map[string]interface{}, fieldKeys []string, fieldMap map[string]string) (UpsertResult, error) {
+	return e.writeRowsWithMode(ctx, tableName, rows, fieldKeys, fieldMap, false)
+}
+
+// supportsSnapshotReplace 判断当前写入器是否具备单事务整体替换能力（ADR-0007）。
+// 注入 writeRowsFunc 的测试替身不走该路径。
+func (e *SyncEngine) supportsSnapshotReplace() bool {
+	if e.writeRowsFunc != nil || e.writer == nil {
+		return false
+	}
+	_, ok := e.writer.(SnapshotReplacer)
+	return ok
+}
+
+func (e *SyncEngine) writeRowsWithMode(ctx context.Context, tableName string, rows []map[string]interface{}, fieldKeys []string, fieldMap map[string]string, snapshotReplace bool) (UpsertResult, error) {
 	if e.writeRowsFunc != nil {
 		return e.writeRowsFunc(ctx, tableName, rows, fieldKeys, fieldMap)
 	}
@@ -2026,10 +2043,21 @@ func (e *SyncEngine) writeRowsWithContext(ctx context.Context, tableName string,
 		return UpsertResult{}, fmt.Errorf("no matching columns between Kingdee fields and table %s", tableName)
 	}
 
-	log.Printf("[SYNC-ENGINE] writeRows: table=%s, rows=%d, cols=%d, pkCols=%v", tableName, len(rows), len(cols), pkCols)
+	mode := "merge"
+	if snapshotReplace {
+		mode = "snapshot-replace"
+	}
+	log.Printf("[SYNC-ENGINE] writeRows: mode=%s, table=%s, rows=%d, cols=%d, pkCols=%v", mode, tableName, len(rows), len(cols), pkCols)
 
 	// Delegate to the configured RowWriter (SQLServerWriter).
 	// Pass kingdeeToDB so SQLServerWriter can look up values using Kingdee field names.
+	if snapshotReplace {
+		replacer, ok := e.writer.(SnapshotReplacer)
+		if !ok {
+			return UpsertResult{}, fmt.Errorf("writer does not support snapshot replace for table %s", tableName)
+		}
+		return replacer.ReplaceSnapshot(ctx, tableName, rows, cols, pkCols, kingdeeToDB)
+	}
 	return e.writer.Upsert(ctx, tableName, rows, cols, pkCols, kingdeeToDB)
 }
 

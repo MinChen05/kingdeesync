@@ -1,6 +1,6 @@
 # ADR-0007: 快照表单的 TRUNCATE 并入写入事务
 
-- **状态**：Proposed（草稿，未实施）
+- **状态**：Accepted（2A、2B 已实现并提交；真实实例原子性验证待补）
 - **日期**：2026-11-02
 - **相关**：`docs/adr/0001`（Staging + MERGE）、`docs/adr/0004`（移除影子表与切换）、
   `docs/adr/0006`（脏运行恢复）、`docs/superpowers/reports/2026-11-02-target-db-memory-grant-starvation.md`
@@ -38,6 +38,10 @@ TRUNCATE 破坏了**。快照表单因此成为全系统唯一"失败即丢数�
      INSERT INTO dbo.<目标表> (列…) SELECT 列… FROM dbo.<staging>
    COMMIT      -- 任一步失败 → ROLLBACK，目标表保持上一轮数据
    ```
+
+   提交前额外核对 `行数(affected) == staging 装载行数`，不一致同样回滚
+   （原因：半张表比整轮回滚更糟）。空快照与 0 行装载一律拒绝执行，
+   绝不允许"清空而不写回"。
 
 3. staging 的 `DROP` 移出业务上下文：用 `context.WithoutCancel(ctx)` + 独立短超时执行，
    失败时记录表名（不再静默丢弃）。事务回滚不属同一问题——`database/sql` 的 `Tx` 没有
@@ -78,7 +82,8 @@ TRUNCATE 破坏了**。快照表单因此成为全系统唯一"失败即丢数�
 
 ## 落地清单
 
-- [ ] `SQLServerWriter` 实现事务内替换；`engine.go` 移除裸 `TRUNCATE`
+- [x] `SQLServerWriter` 实现事务内替换（`ReplaceSnapshot`）；引擎快照分支改调该接口，不再事务外 `TRUNCATE`
+      原子性集成测试 `TestSQLServerReplaceSnapshotIsAtomic` 需 `MSSQL_INTEGRATION=1`，默认跳过（原因：避免连生产库），**尚未在真实实例上执行过**
 - [x] staging `DROP` 改用 `context.WithoutCancel` + 独立超时，失败记录表名；`Rollback` 补错误可见性（2A）
 - [ ] 单表单级超时（新增 `form_run_timeout_minutes`，默认 10）
 - [ ] `RecoverAbnormalRuns`（心跳超时路径）同样补写 `duration_seconds`

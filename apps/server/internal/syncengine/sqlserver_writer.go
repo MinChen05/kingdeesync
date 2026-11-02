@@ -37,6 +37,13 @@ func cleanupContext(parent context.Context) (context.Context, context.CancelFunc
 	return context.WithTimeout(context.WithoutCancel(parent), cleanupTimeout)
 }
 
+// newStagingTableName 生成一次性暂存表名：stg_ + 16 位十六进制。
+// （原因：stagingUpsert 与 ReplaceSnapshot 共用同一命名规则，运维回收脚本才能按同一白名单识别）
+func newStagingTableName(tableName string) string {
+	hash := sha256.Sum256([]byte(tableName + uuid.New().String()))
+	return "stg_" + hex.EncodeToString(hash[:8])
+}
+
 func NewSQLServerWriter() *SQLServerWriter {
 	cfg := config.Get()
 	var dbCfg config.DatabaseConfig
@@ -88,21 +95,29 @@ func (w *SQLServerWriter) Upsert(ctx context.Context, tableName string, rows []m
 	return w.stagingUpsert(ctx, tableName, rows, cols, pkCols, fieldMap)
 }
 
+// dropStagingTable 回收暂存表。使用不受父上下文取消影响的清理上下文，
+// 并在失败时打印表名，避免静默泄漏成孤儿表（原因见 cleanupContext）。
+func dropStagingTable(parent context.Context, sqlDB *sqlx.DB, stagingTable string) {
+	if sqlDB == nil {
+		return
+	}
+	cleanupCtx, cancelCleanup := cleanupContext(parent)
+	defer cancelCleanup()
+
+	if _, err := sqlDB.ExecContext(cleanupCtx,
+		fmt.Sprintf("IF OBJECT_ID(N'dbo.%s', 'U') IS NOT NULL DROP TABLE dbo.%s", stagingTable, stagingTable)); err != nil {
+		log.Printf("[SQLSERVER-STAGING] 清理暂存表 dbo.%s 失败（需人工回收）: %v", stagingTable, err)
+	}
+}
+
 func (w *SQLServerWriter) stagingUpsert(ctx context.Context, tableName string, rows []map[string]interface{},
 	cols []string, pkCols []string, fieldMap map[string]string) (UpsertResult, error) {
 
 	sqlDB := db.DB
-	hash := sha256.Sum256([]byte(tableName + uuid.New().String()))
-	stagingTable := "stg_" + hex.EncodeToString(hash[:8])
+	stagingTable := newStagingTableName(tableName)
 
 	defer func() {
-		cleanupCtx, cancelCleanup := cleanupContext(ctx)
-		defer cancelCleanup()
-
-		if _, err := sqlDB.ExecContext(cleanupCtx,
-			fmt.Sprintf("IF OBJECT_ID(N'dbo.%s', 'U') IS NOT NULL DROP TABLE dbo.%s", stagingTable, stagingTable)); err != nil {
-			log.Printf("[SQLSERVER-STAGING] 清理暂存表 dbo.%s 失败（需人工回收）: %v", stagingTable, err)
-		}
+		dropStagingTable(ctx, sqlDB, stagingTable)
 	}()
 
 	// Build staging table DDL from target table structure.
@@ -177,6 +192,96 @@ func (w *SQLServerWriter) stagingUpsert(ctx context.Context, tableName string, r
 		inserted = 0
 	}
 	return UpsertResult{Inserted: inserted, Updated: updateEstimate, Total: stagingRows}, nil
+}
+
+// ReplaceSnapshot 在单个事务内清空并整体重写目标表：staging 装载在事务外完成，
+// TRUNCATE 与 INSERT…SELECT 同处一个事务，任一步失败即回滚，目标表保持上一轮快照。
+// （原因：此前由引擎在事务外 TRUNCATE，写入失败会把"同步没更新"变成"生产表被清空"，
+// 2026-11-02 事故中 stk_inventory 连续 5 轮被清空为 0 行。见 ADR-0007）
+func (w *SQLServerWriter) ReplaceSnapshot(ctx context.Context, tableName string,
+	rows []map[string]interface{}, cols []string, pkCols []string, fieldMap map[string]string) (UpsertResult, error) {
+
+	if len(rows) == 0 {
+		// 空快照绝不换入：宁可不更新，也不能把目标表清空
+		return UpsertResult{}, fmt.Errorf("refuse to replace snapshot of %s with empty rows", tableName)
+	}
+	if err := config.ValidateSQLIdentifier(tableName); err != nil {
+		return UpsertResult{}, err
+	}
+	for _, col := range cols {
+		if err := config.ValidateSQLIdentifier(col); err != nil {
+			return UpsertResult{}, err
+		}
+	}
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	if db.DB == nil {
+		return UpsertResult{}, fmt.Errorf("database not initialized")
+	}
+
+	injectSyncTime(rows, cols)
+
+	sqlDB := db.DB
+	stagingTable := newStagingTableName(tableName)
+	defer func() {
+		dropStagingTable(ctx, sqlDB, stagingTable)
+	}()
+
+	if err := w.createStagingTable(ctx, sqlDB, tableName, stagingTable, cols, pkCols); err != nil {
+		return UpsertResult{}, fmt.Errorf("create staging table %s: %w", stagingTable, err)
+	}
+	stagingRows, err := w.batchInsertStaging(ctx, sqlDB, stagingTable, rows, cols, fieldMap)
+	if err != nil {
+		return UpsertResult{}, fmt.Errorf("batch insert staging %s: %w", stagingTable, err)
+	}
+	if stagingRows == 0 {
+		return UpsertResult{}, fmt.Errorf("staging %s loaded 0 rows; abort snapshot replace for %s", stagingTable, tableName)
+	}
+
+	quotedCols := make([]string, len(cols))
+	for i, col := range cols {
+		quotedCols[i] = "[" + col + "]"
+	}
+	colList := strings.Join(quotedCols, ", ")
+
+	tx, err := sqlDB.BeginTxx(ctx, nil)
+	if err != nil {
+		return UpsertResult{}, fmt.Errorf("begin transaction: %w", err)
+	}
+	committed := false
+	defer func() {
+		if committed {
+			return
+		}
+		if rbErr := tx.Rollback(); rbErr != nil && !errors.Is(rbErr, sql.ErrTxDone) {
+			log.Printf("[SNAPSHOT-REPLACE] 回滚 %s 事务失败: %v", tableName, rbErr)
+		}
+	}()
+
+	if _, err := tx.ExecContext(ctx, "TRUNCATE TABLE dbo."+tableName); err != nil {
+		return UpsertResult{}, fmt.Errorf("truncate %s: %w", tableName, err)
+	}
+	insertSQL := fmt.Sprintf("INSERT INTO dbo.%s (%s) SELECT %s FROM dbo.%s", tableName, colList, colList, stagingTable)
+	res, err := tx.ExecContext(ctx, insertSQL)
+	if err != nil {
+		return UpsertResult{}, fmt.Errorf("insert staged snapshot into %s: %w", tableName, err)
+	}
+	affected, err := res.RowsAffected()
+	if err != nil {
+		return UpsertResult{}, fmt.Errorf("count inserted rows for %s: %w", tableName, err)
+	}
+	// 提交前核对行数：不一致说明换入不完整，必须回滚而不是留下半张表
+	if affected != int64(stagingRows) {
+		return UpsertResult{}, fmt.Errorf("snapshot replace mismatch for %s: staged=%d inserted=%d", tableName, stagingRows, affected)
+	}
+	if err := tx.Commit(); err != nil {
+		return UpsertResult{}, fmt.Errorf("commit snapshot replace for %s: %w", tableName, err)
+	}
+	committed = true
+
+	log.Printf("[SNAPSHOT-REPLACE] %s: replaced %d rows via staging %s", tableName, affected, stagingTable)
+	return UpsertResult{Inserted: int(affected), Total: stagingRows}, nil
 }
 
 func (w *SQLServerWriter) directUpsert(ctx context.Context, tableName string, rows []map[string]interface{},

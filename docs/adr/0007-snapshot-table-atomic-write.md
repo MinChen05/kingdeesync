@@ -96,9 +96,10 @@ TRUNCATE 破坏了**。快照表单因此成为全系统唯一"失败即丢数�
 - [x] `RecoverAbnormalRuns`（心跳超时路径）同样补写 `duration_seconds`
       （原因：该路径与超时中止路径产出同一个 `failed_abnormal_exit` 告警，缺耗时即显示 0 秒）
 - [x] 测试：取消路径清理仍执行；终态不被覆盖；整表替换原子性集成测试已在真实实例通过
-- [ ] **作用域替换集成测试 `TestSQLServerReplaceSnapshotScoped` 尚未在真实实例执行**
-      （原因：单测只能覆盖拒绝分支，`DELETE t FROM … JOIN staging` 需要真实 SQL Server 验证；
-      执行前须暂停调度，否则并发同步的 `stg_*` 会让残留断言误报）
+- [x] 作用域替换集成测试 `TestSQLServerReplaceSnapshotScoped` **已在真实实例通过**（2026-11-03 00:18，
+      停调度后执行，101s）：跨期间保留、作用域内旧行换入、违反约束整体回滚、NULL 作用域拒绝且无副作用、
+      空作用域退化整表、全程无 `stg_*` 残留（原因：单测只能覆盖拒绝分支，`DELETE t FROM … JOIN staging`
+      必须由真实 SQL Server 验证）
 - [x] 快照表单替换作用域化（issue #7 路线 A）：`snapshotSpecFor` 声明作用域列，
       `ReplaceSnapshot` 用 `DELETE t FROM 目标 JOIN staging` 替换作用域内行，
       `scopeCols` 为空才 `TRUNCATE` 整表；作用域列缺失或取值 NULL 直接拒绝且不接触数据库

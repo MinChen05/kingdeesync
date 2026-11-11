@@ -4,6 +4,7 @@ set -euo pipefail
 PROJECT_ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
 
 command -v podman >/dev/null || { echo "Podman is required" >&2; exit 1; }
+command -v systemctl >/dev/null || { echo "systemctl is required（发布依赖 Quadlet 单元）" >&2; exit 1; }
 test -f "$PROJECT_ROOT/config.local.ini" || { echo "config.local.ini is required" >&2; exit 1; }
 
 # Load deploy-time secrets (DingTalk webhook etc.), gitignored
@@ -39,47 +40,53 @@ fi
 export TMPDIR="$BUILD_TMPDIR"
 echo "构建临时目录: $TMPDIR（可用 ${TMPDIR_FREE_MB}MB）"
 
-POD_NAME="kingdee-sync"
-API_CONTAINER="kingdee-sync-api"
-WEB_CONTAINER="kingdee-sync-web"
+# ---- Quadlet 发布模式（2026-11-11 切换）----
+# 容器归属 systemd Quadlet 单元（Restart=always），发布 = 构建新镜像 → 更新 :latest →
+# systemctl restart 让单元以新镜像重建容器。
+# （原因：旧版 podman pod rm/create/run 与 Quadlet 单元抢占同名容器，
+#  会与 Restart=always 反复拉扯，属于已废弃的手工管理模式）
+API_UNIT="kingdee-sync-api.service"
+WEB_UNIT="kingdee-sync-web.service"
 RELEASE_TAG="$(date +%Y%m%d-%H%M%S)"
 API_IMAGE="kingdee-sync-api:release-$RELEASE_TAG"
 WEB_IMAGE="kingdee-sync-web:release-$RELEASE_TAG"
 
-# Build both images before touching the running pod
-# （原因：任一镜像构建失败时线上服务必须保持运行）
+# Quadlet 单元必须存在，否则本机尚未完成 systemd 托管切换，禁止按旧方式操作
+# （原因：在无双监护的机器上误跑本脚本只 restart 会失败得莫名其妙；在已托管机器上
+#  跑旧流程会破坏监护，两个方向都要挡住）
+systemctl cat "$API_UNIT" >/dev/null 2>&1 \
+  || { echo "Quadlet 单元 $API_UNIT 不存在，宿主机未完成 systemd 切换，禁止继续发布" >&2; exit 1; }
+systemctl cat "$WEB_UNIT" >/dev/null 2>&1 \
+  || { echo "Quadlet 单元 $WEB_UNIT 不存在，宿主机未完成 systemd 切换，禁止继续发布" >&2; exit 1; }
+
+# 记录当前 :latest 镜像 ID，供健康检查失败时回滚
+# （原因：Quadlet 下 restart 直接以 :latest 重建容器，latest 必须先于 restart 更新；
+#  为保留"失败发布不得覆盖当前可运行版本"的原语义，
+#  健康检查失败时用记录的旧镜像 ID 回滚 latest 并再次 restart 恢复旧版本）
+PREV_API_ID="$(podman image inspect --format '{{.Id}}' kingdee-sync-api:latest 2>/dev/null || true)"
+PREV_WEB_ID="$(podman image inspect --format '{{.Id}}' kingdee-sync-web:latest 2>/dev/null || true)"
+
+# Build both images before touching the running services
+# （原因：任一镜像构建失败时线上服务必须保持运行，不得 restart）
 podman build -f "$PROJECT_ROOT/deploy/docker/Dockerfile" -t "$API_IMAGE" "$PROJECT_ROOT"
 podman build -f "$PROJECT_ROOT/deploy/docker/web.Dockerfile" -t "$WEB_IMAGE" "$PROJECT_ROOT"
 
-# Remove existing pod and containers only after both images are ready
-podman pod rm -f "$POD_NAME" 2>/dev/null || true
+podman tag "$API_IMAGE" kingdee-sync-api:latest
+podman tag "$WEB_IMAGE" kingdee-sync-web:latest
 
-# Create pod with shared network namespace
-podman pod create --name "$POD_NAME" -p 8000:8000 -p 8001:80
-
-# Run API container
-podman run -d --pod "$POD_NAME" --name "$API_CONTAINER" \
-  -v "$PROJECT_ROOT/config.local.ini":/app/config.local.ini:ro,Z \
-  -v "$PROJECT_ROOT/packages/sync-config":/app/packages/sync-config:ro,Z \
-  -v "$PROJECT_ROOT/.run/logs":/app/logs:Z \
-  -v "$PROJECT_ROOT/.run/state":/app/state:Z \
-  -e LISTEN_ADDR=0.0.0.0 \
-  -e LISTEN_PORT=8000 \
-  -e GORM_DB_PATH=/app/state/go_state.db \
-  -e DINGTALK_WEBHOOK_URL="${DINGTALK_WEBHOOK_URL:-}" \
-  -e DINGTALK_WEBHOOK_SECRET="${DINGTALK_WEBHOOK_SECRET:-}" \
-  "$API_IMAGE"
-
-# Run Web container
-podman run -d --pod "$POD_NAME" --name "$WEB_CONTAINER" \
-  "$WEB_IMAGE"
+systemctl restart "$API_UNIT" "$WEB_UNIT"
 
 # --retry-connrefused covers the gap between container start and port listening
 # （原因：仅 --retry 不会重试连接拒绝，会在服务已启动但尚未监听时误报失败）
-curl -fsS --retry 30 --retry-delay 1 --retry-connrefused http://127.0.0.1:8000/health
-curl -fsS --retry 30 --retry-delay 1 --retry-connrefused http://127.0.0.1:8001/health
+if ! curl -fsS --retry 30 --retry-delay 1 --retry-connrefused http://127.0.0.1:8000/health \
+   || ! curl -fsS --retry 30 --retry-delay 1 --retry-connrefused http://127.0.0.1:8001/health; then
+  echo "健康检查失败：回滚 :latest 到旧镜像并重启恢复" >&2
+  if [ -n "$PREV_API_ID" ]; then podman tag "$PREV_API_ID" kingdee-sync-api:latest; fi
+  if [ -n "$PREV_WEB_ID" ]; then podman tag "$PREV_WEB_ID" kingdee-sync-web:latest; fi
+  if ! systemctl restart "$API_UNIT" "$WEB_UNIT"; then
+    echo "回滚重启失败，需人工介入：systemctl status $API_UNIT $WEB_UNIT" >&2
+  fi
+  exit 1
+fi
 
-# Publish latest only after the new containers pass health checks
-# （原因：失败发布不得覆盖当前可运行版本标签）
-podman tag "$API_IMAGE" kingdee-sync-api:latest
-podman tag "$WEB_IMAGE" kingdee-sync-web:latest
+echo "发布完成: release-$RELEASE_TAG"

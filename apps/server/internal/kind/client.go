@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"log"
@@ -309,6 +310,64 @@ func (c *KingdeeClient) doPostWithRetryContext(ctx context.Context, url string, 
 	}
 
 	return resp, nil
+}
+
+// bodyReadError 标记“请求阶段成功（已收到 200 响应头）但响应体读取失败”。
+// 调用方据此区分请求级错误：SESSION_ERROR 探测等只应针对请求阶段
+// （原因：读体失败与请求发出失败语义不同，混在一起会误导重试与告警分支）。
+type bodyReadError struct{ err error }
+
+func (e *bodyReadError) Error() string { return fmt.Sprintf("read response body: %v", e.err) }
+func (e *bodyReadError) Unwrap() error { return e.err }
+
+const (
+	// GL 报表响应体读取失败的重试次数与初始退避。
+	// （原因：科目余额表单月响应 3 万+行，读体阶段恰在 client 120s 超时边界
+	// 截断（issue #9 生产实锤：run 2081bfff 于 120.001s 报 Client.Timeout）；
+	// 报表为纯查询幂等接口，整请求重发无副作用，远优于等 2 小时后的下一轮）
+	glReportBodyReadAttempts = 3
+	glReportBodyReadBackoff  = 2 * time.Second
+)
+
+// doReportWithBodyRead 将“POST + 完整读取响应体”作为一个可重试整体执行，
+// 返回缓冲后的响应体字节。
+// doPostWithRetryContext 的熔断重试循环止于收到响应头，GetSysReportData
+// 大响应在 io.ReadAll 阶段断流（client 120s 超时 / 连接中断）不在其保护
+// 范围内，此前只能整表单失败等下一轮
+// （原因：把读体纳入重试闭环，消除 issue #9 记录的读体超时缺口）。
+func (c *KingdeeClient) doReportWithBodyRead(ctx context.Context, url string, payload interface{}, attempts int, initialBackoff time.Duration) ([]byte, error) {
+	var lastErr error
+	backoff := initialBackoff
+	for attempt := 1; attempt <= attempts; attempt++ {
+		if attempt > 1 {
+			select {
+			case <-time.After(backoff):
+			case <-ctx.Done():
+				return nil, ctx.Err()
+			}
+			backoff *= 2
+			if backoff > 30*time.Second {
+				backoff = 30 * time.Second
+			}
+		}
+		resp, err := c.doPostWithRetryContext(ctx, url, payload)
+		if err != nil {
+			// 请求级错误原样返回，交由调用方既有分支处理（SESSION_ERROR 重登、熔断文案等）
+			return nil, err
+		}
+		body, readErr := io.ReadAll(resp.Body)
+		resp.Body.Close()
+		if readErr == nil {
+			return body, nil
+		}
+		if ctx.Err() != nil {
+			// 主动取消（如任务被停止）：不重试
+			return nil, ctx.Err()
+		}
+		lastErr = &bodyReadError{err: readErr}
+		log.Printf("[KIND] Response body read failed (attempt %d/%d): %v", attempt, attempts, readErr)
+	}
+	return nil, lastErr
 }
 
 // extractRows parses Kingdee response and returns rows
@@ -694,10 +753,15 @@ func (c *KingdeeClient) QueryAccountBalanceContext(ctx context.Context, params A
 				reportURL = strings.Replace(reportURL, "ExecuteBillQuery", "GetSysReportData", 1)
 			}
 
-			resp, err := c.doPostWithRetryContext(ctx, reportURL, payload)
+			respBytes, err := c.doReportWithBodyRead(ctx, reportURL, payload, glReportBodyReadAttempts, glReportBodyReadBackoff)
 			if err != nil {
 				if ctx.Err() != nil {
 					return result, ctx.Err()
+				}
+				var readErr *bodyReadError
+				if errors.As(err, &readErr) {
+					log.Printf("[GL] Failed to read response for %d-%02d after %d attempts: %v", year, period, glReportBodyReadAttempts, readErr)
+					return result, fmt.Errorf("read account balance response for %d-%02d: %w", year, period, readErr)
 				}
 				// SESSION_ERROR in HTTP response body
 				if strings.Contains(err.Error(), "SESSION_ERROR") {
@@ -713,14 +777,6 @@ func (c *KingdeeClient) QueryAccountBalanceContext(ctx context.Context, params A
 				}
 				log.Printf("[GL] Failed to query %d-%02d: %v", year, period, err)
 				return result, fmt.Errorf("query account balance for %d-%02d: %w", year, period, err)
-			}
-
-			// Read and buffer response body so we can log it for debugging
-			respBytes, readErr := io.ReadAll(resp.Body)
-			resp.Body.Close()
-			if readErr != nil {
-				log.Printf("[GL] Failed to read response for %d-%02d: %v", year, period, readErr)
-				return result, fmt.Errorf("read account balance response for %d-%02d: %w", year, period, readErr)
 			}
 
 			var raw interface{}

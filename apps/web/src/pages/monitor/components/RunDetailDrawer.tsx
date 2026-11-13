@@ -3,7 +3,8 @@ import { useMutation, useQuery } from '@tanstack/react-query';
 import { App, Button, Drawer, Empty, Typography } from 'antd';
 import React from 'react';
 import type { V1Run } from '@/services/v1';
-import { ApiProblemError, getRun, retryFailedForms } from '@/services/v1';
+import { getRun, retryFailedForms } from '@/services/v1';
+import { grantQueueMessage, isGrantQueueBusyError } from '@/utils/syncError';
 import type { RunDetail } from '../types';
 
 /** V1Run → RunDetail 兼容转换 */
@@ -100,8 +101,10 @@ const RunDetailDrawer: React.FC<RunDetailDrawerProps> = ({
     onError: (err) => {
       // 重试与手动触发同走排队守卫，授予排队期间返回 409 TARGET_DB_GRANT_QUEUE_BUSY，
       // 与"已有任务在跑"等待方向不同（原因：文案失实会把排障引向错误一侧）
-      if (err instanceof ApiProblemError && err.code === 'TARGET_DB_GRANT_QUEUE_BUSY') {
-        message.warning(err.message || '目标库内存授予排队拥堵，重试已拦截');
+      if (isGrantQueueBusyError(err)) {
+        message.warning(
+          grantQueueMessage(err, '目标库内存授予排队拥堵，重试已拦截'),
+        );
         return;
       }
       message.error('重试失败，请检查是否有同步任务正在运行');

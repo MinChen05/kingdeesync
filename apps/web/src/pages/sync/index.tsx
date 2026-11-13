@@ -3,6 +3,7 @@ import React, { useState } from 'react';
 import PageHeader from '@/components/PageHeader';
 import { ApiProblemError } from '@/services/v1';
 import { errorMessage } from '@/utils/errorMessage';
+import { grantQueueMessage, isGrantQueueBusyError } from '@/utils/syncError';
 import LastSyncSummary from './components/LastSyncSummary';
 import SyncConfigPanel from './components/SyncConfigPanel';
 import SyncLogViewer from './components/SyncLogViewer';
@@ -37,14 +38,14 @@ const SyncPage: React.FC = () => {
       });
       message.success('同步任务已启动');
     } catch (err) {
-      if (err instanceof ApiProblemError && err.status === 409) {
-        // 409 有两种语义：已有任务在跑 / 目标库内存授予排队被守卫拦截，
-        // 等待方向完全不同，须按错误码区分（原因：授予排队拥堵提示"稍后再试"会误导排障）
-        if (err.code === 'TARGET_DB_GRANT_QUEUE_BUSY') {
-          message.warning(err.message || '目标库内存授予排队拥堵，本轮已拦截');
-        } else {
-          message.warning('已有同步任务正在运行，请稍后再试');
-        }
+      // 409 有两种语义：已有任务在跑 / 目标库内存授予排队被守卫拦截，
+      // 等待方向完全不同，须按错误码区分（原因：授予排队拥堵提示"稍后再试"会误导排障）
+      if (isGrantQueueBusyError(err)) {
+        message.warning(
+          grantQueueMessage(err, '目标库内存授予排队拥堵，本轮已拦截'),
+        );
+      } else if (err instanceof ApiProblemError && err.status === 409) {
+        message.warning('已有同步任务正在运行，请稍后再试');
       } else {
         message.error(errorMessage(err) || '启动同步失败');
       }

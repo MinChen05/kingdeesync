@@ -13,6 +13,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"sort"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -93,6 +94,9 @@ type Config struct {
 		// （原因：2026-11-02 即时库存一张表吃光 30 秒级基线劣化到 1800 秒整轮预算，
 		// 连带 15 张表被标记 sync stopped；表单级上限可把单点故障限制在该表单）
 		FormRunTimeoutMinutes int `ini:"form_run_timeout_minutes"`
+		// 按表单覆盖的单表预算，格式 "表单名=分钟,表单名=分钟"（原因：历史过千万的大单据
+		// 与万行小表共用一个预算时，只能按最大者放宽，小表卡死又失去保护；按键覆盖两头兼顾）
+		FormRunTimeoutOverrides string `ini:"form_run_timeout_overrides"`
 		// 目标库内存授予排队阈值（秒）：超过该值则跳过本轮同步。填 -1 关闭守卫。
 		// （原因：授予队列 FIFO，外部作业霸占队首时本轮注定超时，空跑还会清空快照表）
 		GrantWaitGuardSeconds int `ini:"grant_wait_guard_seconds"`
@@ -114,6 +118,31 @@ type Config struct {
 	FormQueries map[string]FormQuery `json:"-"`
 	// IncrementalFields maps table/form name to its modify date field (e.g., "bd_material" -> "FMODIFYDATE")
 	IncrementalFields map[string]string `ini:"-"`
+	// FormRunTimeoutOverridesMap 是 Sync.FormRunTimeoutOverrides 的解析结果（表单名→分钟）
+	FormRunTimeoutOverridesMap map[string]int `ini:"-"`
+}
+
+// parseFormRunTimeoutOverrides 解析 "表单名=分钟,表单名=分钟"。
+// 非法条目忽略而非中止加载（原因：一处笔误不应让整份配置的预算全部失效）。
+func parseFormRunTimeoutOverrides(s string) map[string]int {
+	out := make(map[string]int)
+	for _, part := range strings.Split(s, ",") {
+		part = strings.TrimSpace(part)
+		if part == "" {
+			continue
+		}
+		kv := strings.SplitN(part, "=", 2)
+		if len(kv) != 2 {
+			continue
+		}
+		name := strings.TrimSpace(kv[0])
+		mins, err := strconv.Atoi(strings.TrimSpace(kv[1]))
+		if name == "" || err != nil || mins <= 0 {
+			continue
+		}
+		out[name] = mins
+	}
+	return out
 }
 
 // GetEffectiveDatabase returns the effective database config by merging DATABASE with SQLSERVER/MYSQL sections.
@@ -301,6 +330,8 @@ func finalizeConfig(f *ini.File, path string, cfg *Config) {
 		cfg.Server.Port = 8000
 	}
 
+	cfg.FormRunTimeoutOverridesMap = parseFormRunTimeoutOverrides(cfg.Sync.FormRunTimeoutOverrides)
+
 	// Load INCREMENTAL_FIELDS section
 	cfg.IncrementalFields = make(map[string]string)
 	if section, err := f.GetSection("INCREMENTAL_FIELDS"); err == nil {
@@ -482,12 +513,17 @@ func GetSyncRunTimeout(syncType string) time.Duration {
 	return time.Duration(c.Sync.IncrementalRunTimeoutMinutes) * time.Minute
 }
 
-// GetFormRunTimeout 返回单表单预算（分钟）。配置未加载时返回 0，由调用方回退默认值。
-// （原因：一张表卡住不应吃光整轮看门狗预算，见 ADR-0007 落地清单）
-func GetFormRunTimeout() time.Duration {
+// GetFormRunTimeoutFor 返回指定表单的单表预算：优先按表单覆盖值，其次全局值。
+// 配置未加载时返回 0，由调用方回退默认值。
+// （原因：历史过千万的大单据需要更大预算，但不因此放弃对小表卡死的保护；
+//  一张表卡住不应吃光整轮看门狗预算，见 ADR-0007 落地清单）
+func GetFormRunTimeoutFor(formName string) time.Duration {
 	c := Get()
 	if c == nil {
 		return 0
+	}
+	if mins, ok := c.FormRunTimeoutOverridesMap[formName]; ok && mins > 0 {
+		return time.Duration(mins) * time.Minute
 	}
 	return time.Duration(c.Sync.FormRunTimeoutMinutes) * time.Minute
 }

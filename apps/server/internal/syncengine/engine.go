@@ -131,26 +131,21 @@ type SyncEngine struct {
 	formRunBudget time.Duration
 }
 
-// resolveFormBudget 返回本引擎生效的单表单预算。
-func (e *SyncEngine) resolveFormBudget() time.Duration {
+// resolveFormBudget 返回本引擎对指定表单生效的单表单预算。
+func (e *SyncEngine) resolveFormBudget(formName string) time.Duration {
 	if e.formRunBudget > 0 {
 		return e.formRunBudget
 	}
-	return resolveFormRunTimeout()
+	if d := config.GetFormRunTimeoutFor(formName); d > 0 {
+		return d
+	}
+	return formRunTimeout
 }
 
 const stopTimeout = 60 * time.Second
 
 // formRunTimeout 是单表单预算的兜底值（配置未加载时生效），保留包级变量以便测试注入。
 var formRunTimeout = 10 * time.Minute
-
-// resolveFormRunTimeout 优先取配置，未加载或非法时回退包级默认值。
-func resolveFormRunTimeout() time.Duration {
-	if d := config.GetFormRunTimeout(); d > 0 {
-		return d
-	}
-	return formRunTimeout
-}
 
 // formBudgetExceededCause 判定上下文结束是否由"本表单超预算"引起，而非整轮被停止/取消。
 // 两者都表现为 context 结束，但只有前者应记为该表单的失败原因
@@ -1050,7 +1045,7 @@ func (e *SyncEngine) runSync(ctx context.Context, runID string, forms []string, 
 				// 遮蔽 ctx 与 fetchCtx，使本表单的拉取与写入自动受同一上限约束；
 				// roundCtx 保留轮级上下文，用于区分"本表单超预算"与"整轮被停止"。
 				roundCtx := ctx
-				formBudget := e.resolveFormBudget()
+				formBudget := e.resolveFormBudget(formName)
 				ctx, cancelFormBudget := context.WithTimeout(roundCtx, formBudget)
 				defer cancelFormBudget()
 				fetchCtx, cancelFormFetch := context.WithTimeout(fetchCtx, formBudget)

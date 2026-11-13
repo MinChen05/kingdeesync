@@ -128,27 +128,6 @@ func TestGetSyncRunTimeoutByType(t *testing.T) {
 	}
 }
 
-func TestGetFormRunTimeout(t *testing.T) {
-	old := instance
-	t.Cleanup(func() { instance = old })
-
-	// 配置未加载：返回 0，由调用方回退包级默认值
-	instance = nil
-	if got := GetFormRunTimeout(); got != 0 {
-		t.Fatalf("配置未加载时应返回 0，实际 %v", got)
-	}
-
-	instance = &Config{}
-	if got := GetFormRunTimeout(); got != 0 {
-		t.Fatalf("字段缺省时应返回 0，实际 %v", got)
-	}
-
-	instance.Sync.FormRunTimeoutMinutes = 7
-	if got := GetFormRunTimeout(); got != 7*time.Minute {
-		t.Fatalf("单表单预算 = %v, want 7m", got)
-	}
-}
-
 func TestGetGrantWaitGuard(t *testing.T) {
 	old := instance
 	t.Cleanup(func() { instance = old })
@@ -274,5 +253,42 @@ func TestValidateSQLIdentifier(t *testing.T) {
 	// FormToTableName 兜底会把中文表单名透传为表名，必须被闸门拦住
 	if err := ValidateSQLIdentifier(FormToTableName("任意;注入")); err == nil {
 		t.Fatal("中文/含注入字符的兜底表名必须被拒绝")
+	}
+}
+
+func TestParseFormRunTimeoutOverrides(t *testing.T) {
+	m := parseFormRunTimeoutOverrides("生产用料清单明细表=45, 即时库存 = 15 ,坏条目,零值=0,非法=abc")
+	if m["生产用料清单明细表"] != 45 {
+		t.Fatalf("大表覆盖 = %v, want 45", m["生产用料清单明细表"])
+	}
+	if m["即时库存"] != 15 {
+		t.Fatalf("含空白条目应容忍, want 15, got %v", m["即时库存"])
+	}
+	if len(m) != 2 {
+		t.Fatalf("非法条目必须被忽略, got %v", m)
+	}
+	if got := parseFormRunTimeoutOverrides(""); len(got) != 0 {
+		t.Fatalf("空串应得空映射, got %v", got)
+	}
+}
+
+func TestGetFormRunTimeoutFor(t *testing.T) {
+	old := instance
+	t.Cleanup(func() { instance = old })
+
+	c := &Config{}
+	c.Sync.FormRunTimeoutMinutes = 10
+	c.FormRunTimeoutOverridesMap = map[string]int{"生产用料清单明细表": 45}
+	instance = c
+
+	if d := GetFormRunTimeoutFor("生产用料清单明细表"); d != 45*time.Minute {
+		t.Fatalf("覆盖值未生效: %v", d)
+	}
+	if d := GetFormRunTimeoutFor("物料"); d != 10*time.Minute {
+		t.Fatalf("未覆盖表单应回退全局值: %v", d)
+	}
+	instance = nil
+	if d := GetFormRunTimeoutFor("生产用料清单明细表"); d != 0 {
+		t.Fatalf("配置未加载应返回 0 由调用方回退: %v", d)
 	}
 }

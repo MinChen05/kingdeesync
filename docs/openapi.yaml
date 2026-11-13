@@ -82,11 +82,15 @@ paths:
         '400':
           $ref: '#/components/responses/InvalidRequest'
         '409':
-          description: 已有运行在执行，或本次运行未能占用引擎。
+          description: 已有运行在执行、本次运行未能占用引擎，或目标库内存授予排队被守卫拦截。
           content:
             application/json:
               schema: { $ref: '#/components/schemas/Problem' }
-              example: { error: { code: ALREADY_RUNNING, message: a sync task is already running } }
+              examples:
+                alreadyRunning:
+                  value: { error: { code: ALREADY_RUNNING, message: a sync task is already running } }
+                grantQueueBusy:
+                  value: { error: { code: TARGET_DB_GRANT_QUEUE_BUSY, message: '目标库内存授予排队 10m（阈值 1m），本轮跳过' } }
         '503':
           description: 引擎、状态库不可用，或服务正在关闭。
           content:
@@ -187,7 +191,15 @@ paths:
               schema: { $ref: '#/components/schemas/Problem' }
               example: { error: { code: NO_FAILED_FORMS, message: no failed forms found in this run } }
         '409':
-          $ref: '#/components/responses/Conflict'
+          description: 已有运行在执行，或目标库内存授予排队被守卫拦截。
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Problem' }
+              examples:
+                alreadyRunning:
+                  value: { error: { code: ALREADY_RUNNING, message: a sync task is already running } }
+                grantQueueBusy:
+                  value: { error: { code: TARGET_DB_GRANT_QUEUE_BUSY, message: '目标库内存授予排队 10m（阈值 1m），本轮跳过' } }
         '503':
           description: 引擎或状态库不可用。
           content:
@@ -394,8 +406,4 @@ components:
         application/json:
           schema: { $ref: '#/components/schemas/Problem' }
           example: { error: { code: RUN_NOT_FOUND, message: run not found } }
-    Conflict:
-      description: 已有运行在执行。
-      content:
-        application/json:
-          schema: { $ref: '#/components/schemas/Problem' }
+

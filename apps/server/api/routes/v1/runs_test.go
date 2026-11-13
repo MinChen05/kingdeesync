@@ -214,3 +214,69 @@ func TestRetryFailedFormsReleasesSyncMutex(t *testing.T) {
 		t.Fatal("retryFailedForms 连续调用出现死锁：syncMutex 未在出口释放")
 	}
 }
+
+// 回归测试：授予排队守卫接入 API 手动触发路径（原因：2026-11-03 卡死的是
+// API 触发的全量，守卫此前只挂在调度入口，手动路径可无条件发起注定超时的空跑）。
+func TestCreateRunBlockedByGrantGuard(t *testing.T) {
+	r, db := setupRunTest(t)
+
+	oldEng, oldGuard, oldTask := syncEng, grantGuardForTrigger, activeTask
+	t.Cleanup(func() {
+		syncEng, grantGuardForTrigger, activeTask = oldEng, oldGuard, oldTask
+	})
+	syncEng = syncengine.NewSyncEngine()
+	grantGuardForTrigger = func(string) (bool, string) {
+		return true, "目标库内存授予排队 10m（阈值 1m），本轮跳过"
+	}
+
+	rec := performRequest(r, http.MethodPost, "/api/v1/runs", `{"forms":["A"],"sync_type":"full"}`)
+	require.Equal(t, http.StatusConflict, rec.Code)
+
+	var result map[string]any
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &result))
+	errObj, ok := result["error"].(map[string]any)
+	require.True(t, ok)
+	require.Equal(t, "TARGET_DB_GRANT_QUEUE_BUSY", errObj["code"])
+	require.Contains(t, errObj["message"], "内存授予排队")
+
+	var count int64
+	require.NoError(t, db.Model(&gormdb.SyncRun{}).Count(&count).Error)
+	require.Zero(t, count, "守卫拦截时不得留下 sync run 记录")
+
+	syncMutex.Lock()
+	require.Nil(t, activeTask, "守卫拦截不得占用 activeTask")
+	syncMutex.Unlock()
+}
+
+// 重试与 createRun 同一写入路径，同样必须被守卫拦截。
+func TestRetryFailedFormsBlockedByGrantGuard(t *testing.T) {
+	r, db := setupRunTest(t)
+
+	oldEng, oldGuard, oldTask := syncEng, grantGuardForTrigger, activeTask
+	t.Cleanup(func() {
+		syncEng, grantGuardForTrigger, activeTask = oldEng, oldGuard, oldTask
+	})
+	syncEng = syncengine.NewSyncEngine()
+	grantGuardForTrigger = func(string) (bool, string) {
+		return true, "目标库内存授予排队 10m（阈值 1m），本轮跳过"
+	}
+
+	require.NoError(t, db.Create(&gormdb.SyncRun{RunID: "RUN-GUARD-SRC", Status: "failed"}).Error)
+	require.NoError(t, db.Create(&gormdb.SyncRunForm{
+		RunID: "RUN-GUARD-SRC", FormName: "BD_Material", Status: "failed",
+	}).Error)
+
+	rec := performRequest(r, http.MethodPost, "/api/v1/runs/RUN-GUARD-SRC/retry-failed", "")
+	require.Equal(t, http.StatusConflict, rec.Code)
+
+	var result map[string]any
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &result))
+	errObj, ok := result["error"].(map[string]any)
+	require.True(t, ok)
+	require.Equal(t, "TARGET_DB_GRANT_QUEUE_BUSY", errObj["code"])
+
+	// 守卫出口必须已释放 syncMutex：getSyncStatus 同样要拿这把锁，
+	// 无活动运行时按设计返回 404——能正常返回即证明锁未泄漏（对照既有死锁回归测试）
+	statusRec := performRequest(r, http.MethodGet, "/api/v1/sync/status", "")
+	require.Equal(t, http.StatusNotFound, statusRec.Code)
+}

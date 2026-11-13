@@ -93,6 +93,13 @@ TRUNCATE 破坏了**。快照表单因此成为全系统唯一"失败即丢数�
 - [x] 单表单预算 `form_run_timeout_minutes`（默认 10）：超预算只失败该表单并写明原因，整轮继续（2C）
 - [x] 目标库排队守卫 `grant_wait_guard_seconds`（默认 60，-1 关闭）：`RESOURCE_SEMAPHORE` 排队超阈值时
       跳过本轮并推送通知；探测失败按放行处理，避免把抖动放大成停摆（2E）
+- [x] 排队守卫扩展至 API 手动触发路径：`createRun` 与 `retryFailedForms` 复用
+      `schedule.GuardGrantQueueForTrigger`，命中返回 409 `TARGET_DB_GRANT_QUEUE_BUSY`；守卫探测置于取
+      `syncMutex` 之前，不反向阻塞其他 runs 接口
+      （原因：2026-11-03 卡死的是 API 手动触发的全量，手动路径不经过 runJob、完全绕过守卫，
+      同样会发起注定超时的空跑并清空快照表）
+- [x] 单表单预算支持按表单覆盖 `form_run_timeout_overrides`（"表单名=分钟" 逗号分隔，非法条目忽略）：
+      历史过千万的大单据与小表共用预算时只能按最大者放宽，按键覆盖兼顾小表卡死保护
 - [x] `RecoverAbnormalRuns`（心跳超时路径）同样补写 `duration_seconds`
       （原因：该路径与超时中止路径产出同一个 `failed_abnormal_exit` 告警，缺耗时即显示 0 秒）
 - [x] 测试：取消路径清理仍执行；终态不被覆盖；整表替换原子性集成测试已在真实实例通过

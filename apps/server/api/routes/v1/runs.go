@@ -16,6 +16,7 @@ import (
 	"github.com/kingdee-sync/go/internal/config"
 	kingdeeDB "github.com/kingdee-sync/go/internal/db"
 	"github.com/kingdee-sync/go/internal/gormdb"
+	"github.com/kingdee-sync/go/internal/schedule"
 	"github.com/kingdee-sync/go/internal/syncengine"
 )
 
@@ -25,6 +26,9 @@ var (
 	syncMutex       sync.Mutex
 	lastSyncResult  *syncengine.SyncResult
 	syncStopTimeout = 30 * time.Second
+
+	// grantGuardForTrigger 目标库授予排队守卫（原因：与调度侧同一判定，注入点便于测试）
+	grantGuardForTrigger = schedule.GuardGrantQueueForTrigger
 )
 
 type activeSyncTask struct {
@@ -112,6 +116,18 @@ func createRun(c *gin.Context) {
 		req.SyncType = "incremental"
 	}
 	dryRun := req.DryRun != nil && *req.DryRun
+
+	// 目标库排队守卫：被外部作业霸占内存授予时，本轮手动同步同样注定空跑，
+	// 还会清空快照表、堆积暂存表（原因：2026-11-03 卡死的就是 API 触发的全量，
+	// 守卫此前只挂在调度入口，见 ADR-0007）。
+	// 放在取 syncMutex 之前：探测最长 5 秒，不反向阻塞其他 runs 接口。
+	if skip, reason := grantGuardForTrigger("API 手动触发"); skip {
+		WriteProblem(c, http.StatusConflict, Problem{
+			Code:    "TARGET_DB_GRANT_QUEUE_BUSY",
+			Message: reason,
+		})
+		return
+	}
 
 	syncMutex.Lock()
 	defer syncMutex.Unlock()
@@ -241,6 +257,16 @@ func retryFailedForms(c *gin.Context) {
 	formNames := make([]string, len(forms))
 	for i, f := range forms {
 		formNames[i] = f.FormName
+	}
+
+	// 重试同样直写目标库，复用排队守卫（原因：与 createRun 同一写入路径，
+	// 授予排队期间的重试同样只会等待到超时）
+	if skip, reason := grantGuardForTrigger("API 失败重试"); skip {
+		WriteProblem(c, http.StatusConflict, Problem{
+			Code:    "TARGET_DB_GRANT_QUEUE_BUSY",
+			Message: reason,
+		})
+		return
 	}
 
 	// Check if sync is already running

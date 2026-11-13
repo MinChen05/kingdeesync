@@ -75,6 +75,18 @@ func shouldSkipForGrantQueue() (bool, string) {
 	return true, reason
 }
 
+// GuardGrantQueueForTrigger 供调度入口之外的触发路径（API 手动同步等）复用同一排队守卫，
+// 判定跳过时与调度侧一致地发出告警。
+// （原因：2026-11-03 事故中慢的是 API 手动触发的全量，手动路径不经过 runJob、
+// 完全绕过守卫，同样会发起注定超时的空跑并清空快照表，见 ADR-0007）
+func GuardGrantQueueForTrigger(source string) (bool, string) {
+	skip, reason := shouldSkipForGrantQueue()
+	if skip {
+		notifyGrantQueueSkip(source, reason)
+	}
+	return skip, reason
+}
+
 func notifyGrantQueueSkip(jobName, reason string) {
 	skipNotifyMu.Lock()
 	hook := skipNotifyHook

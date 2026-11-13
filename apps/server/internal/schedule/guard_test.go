@@ -100,3 +100,35 @@ func TestFormatDurationShort(t *testing.T) {
 		t.Fatalf("秒级时长 = %q, want 1.5s", got)
 	}
 }
+
+func TestGuardGrantQueueForTrigger(t *testing.T) {
+	oldHook := skipNotifyHook
+	t.Cleanup(func() { skipNotifyHook = oldHook })
+
+	t.Run("跳过时与调度侧一致地告警", func(t *testing.T) {
+		withGuardStub(t, func(context.Context) (time.Duration, error) { return 10 * time.Minute, nil }, time.Minute)
+		var gotSource, gotReason string
+		SetGrantQueueSkipNotifier(func(source, reason string) { gotSource, gotReason = source, reason })
+
+		skip, reason := GuardGrantQueueForTrigger("API 手动触发")
+		if !skip {
+			t.Fatal("排队 10 分钟时 API 触发路径应被拦截")
+		}
+		if gotSource != "API 手动触发" || gotReason != reason {
+			t.Fatalf("告警收到 source=%q reason=%q, want source=API 手动触发 reason=%q", gotSource, gotReason, reason)
+		}
+	})
+
+	t.Run("放行时不告警", func(t *testing.T) {
+		withGuardStub(t, func(context.Context) (time.Duration, error) { return 5 * time.Second, nil }, time.Minute)
+		notified := false
+		SetGrantQueueSkipNotifier(func(string, string) { notified = true })
+
+		if skip, _ := GuardGrantQueueForTrigger("API 手动触发"); skip {
+			t.Fatal("排队 5 秒不应拦截 API 触发")
+		}
+		if notified {
+			t.Fatal("放行时不应发出跳过告警")
+		}
+	})
+}

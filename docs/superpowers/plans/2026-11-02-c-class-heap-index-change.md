@@ -1,6 +1,8 @@
 # C 类堆表索引变更方案（gl_rpt_accountbalance / sal_returnstock）
 
-- 状态：待评审（需 DBA 与业务口径确认）
+- 状态：部分落地——sal_returnstock 一支脚本已定稿入库（docs/sqlserver-change-sal-returnstock-unique-index.sql，
+  等 DBA 执行窗口，见 issue #6，窗口依赖 #5 解除）；gl_rpt_accountbalance 一支的快照作用域替换（路线 A）
+  已先行落地（issue #7，代码 12ffae9，生产已验证），其改键/列宽收窄/唯一索引仍待评审与 DDL 窗口（需 DBA 与业务口径确认）
 - 关联：issue #3（主键契约）、issue #4（快照粒度决策）、ADR-0007
 - 数据取自 2026-11-02 23:26 对生产目标库 `10.10.10.191/Kingdee` 的只读实测
 

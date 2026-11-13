@@ -47,6 +47,7 @@ echo "构建临时目录: $TMPDIR（可用 ${TMPDIR_FREE_MB}MB）"
 #  会与 Restart=always 反复拉扯，属于已废弃的手工管理模式）
 API_UNIT="kingdee-sync-api.service"
 WEB_UNIT="kingdee-sync-web.service"
+POD_UNIT="kingdee-sync-pod.service"
 RELEASE_TAG="$(date +%Y%m%d-%H%M%S)"
 API_IMAGE="kingdee-sync-api:release-$RELEASE_TAG"
 WEB_IMAGE="kingdee-sync-web:release-$RELEASE_TAG"
@@ -58,6 +59,8 @@ systemctl cat "$API_UNIT" >/dev/null 2>&1 \
   || { echo "Quadlet 单元 $API_UNIT 不存在，宿主机未完成 systemd 切换，禁止继续发布" >&2; exit 1; }
 systemctl cat "$WEB_UNIT" >/dev/null 2>&1 \
   || { echo "Quadlet 单元 $WEB_UNIT 不存在，宿主机未完成 systemd 切换，禁止继续发布" >&2; exit 1; }
+systemctl cat "$POD_UNIT" >/dev/null 2>&1 \
+  || { echo "Quadlet 单元 $POD_UNIT 不存在，宿主机未完成 systemd 切换，禁止继续发布" >&2; exit 1; }
 
 # 记录当前 :latest 镜像 ID，供健康检查失败时回滚
 # （原因：Quadlet 下 restart 直接以 :latest 重建容器，latest 必须先于 restart 更新；
@@ -74,7 +77,11 @@ podman build -f "$PROJECT_ROOT/deploy/docker/web.Dockerfile" -t "$WEB_IMAGE" "$P
 podman tag "$API_IMAGE" kingdee-sync-api:latest
 podman tag "$WEB_IMAGE" kingdee-sync-web:latest
 
-systemctl restart "$API_UNIT" "$WEB_UNIT"
+# restart 必须连同 Pod 单元一起：api/web 停止后 Pod 内已无运行容器，会被自动回收删除，
+# 随后 api/web 的启动作业因 "Bound to unit isn't active" 判 Dependency failed，
+# 全线停摆需人工按序拉起（原因：2026-11-13 13:57 发布实测发生，造成 46 秒服务中断；
+# 同一事务内 systemd 会按 Requires/After 依赖顺序先起 Pod 再起容器）
+systemctl restart "$POD_UNIT" "$API_UNIT" "$WEB_UNIT"
 
 # --retry-connrefused covers the gap between container start and port listening
 # （原因：仅 --retry 不会重试连接拒绝，会在服务已启动但尚未监听时误报失败）
@@ -83,7 +90,7 @@ if ! curl -fsS --retry 30 --retry-delay 1 --retry-connrefused http://127.0.0.1:8
   echo "健康检查失败：回滚 :latest 到旧镜像并重启恢复" >&2
   if [ -n "$PREV_API_ID" ]; then podman tag "$PREV_API_ID" kingdee-sync-api:latest; fi
   if [ -n "$PREV_WEB_ID" ]; then podman tag "$PREV_WEB_ID" kingdee-sync-web:latest; fi
-  if ! systemctl restart "$API_UNIT" "$WEB_UNIT"; then
+  if ! systemctl restart "$POD_UNIT" "$API_UNIT" "$WEB_UNIT"; then
     echo "回滚重启失败，需人工介入：systemctl status $API_UNIT $WEB_UNIT" >&2
   fi
   exit 1

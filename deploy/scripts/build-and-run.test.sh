@@ -93,6 +93,18 @@ if grep -Eq '^podman (pod rm|pod create|run )' "$COMMAND_LOG"; then
 fi
 printf '%s\n' 'ok 2 - 两个镜像构建完成后才 systemctl restart，且不再手工建 Pod'
 
+# 守护语义 2b：restart 必须连同 Pod 单元一起
+# （原因：2026-11-13 发布实测——只 restart api/web 时 Pod 在容器停止后被自动回收，
+#  api/web 启动报 Dependency failed 全线停摆，需人工按序恢复）
+run_script
+if ! grep '^systemctl restart ' "$COMMAND_LOG" | grep -q 'kingdee-sync-pod.service'; then
+  fail 'restart 必须包含 kingdee-sync-pod.service，防止 Pod 被回收后 Dependency failed'
+fi
+if ! grep '^systemctl cat ' "$COMMAND_LOG" | grep -q 'kingdee-sync-pod.service'; then
+  fail '发布前应校验 Pod 单元存在（systemctl cat kingdee-sync-pod.service）'
+fi
+printf '%s\n' 'ok 2b - restart 与前置校验均覆盖 Pod 单元'
+
 # 守护语义 3：restart 前更新 :latest，健康检查在 restart 之后（Quadlet 以 :latest 重建）
 run_script
 [[ "$SCRIPT_STATUS" -eq 0 ]] || fail '默认构建应成功'

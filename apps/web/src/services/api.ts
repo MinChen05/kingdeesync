@@ -4,7 +4,6 @@ import type {
   HealthResponse,
   HistoryDetailsData,
   ReadyResponse,
-  SyncLogsData,
   SyncStartData,
   SyncStartRequest,
   SyncStatusData,
@@ -57,13 +56,6 @@ export async function getSyncStatus(
     method: 'GET',
     params: runId ? { run_id: runId } : undefined,
     ...(opts || {}),
-  });
-}
-
-export async function getSyncLogs(runId?: string) {
-  return request<ApiResponse<SyncLogsData>>('/api/sync/logs', {
-    method: 'GET',
-    params: runId ? { run_id: runId } : undefined,
   });
 }
 

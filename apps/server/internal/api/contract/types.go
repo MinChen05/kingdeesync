@@ -74,21 +74,6 @@ type SyncStopData struct {
 	Status SyncStatus `json:"status"`
 }
 
-// SyncLogEntry is one persisted log entry belonging to a synchronization run.
-type SyncLogEntry struct {
-	CreatedAt time.Time `json:"created_at"`
-	FormName  string    `json:"form_name"`
-	Level     string    `json:"level"`
-	Message   string    `json:"message"`
-	Detail    string    `json:"detail"`
-}
-
-// SyncLogsData is the successful response payload for one run's logs.
-type SyncLogsData struct {
-	RunID string         `json:"run_id"`
-	Logs  []SyncLogEntry `json:"logs"`
-}
-
 type SyncFormStatus struct {
 	FormName     string     `json:"form_name"`
 	Fetched      int        `json:"fetched"`
@@ -126,5 +111,4 @@ const (
 	CodeSyncInvalidRequest      = "SYNC_INVALID_REQUEST"
 	CodeSyncDatabaseUnavailable = "SYNC_DATABASE_UNAVAILABLE"
 	CodeSyncStartFailed         = "SYNC_START_FAILED"
-	CodeSyncLogsFailed          = "SYNC_LOGS_FAILED"
 )

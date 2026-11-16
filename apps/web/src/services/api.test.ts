@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { request } from '@umijs/max';
-import { getSyncLogs, startSync, stopSync } from './api';
+import { startSync, stopSync } from './api';
 
 vi.mock('@umijs/max', () => ({
   request: vi.fn(),
@@ -42,22 +42,6 @@ describe('同步 API 契约', () => {
 
     expect(requestMock).toHaveBeenCalledWith('/api/v1/sync/stop', {
       method: 'POST',
-      params: { run_id: 'run-001' },
-    });
-  });
-
-  it('日志请求按 run_id 隔离', async () => {
-    requestMock.mockResolvedValue({
-      ok: true,
-      data: { run_id: 'run-001', logs: [] },
-      error: '',
-      code: '',
-    });
-
-    await getSyncLogs('run-001');
-
-    expect(requestMock).toHaveBeenCalledWith('/api/sync/logs', {
-      method: 'GET',
       params: { run_id: 'run-001' },
     });
   });

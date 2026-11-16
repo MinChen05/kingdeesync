@@ -22,8 +22,7 @@ export type SyncErrorCode =
   | 'SYNC_NOT_ACTIVE'
   | 'SYNC_INVALID_REQUEST'
   | 'SYNC_DATABASE_UNAVAILABLE'
-  | 'SYNC_START_FAILED'
-  | 'SYNC_LOGS_FAILED';
+  | 'SYNC_START_FAILED';
 
 // ─── API Response ───
 
@@ -85,21 +84,6 @@ export interface SyncStatusData {
   elapsed_seconds: number;
   started_at: string;
   form_stats: SyncFormStatus[];
-}
-
-// ─── Sync Logs ───
-
-export interface SyncLogEntry {
-  created_at: string;
-  form_name: string;
-  level: string;
-  message: string;
-  detail: string;
-}
-
-export interface SyncLogsData {
-  run_id: string;
-  logs: SyncLogEntry[];
 }
 
 // ─── History Details ───

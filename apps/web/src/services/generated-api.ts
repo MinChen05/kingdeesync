@@ -33,17 +33,6 @@ export interface ApiResponse<T> {
   code: string;
 }
 
-// ─── Health / Readiness ───
-
-export interface HealthResponse {
-  status: 'ok';
-}
-
-export interface ReadyResponse {
-  status: 'ready' | 'not_ready';
-  reasons?: string[];
-}
-
 // ─── Sync Start / Stop ───
 
 export interface SyncStopData {

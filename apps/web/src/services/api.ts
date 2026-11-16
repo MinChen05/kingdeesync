@@ -4,8 +4,6 @@ import type {
   HealthResponse,
   HistoryDetailsData,
   ReadyResponse,
-  SyncStartData,
-  SyncStartRequest,
   SyncStatusData,
   SyncStopData,
 } from './generated-api';
@@ -33,7 +31,6 @@ import type {
 } from '@/pages/Overview/types';
 
 export type { SyncStatus, SyncType, SyncErrorCode } from './generated-api';
-export type { SyncStartRequest as SyncStartParams } from './generated-api';
 
 // Re-export types so existing imports still work
 export type { ConfigData, FormItem, DataSource, FormStat };
@@ -43,10 +40,6 @@ export type { ScheduleJob };
 export type { TodayStats, TrendDay, TopForm, HealthStatus, RecentRun, TaskItem };
 
 // ─── Sync ───
-
-export async function startSync(params: SyncStartRequest) {
-  return request<ApiResponse<SyncStartData>>('/api/sync/start', { method: 'POST', data: params });
-}
 
 export async function getSyncStatus(
   runId?: string,

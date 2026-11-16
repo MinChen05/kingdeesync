@@ -46,17 +46,6 @@ export interface ReadyResponse {
 
 // ─── Sync Start / Stop ───
 
-export interface SyncStartRequest {
-  forms?: string[];
-  sync_type?: SyncType;
-  dry_run?: boolean;
-}
-
-export interface SyncStartData {
-  run_id: string;
-  dry_run: boolean;
-}
-
 export interface SyncStopData {
   run_id: string;
   status: 'stopping';

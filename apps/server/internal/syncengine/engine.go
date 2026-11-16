@@ -113,6 +113,7 @@ type SyncEngine struct {
 	currentForm        string
 	startTime          time.Time
 	logCallback        LogCallback
+	logSkipWarned      bool      // 当前回调断线 episode 是否已告警（原因：cb 为 nil 时每行进度日志刷一条 Skipping，噪声淹没真实告警）
 	runID              string    // current run ID
 	writer             RowWriter // database write abstraction
 	active             bool
@@ -235,6 +236,16 @@ func (e *SyncEngine) SetLogCallback(cb LogCallback, runID string) {
 	defer e.mu.Unlock()
 	e.logCallback = cb
 	e.runID = runID
+	// 原因：注册状态变化后重置告警位，让下一次回调断线仍能告警一次而非永久静默。
+	e.logSkipWarned = false
+}
+
+// HasLogCallback reports whether a real-time log callback is currently registered.
+// （原因：手动/调度触发路径注册回调后可被测试与探测使用，避免回调断线再次静默发生）
+func (e *SyncEngine) HasLogCallback() bool {
+	e.mu.RLock()
+	defer e.mu.RUnlock()
+	return e.logCallback != nil
 }
 
 // logMsg calls the log callback if set.
@@ -243,15 +254,19 @@ func (e *SyncEngine) logMsg(formName, level, message string) {
 	cb := e.logCallback
 	rid := e.runID
 	e.mu.RUnlock()
-	if cb == nil {
-		log.Printf("[LOG-MSG] Skipping: cb is nil, form=%s, msg=%s", formName, message)
+	if cb != nil && rid != "" {
+		cb(rid, formName, level, message)
 		return
 	}
-	if rid == "" {
-		log.Printf("[LOG-MSG] Skipping: rid is empty, form=%s, msg=%s", formName, message)
-		return
+	// 原因：历史上调度轮从不注册回调，每行进度日志刷一条 Skipping（每轮 60+ 行），
+	// 淹没真实告警；改为每个回调断线 episode 只告警一次，SetLogCallback 时重置。
+	e.mu.Lock()
+	warned := e.logSkipWarned
+	e.logSkipWarned = true
+	e.mu.Unlock()
+	if !warned {
+		log.Printf("[LOG-MSG] Skipping sync log message: log callback unavailable (cb nil=%v, run id empty=%v, form=%s); further skips are suppressed until SetLogCallback is called again", cb == nil, rid == "", formName)
 	}
-	cb(rid, formName, level, message)
 }
 
 func (e *SyncEngine) GetStatus() (SyncStatus, string, int, string, float64, []FormStat) {

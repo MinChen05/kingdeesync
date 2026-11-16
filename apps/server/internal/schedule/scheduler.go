@@ -16,6 +16,7 @@ import (
 	"github.com/kingdee-sync/go/internal/gormdb"
 	"github.com/kingdee-sync/go/internal/syncengine"
 	"github.com/robfig/cron/v3"
+	"gorm.io/gorm"
 )
 
 var (
@@ -182,6 +183,18 @@ func resolveRunTimeout(syncType string) time.Duration {
 	return schedulerRunTimeout
 }
 
+// newScheduleLogCallback 构造调度轮实时日志回调，写入与 API 手动轮相同的
+// go_sync_errors 持久化通道（原因：runs/:id/logs 从该表读取，不注册则调度轮
+// 前端日志为空且引擎侧只能丢弃进度信息）。
+func newScheduleLogCallback(db *gorm.DB) syncengine.LogCallback {
+	return func(runID, formName, level, message string) {
+		if db == nil {
+			return
+		}
+		_ = db.Create(&gormdb.SyncError{RunID: runID, FormName: formName, Level: level, Message: message}).Error
+	}
+}
+
 // runJob executes a scheduled sync job.
 func runJob(job *gormdb.ScheduleJob, engine *syncengine.SyncEngine) {
 	mu.Lock()
@@ -258,6 +271,9 @@ func runJob(job *gormdb.ScheduleJob, engine *syncengine.SyncEngine) {
 		failScheduleRun(&scheduleRun, err.Error())
 		return
 	}
+	// 调度轮注册实时日志回调（原因：此前只有 API 手动触发路径注册，调度轮所有
+	// logMsg 进度/告警被丢弃，前端 runs/:id/logs 对调度轮始终为空，见 2026-11-16 日志审计）
+	engine.SetLogCallback(newScheduleLogCallback(db), runID)
 
 	// Update job last run
 	mu.Lock()
